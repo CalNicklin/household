@@ -1,0 +1,11 @@
+node_modules
+**/node_modules
+.data
+.git
+.claude
+test-results
+playwright-report
+web/dist
+evidence/screenshots
+backups
+.secrets

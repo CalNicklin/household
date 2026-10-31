@@ -1,0 +1,511 @@
+{
+  "$schema": "./node_modules/fallow/schema.json",
+  "entry": [
+    "helper/main.ts",
+    "practice/supermarket/main.ts",
+    "scripts/*.ts",
+    "web/src/router.tsx",
+    "web/src/routes/**/*.tsx",
+    "web/vite.config.ts",
+    "tools/**/*.ts",
+    "tools/oxlint-plugin/index.js",
+    "server/domains/*/drizzle.config.ts",
+    "e2e/**/*.ts",
+    "playwright.config.ts",
+    "vitest.config.ts"
+  ],
+  "dynamicallyLoaded": [
+    "server/adapters/*/index.ts",
+    "helper/tasks/*/index.ts",
+    "web/public/sw.js",
+    "web/src/design-system/*.css"
+  ],
+  "ignorePatterns": [
+    "design/**",
+    ".data/**",
+    "web/src/routeTree.gen.ts"
+  ],
+  "rules": {
+    "unused-files": "error",
+    "unused-exports": "error",
+    "unused-types": "error",
+    "unused-dependencies": "error",
+    "unused-class-members": "error",
+    "circular-dependencies": "error",
+    "boundary-violation": "error",
+    "unresolved-imports": "error",
+    "complexity-cyclomatic": "warn",
+    "complexity-cognitive": "warn",
+    "complexity-crap": "warn",
+    "complexity-file-lines": "warn",
+    "policy-violation": "off"
+  },
+  "boundaries": {
+    "zones": [
+      {
+        "name": "tests",
+        "patterns": [
+          "**/*.test.ts",
+          "**/*.test.tsx"
+        ]
+      },
+      {
+        "name": "contracts",
+        "patterns": [
+          "contracts/**"
+        ]
+      },
+      {
+        "name": "infra",
+        "patterns": [
+          "server/db/**",
+          "server/trpc.ts",
+          "server/live/**",
+          "server/env.ts",
+          "server/ports.ts",
+          "server/time.ts"
+        ]
+      },
+      {
+        "name": "domain-household",
+        "patterns": [
+          "server/domains/household/**"
+        ]
+      },
+      {
+        "name": "domain-calendar",
+        "patterns": [
+          "server/domains/calendar/**"
+        ]
+      },
+      {
+        "name": "domain-backlog",
+        "patterns": [
+          "server/domains/backlog/**"
+        ]
+      },
+      {
+        "name": "domain-plans",
+        "patterns": [
+          "server/domains/plans/**"
+        ]
+      },
+      {
+        "name": "domain-parcels",
+        "patterns": [
+          "server/domains/parcels/**"
+        ]
+      },
+      {
+        "name": "domain-learning",
+        "patterns": [
+          "server/domains/learning/**"
+        ]
+      },
+      {
+        "name": "domain-wellbeing",
+        "patterns": [
+          "server/domains/wellbeing/**"
+        ]
+      },
+      {
+        "name": "domain-jobs",
+        "patterns": [
+          "server/domains/jobs/**"
+        ]
+      },
+      {
+        "name": "domain-health",
+        "patterns": [
+          "server/domains/health/**"
+        ]
+      },
+      {
+        "name": "domain-shopping",
+        "patterns": [
+          "server/domains/shopping/**"
+        ]
+      },
+      {
+        "name": "rules",
+        "patterns": [
+          "server/rules/**"
+        ]
+      },
+      {
+        "name": "planner",
+        "patterns": [
+          "server/planner/**"
+        ]
+      },
+      {
+        "name": "agent",
+        "patterns": [
+          "server/agent/**"
+        ]
+      },
+      {
+        "name": "learning",
+        "patterns": [
+          "server/learning/**",
+          "server/wellbeing/**"
+        ]
+      },
+      {
+        "name": "notify",
+        "patterns": [
+          "server/notify/**"
+        ]
+      },
+      {
+        "name": "jobs",
+        "patterns": [
+          "server/jobs/**"
+        ]
+      },
+      {
+        "name": "coordinator",
+        "patterns": [
+          "server/coordinator/**"
+        ]
+      },
+      {
+        "name": "adapters",
+        "patterns": [
+          "server/adapters/**"
+        ]
+      },
+      {
+        "name": "views",
+        "patterns": [
+          "server/views/**"
+        ]
+      },
+      {
+        "name": "integrations",
+        "patterns": [
+          "server/integrations/**"
+        ]
+      },
+      {
+        "name": "composition",
+        "patterns": [
+          "server/runtime.ts",
+          "server/main.ts",
+          "server/http/**",
+          "server/privacy/**"
+        ]
+      },
+      {
+        "name": "web",
+        "patterns": [
+          "web/**"
+        ]
+      },
+      {
+        "name": "practice",
+        "patterns": [
+          "practice/**"
+        ]
+      },
+      {
+        "name": "helper",
+        "patterns": [
+          "helper/**"
+        ]
+      },
+      {
+        "name": "tooling",
+        "patterns": [
+          "tools/**",
+          "scripts/**",
+          "server/testing/**",
+          "e2e/**"
+        ]
+      }
+    ],
+    "rules": [
+      {
+        "from": "contracts",
+        "allow": []
+      },
+      {
+        "from": "infra",
+        "allow": [
+          "contracts"
+        ]
+      },
+      {
+        "from": "domain-household",
+        "allow": [
+          "contracts",
+          "infra"
+        ]
+      },
+      {
+        "from": "domain-calendar",
+        "allow": [
+          "contracts",
+          "infra"
+        ]
+      },
+      {
+        "from": "domain-backlog",
+        "allow": [
+          "contracts",
+          "infra"
+        ]
+      },
+      {
+        "from": "domain-plans",
+        "allow": [
+          "contracts",
+          "infra"
+        ]
+      },
+      {
+        "from": "domain-parcels",
+        "allow": [
+          "contracts",
+          "infra"
+        ]
+      },
+      {
+        "from": "domain-learning",
+        "allow": [
+          "contracts",
+          "infra"
+        ]
+      },
+      {
+        "from": "domain-wellbeing",
+        "allow": [
+          "contracts",
+          "infra"
+        ]
+      },
+      {
+        "from": "domain-jobs",
+        "allow": [
+          "contracts",
+          "infra"
+        ]
+      },
+      {
+        "from": "domain-health",
+        "allow": [
+          "contracts",
+          "infra"
+        ]
+      },
+      {
+        "from": "domain-shopping",
+        "allow": [
+          "contracts",
+          "infra"
+        ]
+      },
+      {
+        "from": "rules",
+        "allow": [
+          "contracts",
+          "infra"
+        ]
+      },
+      {
+        "from": "planner",
+        "allow": [
+          "contracts",
+          "infra",
+          "rules"
+        ],
+        "allowTypeOnly": [
+          "composition"
+        ]
+      },
+      {
+        "from": "agent",
+        "allow": [
+          "contracts",
+          "infra",
+          "rules",
+          "planner"
+        ],
+        "allowTypeOnly": [
+          "composition"
+        ]
+      },
+      {
+        "from": "learning",
+        "allow": [
+          "contracts",
+          "infra",
+          "rules"
+        ],
+        "allowTypeOnly": [
+          "composition"
+        ]
+      },
+      {
+        "from": "notify",
+        "allow": [
+          "contracts",
+          "infra",
+          "rules"
+        ],
+        "allowTypeOnly": [
+          "composition"
+        ]
+      },
+      {
+        "from": "jobs",
+        "allow": [
+          "contracts",
+          "infra",
+          "rules",
+          "planner",
+          "agent",
+          "learning",
+          "notify"
+        ],
+        "allowTypeOnly": [
+          "composition"
+        ]
+      },
+      {
+        "from": "coordinator",
+        "allow": [
+          "contracts",
+          "infra",
+          "jobs"
+        ],
+        "allowTypeOnly": [
+          "composition"
+        ]
+      },
+      {
+        "from": "adapters",
+        "allow": [
+          "contracts",
+          "infra",
+          "coordinator",
+          "integrations",
+          "views",
+          "practice",
+          "rules"
+        ],
+        "allowTypeOnly": [
+          "composition"
+        ]
+      },
+      {
+        "from": "views",
+        "allow": [
+          "contracts",
+          "infra",
+          "rules",
+          "planner",
+          "learning"
+        ],
+        "allowTypeOnly": [
+          "composition"
+        ]
+      },
+      {
+        "from": "integrations",
+        "allow": [
+          "contracts",
+          "infra",
+          "practice"
+        ]
+      },
+      {
+        "from": "composition",
+        "allow": [
+          "contracts",
+          "infra",
+          "practice",
+          "adapters",
+          "coordinator",
+          "jobs",
+          "views",
+          "integrations",
+          "learning",
+          "domain-household",
+          "domain-calendar",
+          "domain-backlog",
+          "domain-plans",
+          "domain-parcels",
+          "domain-learning",
+          "domain-wellbeing",
+          "domain-jobs",
+          "domain-health",
+          "domain-shopping"
+        ]
+      },
+      {
+        "from": "web",
+        "allow": [
+          "contracts"
+        ],
+        "allowTypeOnly": [
+          "views"
+        ]
+      },
+      {
+        "from": "practice",
+        "allow": [
+          "contracts",
+          "infra",
+          "composition",
+          "domain-household"
+        ]
+      },
+      {
+        "from": "helper",
+        "allow": [
+          "contracts",
+          "practice"
+        ]
+      },
+      {
+        "from": "tests",
+        "allow": [
+          "contracts",
+          "infra",
+          "domain-household",
+          "domain-calendar",
+          "domain-backlog",
+          "domain-plans",
+          "domain-parcels",
+          "domain-learning",
+          "domain-wellbeing",
+          "domain-jobs",
+          "domain-health",
+          "domain-shopping",
+          "rules",
+          "planner",
+          "agent",
+          "learning",
+          "notify",
+          "jobs",
+          "coordinator",
+          "adapters",
+          "views",
+          "integrations",
+          "composition",
+          "web",
+          "practice",
+          "helper",
+          "tooling"
+        ]
+      }
+    ]
+  },
+  "usedClassMembers": [
+    "signIn",
+    "close",
+    "remove",
+    "list"
+  ]
+}

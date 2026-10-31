@@ -1,0 +1,16 @@
+node_modules
+.data
+web/dist
+web/.output
+web/.tanstack
+test-results
+playwright-report
+evidence/vitest.json
+evidence/playwright.json
+*.log
+.claude/worktrees
+backups
+.env
+.env.*
+!.env.example
+.secrets

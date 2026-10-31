@@ -1,0 +1,85 @@
+# PLT-8: the whole system on our own server with one `docker compose up`.
+# First run `pnpm env:init` (or `pnpm env:init --real` for the real house): it writes every secret at
+# random into .env and .secrets/ (git-ignored). Nothing secret has a default here; a missing one stops
+# `docker compose up` with a message instead of falling back to a value published in this repo.
+name: household
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?run pnpm env:init first}
+    volumes: [pgdata:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 2s
+      retries: 30
+
+  # PLT-7: S3-compatible object storage we run ourselves (SeaweedFS). Objects arrive already encrypted.
+  objects:
+    image: chrislusf/seaweedfs:4.50
+    command: server -dir=/data -s3 -s3.port=8333 -s3.config=/etc/seaweedfs/s3.json
+    volumes:
+      - objects:/data
+      - ./.secrets/seaweedfs-s3.json:/etc/seaweedfs/s3.json:ro
+
+  # PLT-6: episodic memory. Optional profile until the image is reachable from the server:
+  # `docker compose --profile memory up`, then set HINDSIGHT_URL=http://hindsight:8888 in .env.
+  hindsight:
+    profiles: [memory]
+    image: ghcr.io/vectorize-io/hindsight:latest
+    volumes: [memory:/home/hindsight/.pg0]
+
+  # QA-9: the practice supermarket the helper is proven against.
+  supermarket:
+    build: .
+    command: ["node", "practice/supermarket/main.ts"]
+    environment:
+      PORT: "3002"
+      PRACTICE_SUPERMARKET_PASSWORD: ${PRACTICE_SUPERMARKET_PASSWORD:?run pnpm env:init first}
+
+  # AUT-2: the sealed helper — its own container, its own supermarket login, readable only by it.
+  helper:
+    build:
+      context: .
+      dockerfile: helper/Dockerfile
+    environment:
+      HELPER_TOKEN: ${HELPER_TOKEN:?run pnpm env:init first}
+    secrets:
+      - source: supermarket
+        target: supermarket
+    volumes: [helper:/data]
+    depends_on: [supermarket]
+
+  # Everything else the app reads (secrets, credentials, model settings) comes from .env as-is, so a
+  # setting left out keeps its practice default in practice mode and stops the real house (PRV-6).
+  app:
+    build: .
+    ports: ["${PORT:-3001}:3001"]
+    env_file: [.env]
+    environment:
+      # The password travels in PGPASSWORD (read by every Postgres client), never inside a URL.
+      DATABASE_URL: postgres://postgres@postgres:5432/postgres
+      PGPASSWORD: ${POSTGRES_PASSWORD:?run pnpm env:init first}
+      PORT: "3001"
+      HELPER_URL: http://helper:3003
+      S3_ENDPOINT: http://objects:8333
+      S3_BUCKET: household
+    depends_on:
+      postgres: { condition: service_healthy }
+      objects: { condition: service_started }
+      helper: { condition: service_started }
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3001/healthz').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"]
+      interval: 5s
+      retries: 30
+
+secrets:
+  supermarket:
+    file: ${SUPERMARKET_SECRET_FILE:?run pnpm env:init first}
+
+volumes:
+  pgdata:
+  objects:
+  memory:
+  helper:

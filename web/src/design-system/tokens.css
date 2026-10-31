@@ -1,0 +1,70 @@
+/* Mirrors design/tokens.json exactly (tokens.test.ts keeps them in step). Edit both together. */
+:root {
+  --color-ground: #F3F4F6;
+  --color-surface: #FFFFFF;
+  --color-text: #17191C;
+  --color-muted: #5B6168;
+  --color-hairline: #EDEEF1;
+  --color-border: #E2E4E8;
+  --color-border-strong: #D5D8DD;
+  --color-ink: #17191C;
+  --color-on-ink: #FFFFFF;
+  --color-suggestion-bg: #E3F0EB;
+  --color-suggestion-accent: #1F6B5A;
+  --color-suggestion-text: #2C5648;
+  --color-suggestion-border: #B9D3CA;
+  --color-alert-bg: #FBF1DC;
+  --color-alert-accent: #8A5A00;
+  --color-alert-text: #6B4A08;
+
+  --font-family: Manrope, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  --weight-regular: 400;
+  --weight-medium: 500;
+  --weight-semibold: 600;
+  --weight-bold: 700;
+
+  --size-title: 34px;
+  --size-title-phone: 26px;
+  --size-focus-title: 30px;
+  --size-mode-title: 22px;
+  --size-item: 19px;
+  --size-body: 17px;
+  --size-body-small: 15px;
+  --size-detail: 14px;
+  --size-label: 13px;
+  --size-label-phone: 12px;
+
+  --tracking-label: 1.2px;
+  --tracking-title: -0.5px;
+  --tracking-title-small: -0.4px;
+
+  --radius-card: 16px;
+  --radius-button: 12px;
+  --radius-button-large: 14px;
+  --radius-composer: 18px;
+  --radius-focus: 22px;
+  --radius-chip: 10px;
+
+  --space-page-top: 44px;
+  --space-page-side: 48px;
+  --space-page-bottom: 36px;
+  --space-phone-top: 64px;
+  --space-phone-side: 20px;
+  --space-phone-bottom: 28px;
+  --space-region: 28px;
+  --space-section: 22px;
+  --space-stack: 10px;
+  --space-tight: 8px;
+  --space-card-y: 18px;
+  --space-card-x: 20px;
+  --space-row-y: 14px;
+
+  --size-target-tap: 44px;
+  --size-target-tap-large: 48px;
+  --size-target-time-column: 58px;
+
+  --breakpoint-phone: 700px;
+  --breakpoint-wide: 900px;
+}

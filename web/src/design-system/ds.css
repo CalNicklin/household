@@ -1,0 +1,897 @@
+/* Household design system. Every value comes from tokens.css; screens never style anything. */
+@import "./tokens.css";
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  background: var(--color-ground);
+  color: var(--color-text);
+  font-family: var(--font-family);
+  -webkit-font-smoothing: antialiased;
+  -webkit-text-size-adjust: 100%;
+}
+
+button,
+input,
+select {
+  font-family: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+a {
+  color: var(--color-muted);
+  text-decoration: none;
+}
+
+a:hover {
+  color: var(--color-text);
+}
+
+.ds-visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+/* ── Page shell ─────────────────────────────────────────────────────────── */
+
+.ds-page {
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-region);
+  padding: max(var(--space-page-top), env(safe-area-inset-top)) var(--space-page-side) max(var(--space-page-bottom), env(safe-area-inset-bottom));
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+.ds-page__body {
+  flex-grow: 1;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-section);
+  min-height: 0;
+}
+
+.ds-columns {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-region);
+  align-content: start;
+  flex-grow: 1;
+}
+
+.ds-columns__main {
+  grid-column: span 2;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-section);
+  min-width: 0;
+}
+
+.ds-columns__main--full {
+  grid-column: 1 / -1;
+}
+
+.ds-columns__aside {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-section);
+  min-width: 0;
+}
+
+.ds-focus {
+  flex-grow: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  gap: var(--space-region);
+  padding: 0 80px;
+}
+
+.ds-focus > * {
+  width: 100%;
+  max-width: 760px;
+}
+
+.ds-focus > .ds-card--focus {
+  max-width: 840px;
+}
+
+.ds-footer {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-stack);
+}
+
+.ds-grid3 {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 24px;
+  align-content: start;
+  flex-grow: 1;
+}
+
+.ds-stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-section);
+}
+
+.ds-stack--tight {
+  gap: var(--space-stack);
+}
+
+.ds-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-tight);
+  flex-wrap: wrap;
+}
+
+.ds-row--between {
+  justify-content: space-between;
+}
+
+/* ── Header ─────────────────────────────────────────────────────────────── */
+
+.ds-header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 24px;
+}
+
+.ds-header__text {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.ds-header__title {
+  margin: 0;
+  font-size: var(--size-title);
+  font-weight: var(--weight-bold);
+  letter-spacing: var(--tracking-title);
+  line-height: 1.1;
+}
+
+.ds-header__line {
+  margin: 0;
+  font-size: var(--size-body);
+  font-weight: var(--weight-medium);
+  color: var(--color-muted);
+}
+
+.ds-nav {
+  display: flex;
+  gap: 22px;
+  font-size: var(--size-body-small);
+  font-weight: var(--weight-semibold);
+  /* Links are 44px tall; this lines their text up with the context line, as on the canvas. */
+  margin-bottom: -6px;
+}
+
+.ds-nav a {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: var(--size-target-tap);
+  min-width: var(--size-target-tap);
+}
+
+/* Links inside text and rows still get a full tap target (HOME-10). */
+.ds-text a,
+.ds-row a,
+.ds-footnote a,
+.ds-table a {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--size-target-tap);
+  font-weight: var(--weight-semibold);
+}
+
+/* ── Sections ───────────────────────────────────────────────────────────── */
+
+.ds-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-stack);
+}
+
+.ds-section__label {
+  margin: 0;
+  font-size: var(--size-label);
+  font-weight: var(--weight-bold);
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+  color: var(--color-muted);
+}
+
+.ds-section__label--suggestion {
+  color: var(--color-suggestion-accent);
+}
+
+.ds-section__body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-tight);
+}
+
+/* ── Cards ──────────────────────────────────────────────────────────────── */
+
+.ds-card {
+  background: var(--color-surface);
+  border-radius: var(--radius-card);
+  padding: var(--space-card-y) var(--space-card-x);
+}
+
+.ds-card--list {
+  padding: 6px var(--space-card-x);
+  display: flex;
+  flex-direction: column;
+}
+
+.ds-card--stack {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: var(--space-card-y);
+}
+
+.ds-card--suggestion {
+  background: var(--color-suggestion-bg);
+}
+
+.ds-card--alert {
+  background: var(--color-alert-bg);
+  padding: 16px var(--space-card-x);
+}
+
+.ds-card--focus {
+  border-radius: var(--radius-focus);
+  padding: 36px 40px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-card-y);
+}
+
+.ds-card__row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.ds-card__lead {
+  width: var(--size-target-time-column);
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  font-weight: var(--weight-bold);
+}
+
+.ds-card__main {
+  flex-grow: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.ds-card__title {
+  margin: 0;
+  font-size: var(--size-item);
+  font-weight: var(--weight-semibold);
+  line-height: 1.3;
+}
+
+.ds-card__title--small {
+  font-size: var(--size-body);
+}
+
+.ds-card__detail {
+  margin: 0;
+  font-size: var(--size-detail);
+  color: var(--color-muted);
+  line-height: 1.4;
+}
+
+.ds-card--suggestion .ds-card__detail {
+  color: var(--color-suggestion-text);
+}
+
+.ds-card--alert .ds-card__detail {
+  color: var(--color-alert-text);
+}
+
+.ds-card__actions {
+  display: flex;
+  gap: var(--space-tight);
+  flex-wrap: wrap;
+}
+
+/* A tappable title: the text keeps its place, the hit area grows to at least 44px (HOME-10). */
+.ds-selectable {
+  all: unset;
+  cursor: pointer;
+  display: block;
+  border-radius: 6px;
+  padding-block: 11px;
+  margin-block: -11px;
+}
+
+.ds-list-row .ds-selectable {
+  padding-block: 13px;
+  margin-block: -13px;
+}
+
+.ds-selectable:focus-visible {
+  outline: 2px solid var(--color-suggestion-accent);
+  outline-offset: 2px;
+}
+
+.ds-selected {
+  box-shadow: 0 0 0 2px var(--color-suggestion-accent);
+}
+
+/* ── List rows (events, arrivals, backlog) ──────────────────────────────── */
+
+.ds-list-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: var(--space-row-y) 0;
+  border-bottom: 1px solid var(--color-hairline);
+  min-height: var(--size-target-tap);
+}
+
+.ds-list-row:last-child {
+  border-bottom: 0;
+}
+
+.ds-list-row--compact {
+  gap: 12px;
+  padding: 13px 0;
+}
+
+.ds-list-row--stacked {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 3px;
+}
+
+.ds-list-row__time {
+  width: var(--size-target-time-column);
+  flex-shrink: 0;
+  font-size: var(--size-body-small);
+  font-weight: var(--weight-bold);
+}
+
+.ds-list-row__text {
+  flex-grow: 1;
+  min-width: 0;
+  font-size: var(--size-body);
+  font-weight: var(--weight-medium);
+  line-height: 1.3;
+}
+
+.ds-list-row__text--small {
+  font-size: var(--size-body-small);
+}
+
+.ds-list-row__title {
+  font-size: 16px;
+  font-weight: var(--weight-semibold);
+}
+
+.ds-list-row__meta {
+  font-size: var(--size-label);
+  color: var(--color-muted);
+}
+
+.ds-list-row__meta--suggestion {
+  color: var(--color-suggestion-accent);
+  font-weight: var(--weight-medium);
+}
+
+.ds-detail-inline {
+  color: var(--color-muted);
+  font-weight: var(--weight-regular);
+}
+
+.ds-icon {
+  flex-shrink: 0;
+  display: inline-flex;
+}
+
+/* ── Mode (slow / sick / away) ──────────────────────────────────────────── */
+
+.ds-mode__eyebrow {
+  font-size: var(--size-label);
+  font-weight: var(--weight-bold);
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+  color: var(--color-suggestion-accent);
+}
+
+.ds-mode__title {
+  margin: 0;
+  font-size: var(--size-focus-title);
+  font-weight: var(--weight-bold);
+  letter-spacing: var(--tracking-title-small);
+  line-height: 1.2;
+}
+
+.ds-mode__why {
+  margin: 0;
+  font-size: var(--size-body);
+  color: var(--color-muted);
+  line-height: 1.5;
+}
+
+.ds-mode__actions {
+  display: flex;
+  gap: var(--space-stack);
+  flex-wrap: wrap;
+  padding-top: 4px;
+}
+
+.ds-still {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-stack);
+  font-size: 16px;
+  color: var(--color-muted);
+  line-height: 1.5;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ds-still__item {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.ds-still__item .ds-icon {
+  margin-top: 2px;
+}
+
+/* ── Buttons ────────────────────────────────────────────────────────────── */
+
+.ds-button {
+  min-height: var(--size-target-tap);
+  min-width: var(--size-target-tap);
+  padding: 0 18px;
+  border-radius: var(--radius-button);
+  border: 0;
+  font-size: var(--size-body-small);
+  font-weight: var(--weight-semibold);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  white-space: nowrap;
+  background: transparent;
+  color: var(--color-text);
+}
+
+.ds-button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.ds-button:focus-visible {
+  outline: 2px solid var(--color-suggestion-accent);
+  outline-offset: 2px;
+}
+
+.ds-button--large {
+  min-height: var(--size-target-tap-large);
+  border-radius: var(--radius-button-large);
+  font-size: 16px;
+  padding: 0 22px;
+}
+
+.ds-button--primary {
+  background: var(--color-suggestion-accent);
+  color: var(--color-on-ink);
+}
+
+.ds-button--suggestion-secondary {
+  border: 1px solid var(--color-suggestion-border);
+  color: var(--color-suggestion-accent);
+  padding: 0 16px;
+}
+
+.ds-button--secondary {
+  border: 1px solid var(--color-border-strong);
+  color: var(--color-text);
+  padding: 0 16px;
+}
+
+.ds-button--ghost {
+  color: var(--color-muted);
+  padding: 0 14px;
+}
+
+.ds-button--alert {
+  background: var(--color-alert-accent);
+  color: var(--color-on-ink);
+}
+
+.ds-button--ink {
+  background: var(--color-ink);
+  color: var(--color-on-ink);
+  width: var(--size-target-tap-large);
+  height: var(--size-target-tap-large);
+  padding: 0;
+  border-radius: var(--radius-button-large);
+}
+
+.ds-button--link {
+  padding: 0 4px;
+  color: var(--color-muted);
+}
+
+/* ── Chips: drawn at 32px, but the hit area is always ≥ 44px (HOME-10) ──── */
+
+.ds-chip {
+  position: relative;
+  min-height: var(--size-target-tap);
+  padding: 6px 0;
+  border: 0;
+  background: transparent;
+  display: inline-flex;
+  align-items: center;
+}
+
+.ds-chip__face {
+  height: 32px;
+  padding: 0 12px;
+  border-radius: var(--radius-chip);
+  border: 1px solid var(--color-border-strong);
+  color: var(--color-text);
+  font-size: var(--size-label);
+  font-weight: var(--weight-semibold);
+  display: inline-flex;
+  align-items: center;
+  white-space: nowrap;
+}
+
+.ds-chip--off .ds-chip__face {
+  border-style: dashed;
+  color: var(--color-muted);
+}
+
+.ds-chips {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin: -6px 0;
+}
+
+/* ── Composer ───────────────────────────────────────────────────────────── */
+
+.ds-composer {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: var(--color-surface);
+  border-radius: var(--radius-composer);
+  padding: 8px 8px 8px 22px;
+  border: 1px solid var(--color-border);
+}
+
+.ds-composer__input {
+  flex-grow: 1;
+  min-width: 0;
+  border: 0;
+  outline: none;
+  font-size: var(--size-body);
+  color: var(--color-text);
+  background: transparent;
+  height: var(--size-target-tap);
+}
+
+.ds-composer__about {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: var(--size-label);
+  color: var(--color-suggestion-accent);
+  font-weight: var(--weight-semibold);
+}
+
+.ds-reply {
+  align-self: flex-start;
+  background: var(--color-surface);
+  border-radius: var(--radius-card);
+  padding: 12px 18px;
+  font-size: var(--size-body-small);
+  line-height: 1.4;
+  max-width: 760px;
+  border-left: 3px solid var(--color-suggestion-accent);
+}
+
+/* ── Forms (settings) ───────────────────────────────────────────────────── */
+
+.ds-field {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: var(--space-row-y) 0;
+  border-bottom: 1px solid var(--color-hairline);
+  min-height: var(--size-target-tap);
+  flex-wrap: wrap;
+}
+
+.ds-field:last-child {
+  border-bottom: 0;
+}
+
+.ds-field__label {
+  font-size: 16px;
+  font-weight: var(--weight-medium);
+}
+
+.ds-field__hint {
+  display: block;
+  font-size: var(--size-label);
+  color: var(--color-muted);
+  font-weight: var(--weight-regular);
+}
+
+.ds-stepper {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.ds-stepper__value {
+  min-width: 48px;
+  text-align: center;
+  font-size: 16px;
+  font-weight: var(--weight-semibold);
+}
+
+.ds-toggle {
+  position: relative;
+  width: 64px;
+  height: var(--size-target-tap);
+  border: 0;
+  background: transparent;
+  padding: 0;
+}
+
+.ds-toggle__track {
+  position: absolute;
+  inset: 8px 4px;
+  border-radius: 14px;
+  background: var(--color-border-strong);
+  transition: background 120ms;
+}
+
+.ds-toggle__thumb {
+  position: absolute;
+  top: 11px;
+  left: 7px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--color-surface);
+  transition: transform 120ms;
+}
+
+.ds-toggle[aria-checked="true"] .ds-toggle__track {
+  background: var(--color-suggestion-accent);
+}
+
+.ds-toggle[aria-checked="true"] .ds-toggle__thumb {
+  transform: translateX(22px);
+}
+
+.ds-segmented {
+  display: inline-flex;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-button);
+  overflow: hidden;
+}
+
+.ds-segmented .ds-button {
+  border-radius: 0;
+}
+
+.ds-segmented .ds-button[aria-pressed="true"] {
+  background: var(--color-ink);
+  color: var(--color-on-ink);
+}
+
+.ds-text-input {
+  height: var(--size-target-tap);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-button);
+  padding: 0 14px;
+  font-size: 16px;
+  background: var(--color-surface);
+  color: var(--color-text);
+  min-width: 0;
+}
+
+.ds-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-width: 420px;
+}
+
+/* ── Text bits ──────────────────────────────────────────────────────────── */
+
+.ds-text {
+  margin: 0;
+  font-size: var(--size-body-small);
+  line-height: 1.5;
+}
+
+.ds-text--muted {
+  color: var(--color-muted);
+}
+
+.ds-text--small {
+  font-size: var(--size-label);
+}
+
+.ds-text--suggestion {
+  color: var(--color-suggestion-accent);
+}
+
+.ds-text--alert {
+  color: var(--color-alert-accent);
+  font-weight: var(--weight-semibold);
+}
+
+.ds-text--mono {
+  font-family: var(--font-mono);
+  font-size: var(--size-label);
+}
+
+.ds-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--size-detail);
+}
+
+.ds-table th {
+  text-align: left;
+  font-size: var(--size-label);
+  font-weight: var(--weight-bold);
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+  color: var(--color-muted);
+  padding: 8px 8px 8px 0;
+}
+
+.ds-table td {
+  padding: 10px 8px 10px 0;
+  border-top: 1px solid var(--color-hairline);
+  vertical-align: top;
+}
+
+.ds-scroll-x {
+  overflow-x: auto;
+}
+
+.ds-image {
+  display: block;
+  max-width: 100%;
+  border-radius: var(--radius-button);
+  border: 1px solid var(--color-border);
+}
+
+.ds-footnote {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  font-size: var(--size-detail);
+  color: var(--color-muted);
+  flex-wrap: wrap;
+}
+
+/* ── Phone: one column, nothing cut off (HOME-10) ───────────────────────── */
+
+@media (max-width: 899px) {
+  .ds-columns,
+  .ds-grid3 {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .ds-columns__main {
+    grid-column: auto;
+  }
+  .ds-focus {
+    padding: 0;
+  }
+}
+
+@media (max-width: 699px) {
+  .ds-page {
+    padding: max(var(--space-phone-top), env(safe-area-inset-top)) var(--space-phone-side) max(var(--space-phone-bottom), env(safe-area-inset-bottom));
+    gap: var(--space-section);
+  }
+  .ds-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 6px;
+  }
+  .ds-header__title {
+    font-size: var(--size-title-phone);
+    letter-spacing: var(--tracking-title-small);
+  }
+  .ds-header__line {
+    font-size: var(--size-detail);
+  }
+  .ds-nav {
+    padding-bottom: 0;
+  }
+  .ds-section__label {
+    font-size: var(--size-label-phone);
+  }
+  .ds-card__row {
+    flex-wrap: wrap;
+  }
+  .ds-card__row {
+    gap: 12px;
+  }
+  .ds-card__lead {
+    width: auto;
+  }
+  .ds-card__main {
+    flex: 1 1 180px;
+  }
+  .ds-card--suggestion.ds-card__row > .ds-card__lead {
+    display: none;
+  }
+  .ds-card--suggestion,
+  .ds-card--alert {
+    padding: 14px 18px 16px;
+  }
+  .ds-card__title {
+    font-size: 18px;
+  }
+  .ds-card--focus {
+    padding: 24px;
+  }
+  .ds-mode__title {
+    font-size: var(--size-mode-title);
+  }
+  .ds-list-row__text {
+    font-size: var(--size-body-small);
+  }
+  .ds-list-row__time {
+    width: 48px;
+    font-size: var(--size-detail);
+  }
+  .ds-composer {
+    padding: 6px 6px 6px 18px;
+  }
+  .ds-composer__input {
+    font-size: 16px;
+  }
+}
