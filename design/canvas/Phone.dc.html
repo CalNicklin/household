@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Home — phone</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&display=swap">
+<style>
+body{margin:0}
+a{color:#5B6168;text-decoration:none}a:hover{color:#17191C}
+button{font-family:inherit;cursor:pointer}
+</style>
+</helmet>
+<div style="width: 390px; height: 844px; box-sizing: border-box; padding: 64px 20px 28px 20px; background: #F3F4F6; color: #17191C; font-family: Manrope, system-ui, sans-serif; display: flex; flex-direction: column; gap: 22px">
+
+  <div style="display: flex; flex-direction: column; gap: 4px">
+    <div style="font-size: 26px; font-weight: 700; letter-spacing: -0.4px; line-height: 1.1">Monday</div>
+    <div style="font-size: 14px; font-weight: 500; color: #5B6168">Dry until 2pm · dark by 16:35</div>
+  </div>
+
+  <div style="flex-grow: 1; display: flex; flex-direction: column; gap: 18px; min-height: 0">
+
+    <section style="display: flex; flex-direction: column; gap: 8px">
+      <h2 style="margin: 0; font-size: 12px; font-weight: 700; letter-spacing: 1.2px; text-transform: uppercase; color: #1F6B5A">Now</h2>
+      <div style="background: #E3F0EB; border-radius: 16px; padding: 16px 18px; display: flex; flex-direction: column; gap: 10px">
+        <div style="font-size: 18px; font-weight: 600; line-height: 1.25">Hang the washing out</div>
+        <div style="font-size: 14px; color: #2C5648; line-height: 1.4">Dry until 2 — done by lunch</div>
+        <div style="display: flex; gap: 8px">
+          <button type="button" style="height: 44px; padding: 0 16px; border-radius: 12px; border: 0; background: #1F6B5A; color: #FFFFFF; font-size: 15px; font-weight: 600">Doing it</button>
+          <button type="button" style="height: 44px; padding: 0 14px; border-radius: 12px; border: 1px solid #B9D3CA; background: transparent; color: #1F6B5A; font-size: 15px; font-weight: 600">Not today</button>
+        </div>
+      </div>
+    </section>
+
+    <section style="display: flex; flex-direction: column; gap: 8px">
+      <h2 style="margin: 0; font-size: 12px; font-weight: 700; letter-spacing: 1.2px; text-transform: uppercase; color: #5B6168">Later</h2>
+      <div style="background: #FFFFFF; border-radius: 16px; padding: 4px 18px; display: flex; flex-direction: column">
+        <div style="display: flex; gap: 14px; padding: 13px 0; border-bottom: 1px solid #EDEEF1">
+          <div style="width: 48px; font-size: 14px; font-weight: 700">13:00</div>
+          <div style="flex-grow: 1; font-size: 15px; font-weight: 500; line-height: 1.3">Client call <span style="color: #5B6168; font-weight: 400">· Cal has the kids</span></div>
+        </div>
+        <div style="display: flex; gap: 14px; padding: 13px 0; border-bottom: 1px solid #EDEEF1">
+          <div style="width: 48px; font-size: 14px; font-weight: 700">16:10</div>
+          <div style="flex-grow: 1; font-size: 15px; font-weight: 500; line-height: 1.3">Nursery pick-up <span style="color: #5B6168; font-weight: 400">· Cal</span></div>
+        </div>
+        <div style="display: flex; gap: 14px; padding: 13px 0">
+          <div style="width: 48px; font-size: 14px; font-weight: 700">19:00</div>
+          <div style="flex-grow: 1; font-size: 15px; font-weight: 500; line-height: 1.3">Bins out <span style="color: #5B6168; font-weight: 400">· recycling + food</span></div>
+        </div>
+      </div>
+    </section>
+
+    <section style="display: flex; flex-direction: column; gap: 8px">
+      <h2 style="margin: 0; font-size: 12px; font-weight: 700; letter-spacing: 1.2px; text-transform: uppercase; color: #5B6168">Tomorrow</h2>
+      <div style="background: #FBF1DC; border-radius: 16px; padding: 14px 18px; display: flex; align-items: center; gap: 12px">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#8A5A00" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex-shrink: 0"><path d="M12 9v4M12 17h.01"></path><path d="M10.3 3.9 2.6 17a2 2 0 0 0 1.7 3h15.4a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"></path></svg>
+        <div style="flex-grow: 1; font-size: 15px; font-weight: 600; line-height: 1.3">Both out 19:30 — no babysitter yet</div>
+      </div>
+    </section>
+
+  </div>
+
+  <form style="display: flex; align-items: center; gap: 10px; background: #FFFFFF; border-radius: 18px; padding: 6px 6px 6px 18px; border: 1px solid #E2E4E8">
+    <label for="say3" style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0)">Tell the house something</label>
+    <input id="say3" type="text" placeholder="Tell me something, or ask" style="flex-grow: 1; min-width: 0; border: 0; outline: none; font-family: inherit; font-size: 16px; color: #17191C; background: transparent; height: 44px">
+    <button type="button" aria-label="Talk" style="width: 46px; height: 46px; border-radius: 14px; border: 0; background: #17191C; color: #FFFFFF; display: flex; align-items: center; justify-content: center; flex-shrink: 0">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="3" width="6" height="12" rx="3"></rect><path d="M5 11a7 7 0 0 0 14 0M12 18v3"></path></svg>
+    </button>
+  </form>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {};
+  }
+}
+</script>
+</body>
+</html>

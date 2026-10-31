@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Home — slow day</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&display=swap">
+<style>
+body{margin:0}
+a{color:#5B6168;text-decoration:none}a:hover{color:#17191C}
+button{font-family:inherit;cursor:pointer}
+</style>
+</helmet>
+<div style="width: 1180px; height: 820px; box-sizing: border-box; padding: 44px 48px 36px 48px; background: #F3F4F6; color: #17191C; font-family: Manrope, system-ui, sans-serif; display: flex; flex-direction: column; gap: 28px">
+
+  <div style="display: flex; align-items: flex-end; justify-content: space-between; gap: 24px">
+    <div style="display: flex; flex-direction: column; gap: 6px">
+      <div style="font-size: 34px; font-weight: 700; letter-spacing: -0.5px; line-height: 1.1">Monday 2 November</div>
+      <div style="font-size: 17px; font-weight: 500; color: #5B6168">Slow day · Chloe said so at 7:12</div>
+    </div>
+    <nav aria-label="Secondary" style="display: flex; gap: 22px; font-size: 15px; font-weight: 600; padding-bottom: 6px">
+      <a href="#backlog">Backlog</a>
+      <a href="#shop">Shop</a>
+      <a href="#week">Week</a>
+    </nav>
+  </div>
+
+  <div style="flex-grow: 1; display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 28px; padding: 0 80px">
+
+    <div style="width: 100%; max-width: 760px; background: #FFFFFF; border-radius: 22px; padding: 36px 40px; display: flex; flex-direction: column; gap: 18px">
+      <div style="font-size: 13px; font-weight: 700; letter-spacing: 1.2px; text-transform: uppercase; color: #1F6B5A">If you do one thing</div>
+      <div style="font-size: 30px; font-weight: 700; letter-spacing: -0.4px; line-height: 1.2">Ring the nursery about Friday</div>
+      <div style="font-size: 17px; color: #5B6168; line-height: 1.5">They close at 1 today and it's the last day to swap sessions. Two minutes, and it's off the list.</div>
+      <div style="display: flex; gap: 10px; padding-top: 4px">
+        <button type="button" style="height: 48px; padding: 0 22px; border-radius: 14px; border: 0; background: #1F6B5A; color: #FFFFFF; font-size: 16px; font-weight: 600">Done</button>
+        <button type="button" style="height: 48px; padding: 0 18px; border-radius: 14px; border: 1px solid #D5D8DD; background: transparent; color: #17191C; font-size: 16px; font-weight: 600">Cal can do it</button>
+        <button type="button" style="height: 48px; padding: 0 16px; border-radius: 14px; border: 0; background: transparent; color: #5B6168; font-size: 16px; font-weight: 600">Not today</button>
+      </div>
+    </div>
+
+    <div style="width: 100%; max-width: 760px; display: flex; flex-direction: column; gap: 10px; font-size: 16px; color: #5B6168; line-height: 1.5">
+      <div style="display: flex; gap: 12px; align-items: flex-start">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#5B6168" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex-shrink: 0; margin-top: 3px"><circle cx="12" cy="12" r="9"></circle><path d="M12 7v5l3 2"></path></svg>
+        <div>Everything else is parked. The bins still go out tonight — I'll nudge whoever's downstairs at 7.</div>
+      </div>
+      <div style="display: flex; gap: 12px; align-items: flex-start">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#5B6168" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex-shrink: 0; margin-top: 3px"><path d="M21 8 12 3 3 8v8l9 5 9-5z"></path><path d="M3 8l9 5 9-5M12 13v8"></path></svg>
+        <div>A Screwfix parcel lands before 6. Nothing to sign.</div>
+      </div>
+    </div>
+
+  </div>
+
+  <form style="display: flex; align-items: center; gap: 12px; background: #FFFFFF; border-radius: 18px; padding: 8px 8px 8px 22px; border: 1px solid #E2E4E8">
+    <label for="say2" style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0)">Tell the house something</label>
+    <input id="say2" type="text" placeholder="Tell me something, or ask" style="flex-grow: 1; border: 0; outline: none; font-family: inherit; font-size: 17px; color: #17191C; background: transparent; height: 44px">
+    <button type="button" aria-label="Talk" style="width: 48px; height: 48px; border-radius: 14px; border: 0; background: #17191C; color: #FFFFFF; display: flex; align-items: center; justify-content: center">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="3" width="6" height="12" rx="3"></rect><path d="M5 11a7 7 0 0 0 14 0M12 18v3"></path></svg>
+    </button>
+  </form>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1180,"height":820}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {};
+  }
+}
+</script>
+</body>
+</html>

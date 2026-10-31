@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Backlog — brain dump</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&display=swap">
+<style>
+body{margin:0}
+a{color:#5B6168;text-decoration:none}a:hover{color:#17191C}
+button{font-family:inherit;cursor:pointer}
+</style>
+</helmet>
+<div style="width: 1180px; height: 820px; box-sizing: border-box; padding: 44px 48px 36px 48px; background: #F3F4F6; color: #17191C; font-family: Manrope, system-ui, sans-serif; display: flex; flex-direction: column; gap: 26px">
+
+  <div style="display: flex; align-items: flex-end; justify-content: space-between; gap: 24px">
+    <div style="display: flex; flex-direction: column; gap: 6px">
+      <div style="font-size: 34px; font-weight: 700; letter-spacing: -0.5px; line-height: 1.1">Backlog</div>
+      <div style="font-size: 17px; font-weight: 500; color: #5B6168">14 things with no deadline · nothing here is overdue, ever</div>
+    </div>
+    <nav aria-label="Secondary" style="display: flex; gap: 22px; font-size: 15px; font-weight: 600; padding-bottom: 6px">
+      <a href="Main.dc.html">Today</a>
+      <a href="#shop">Shop</a>
+      <a href="#week">Week</a>
+    </nav>
+  </div>
+
+  <form style="display: flex; align-items: center; gap: 12px; background: #FFFFFF; border-radius: 18px; padding: 8px 8px 8px 22px; border: 1px solid #E2E4E8">
+    <label for="dump" style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0)">Add to the backlog</label>
+    <input id="dump" type="text" placeholder="Dump it here — “put up the hallway pictures”, “book the car in for MOT”" style="flex-grow: 1; border: 0; outline: none; font-family: inherit; font-size: 17px; color: #17191C; background: transparent; height: 44px">
+    <button type="button" aria-label="Talk" style="width: 48px; height: 48px; border-radius: 14px; border: 0; background: #17191C; color: #FFFFFF; display: flex; align-items: center; justify-content: center">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="3" width="6" height="12" rx="3"></rect><path d="M5 11a7 7 0 0 0 14 0M12 18v3"></path></svg>
+    </button>
+  </form>
+
+  <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 24px; flex-grow: 1; min-height: 0; align-content: start">
+
+    <section style="display: flex; flex-direction: column; gap: 10px">
+      <h2 style="margin: 0; font-size: 13px; font-weight: 700; letter-spacing: 1.2px; text-transform: uppercase; color: #1F6B5A">Could go soon</h2>
+      <div style="background: #FFFFFF; border-radius: 16px; padding: 6px 18px; display: flex; flex-direction: column">
+        <div style="display: flex; flex-direction: column; gap: 3px; padding: 14px 0; border-bottom: 1px solid #EDEEF1">
+          <div style="font-size: 16px; font-weight: 600">Service the bike</div>
+          <div style="font-size: 13px; color: #1F6B5A; font-weight: 500">Sat morning · dry, kids at Grandma's</div>
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 3px; padding: 14px 0; border-bottom: 1px solid #EDEEF1">
+          <div style="font-size: 16px; font-weight: 600">Put up the hallway pictures</div>
+          <div style="font-size: 13px; color: #1F6B5A; font-weight: 500">Any evening · 20 min, kids asleep</div>
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 3px; padding: 14px 0">
+          <div style="font-size: 16px; font-weight: 600">Return the Screwfix order</div>
+          <div style="font-size: 13px; color: #1F6B5A; font-weight: 500">Thu · you're passing on the way to pick-up</div>
+        </div>
+      </div>
+    </section>
+
+    <section style="display: flex; flex-direction: column; gap: 10px">
+      <h2 style="margin: 0; font-size: 13px; font-weight: 700; letter-spacing: 1.2px; text-transform: uppercase; color: #5B6168">Waiting for the right moment</h2>
+      <div style="background: #FFFFFF; border-radius: 16px; padding: 6px 18px; display: flex; flex-direction: column">
+        <div style="display: flex; flex-direction: column; gap: 3px; padding: 14px 0; border-bottom: 1px solid #EDEEF1">
+          <div style="font-size: 16px; font-weight: 600">Clear the gutters</div>
+          <div style="font-size: 13px; color: #5B6168">Needs dry weather and both home</div>
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 3px; padding: 14px 0; border-bottom: 1px solid #EDEEF1">
+          <div style="font-size: 16px; font-weight: 600">Sort the loft boxes</div>
+          <div style="font-size: 13px; color: #5B6168">Needs a free half-day</div>
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 3px; padding: 14px 0; border-bottom: 1px solid #EDEEF1">
+          <div style="font-size: 16px; font-weight: 600">Book the car in for MOT</div>
+          <div style="font-size: 13px; color: #5B6168">Due January · will surface in December</div>
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 3px; padding: 14px 0">
+          <div style="font-size: 16px; font-weight: 600">Fix the garden gate latch</div>
+          <div style="font-size: 13px; color: #5B6168">Needs daylight · 30 min</div>
+        </div>
+      </div>
+    </section>
+
+    <section style="display: flex; flex-direction: column; gap: 10px">
+      <h2 style="margin: 0; font-size: 13px; font-weight: 700; letter-spacing: 1.2px; text-transform: uppercase; color: #5B6168">Just added</h2>
+      <div style="background: #FFFFFF; border-radius: 16px; padding: 6px 18px; display: flex; flex-direction: column">
+        <div style="display: flex; flex-direction: column; gap: 6px; padding: 14px 0; border-bottom: 1px solid #EDEEF1">
+          <div style="font-size: 16px; font-weight: 600">Descale the coffee machine</div>
+          <div style="font-size: 13px; color: #5B6168">Chloe · this morning</div>
+          <div style="display: flex; gap: 6px; flex-wrap: wrap">
+            <button type="button" style="height: 32px; padding: 0 12px; border-radius: 10px; border: 1px solid #D5D8DD; background: transparent; color: #17191C; font-size: 13px; font-weight: 600">15 min</button>
+            <button type="button" style="height: 32px; padding: 0 12px; border-radius: 10px; border: 1px solid #D5D8DD; background: transparent; color: #17191C; font-size: 13px; font-weight: 600">Either of us</button>
+            <button type="button" style="height: 32px; padding: 0 12px; border-radius: 10px; border: 1px solid #D5D8DD; background: transparent; color: #17191C; font-size: 13px; font-weight: 600">No kids needed</button>
+          </div>
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 6px; padding: 14px 0">
+          <div style="font-size: 16px; font-weight: 600">Find a plumber for the bathroom tap</div>
+          <div style="font-size: 13px; color: #5B6168">Cal · Thursday</div>
+          <div style="display: flex; gap: 6px; flex-wrap: wrap">
+            <button type="button" style="height: 32px; padding: 0 12px; border-radius: 10px; border: 1px solid #D5D8DD; background: transparent; color: #17191C; font-size: 13px; font-weight: 600">Needs a phone call</button>
+            <button type="button" style="height: 32px; padding: 0 12px; border-radius: 10px; border: 1px solid #D5D8DD; background: transparent; color: #17191C; font-size: 13px; font-weight: 600">Weekday 9–5</button>
+          </div>
+        </div>
+      </div>
+      <div style="font-size: 13px; color: #5B6168; line-height: 1.5; padding: 2px 4px">The agent guesses the constraints from what you typed. Tap a tag to correct it; then it knows when to offer this.</div>
+    </section>
+
+  </div>
+
+  <div style="display: flex; justify-content: space-between; align-items: center; font-size: 14px; color: #5B6168">
+    <div>5 more, parked · things you said “not now” to three times</div>
+    <a href="#parked" style="font-weight: 600">Show parked</a>
+  </div>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1180,"height":820}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {};
+  }
+}
+</script>
+</body>
+</html>
