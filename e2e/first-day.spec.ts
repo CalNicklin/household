@@ -34,7 +34,7 @@ for (const size of ["ipad", "phone"] as const) {
     // No timer has run: the screen asked, a catch-up plan job made today's plan, and it arrived live.
     const start = page.getByRole("region", { name: "Getting started" });
     await expect(start.getByText("Say a few jobs into the box below")).toBeVisible();
-    await expect(start.getByText("Connect the shared calendar in Settings")).toBeVisible();
+    await expect(start.getByText("Calendars aren't connected yet")).toBeVisible();
     await expect(start.getByText("Ask “if I do one thing, what should it be?”")).toBeVisible();
     await expect(start.getByText(/The backlog is empty/)).toBeVisible();
     await expect(start.getByRole("button", { name: "Not now" })).toHaveCount(3);
