@@ -262,18 +262,22 @@ export function jobsRouter(db: JobsDb) {
     exchanges: readProcedure.input(zExchangesForInput).output(z.array(zExchange)).query(async ({ input }) => {
       const rows = await db.query.messages.findMany({
         where: and(eq(schema.messages.person, input.person), eq(schema.messages.channel, Channel.app), gte(schema.messages.receivedAt, new Date(input.since))),
-        with: { replies: { where: eq(schema.replies.person, input.person), orderBy: desc(schema.replies.createdAt) } },
+        with: { replies: { where: eq(schema.replies.person, input.person), orderBy: desc(schema.replies.createdAt) }, jobs: { orderBy: desc(schema.jobs.createdAt) } },
         orderBy: schema.messages.receivedAt,
       });
       return rows.map((m) => {
         const r = m.replies[0];
+        const job = m.jobs[0];
+        // PRV-5: redaction empties the attachments, so a finished tap is also known by its `tap:` intent.
+        const tap = m.attachments.some((a) => a.kind === AttachmentKind.ref && a.action !== undefined) || (job?.intent.startsWith("tap:") ?? false);
         return {
           id: m.id,
           text: m.text,
           redacted: m.redacted,
           receivedAt: iso(m.receivedAt),
-          tap: m.attachments.some((a) => a.kind === AttachmentKind.ref && a.action !== undefined),
+          tap,
           reply: r === undefined ? null : { id: r.id, text: r.text, createdAt: iso(r.createdAt) },
+          job: job === undefined ? null : { status: job.status, toolCalls: job.toolCalls },
         };
       });
     }),

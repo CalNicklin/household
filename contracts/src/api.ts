@@ -65,9 +65,14 @@ export const zExchange = z.object({
   text: z.string(),
   redacted: z.boolean(),
   receivedAt: z.iso.datetime({ offset: true }),
-  /** True for a one-tap button press (CH-8): a tap, not something said. */
+  /**
+   * True for a one-tap button press (CH-8): a tap, not something said. Read from the attachments or,
+   * once they are redacted (PRV-5), from the job's `tap:` intent.
+   */
   tap: z.boolean(),
   reply: z.object({ id: z.string(), text: z.string(), createdAt: z.iso.datetime({ offset: true }) }).nullable(),
+  /** The message's job, if it has started: how it stands, and what its tools returned. */
+  job: zJob.pick({ status: true, toolCalls: true }).nullable(),
 });
 export const zTimerRunInput = z.object({ timer: zTimerKind, scheduledFor: z.iso.datetime({ offset: true }), missed: z.boolean() });
 

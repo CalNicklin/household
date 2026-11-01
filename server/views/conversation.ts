@@ -20,15 +20,16 @@ export async function conversationView(rt: Runtime, person: string): Promise<Con
   const api = rt.system("views");
   const since = startOfLocalDay(localDate(rt.ports.clock.now(), rt.timeZone), rt.timeZone).toISOString();
   const exchanges = (await api.jobs.exchanges({ person, since })).filter((e) => !e.tap);
-  return Promise.all(
-    exchanges.map(async (e) => {
-      const job = await api.jobs.jobForMessage({ id: e.id });
-      const said = e.redacted || e.text.trim() === "" ? null : e.text;
-      if (e.reply !== null) {
-        return { id: e.id, said, saidAt: e.receivedAt, state: ExchangeState.answered, reply: { ...e.reply, pick: job === null ? null : pickOf(job.toolCalls) } };
-      }
-      const state = job?.status === JobStatus.failed ? ExchangeState.failed : job?.status === JobStatus.succeeded ? ExchangeState.quiet : ExchangeState.waiting;
-      return { id: e.id, said, saidAt: e.receivedAt, state, reply: null };
-    }),
-  );
+  return exchanges.map((e) => {
+    const said = e.redacted || e.text.trim() === "" ? null : e.text;
+    if (e.reply !== null) return { id: e.id, said, saidAt: e.receivedAt, state: ExchangeState.answered, reply: { ...e.reply, pick: e.job === null ? null : pickOf(e.job.toolCalls) } };
+    return { id: e.id, said, saidAt: e.receivedAt, state: stateWithoutReply(e.job?.status ?? null), reply: null };
+  });
+}
+
+/** An exchange with no reply yet: still going, finished with nothing to say, or failed. */
+function stateWithoutReply(status: JobStatus | null): ExchangeState {
+  if (status === JobStatus.failed) return ExchangeState.failed;
+  if (status === JobStatus.succeeded) return ExchangeState.quiet;
+  return ExchangeState.waiting;
 }
