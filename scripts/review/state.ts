@@ -67,7 +67,6 @@ export type ReadHead = (file: string) => string | null;
 
 const WINDOW_BEFORE = 3;
 const WINDOW_AFTER = 3;
-const NEAR_LINES = 3;
 const sha256 = (s: string) => createHash("sha256").update(s).digest("hex");
 const normaliseLines = (text: string) =>
   text
@@ -132,18 +131,15 @@ export type Merged = {
   blocking: boolean;
 };
 
-const near = (a: Pick<ReviewFinding, "stage" | "file" | "line">, b: Pick<ReviewFinding, "stage" | "file" | "line">) =>
-  a.stage === b.stage && a.file === b.file && (a.line === null || b.line === null ? a.line === b.line : Math.abs(a.line - b.line) <= NEAR_LINES);
-
 /**
- * A new finding restates a remembered one of its stage when it is near one still open, or anchored on
- * exactly the code of one accepted. A fixed finding is only restated by name (`repeats`), so a
- * new defect next to a fix is still raised.
+ * A new finding restates a remembered one of its stage when it is anchored on exactly the same code as
+ * one still open (and is no more severe) or one accepted. Anything else is raised: a duplicate comment is
+ * better than a hidden defect. A fixed finding is only restated by name (`repeats`), so a new defect next
+ * to a fix is still raised.
  */
 function restates(f: ReviewFinding, window: string, k: StoredFinding): boolean {
-  if (k.status === ReviewStatus.open) return near(k, f);
-  if (k.status === ReviewStatus.fixed) return false;
-  return k.stage === f.stage && k.file === f.file && k.window === window;
+  if (k.status === ReviewStatus.fixed || k.stage !== f.stage || k.file !== f.file || k.window !== window) return false;
+  return k.status === ReviewStatus.accepted || severityRank[f.severity] >= severityRank[k.severity];
 }
 
 /**
@@ -178,7 +174,7 @@ export function merge(prior: ReviewState, answers: Answers, head: { sha: string;
       .map((f) => normalise(stage, f))
       .filter((f): f is ReviewFinding => f !== null)
       .map((f) => ({ f, window: windowOf(f, read, diff) }))
-      .filter(({ f, window }) => !findings.some((k) => restates(f, window, k)) && !raised.some((r) => near(r, f)))
+      .filter(({ f, window }) => !findings.some((k) => restates(f, window, k)))
       .sort((a, b) => severityRank[a.f.severity] - severityRank[b.f.severity])
       .slice(0, Limits.reviewMaxFindings.value);
     for (const { f, window } of fresh) raised.push({ ...f, id: `AR-${nextId++}`, status: ReviewStatus.open, sha, window, commentId: null, reason: null, settledOn: null });

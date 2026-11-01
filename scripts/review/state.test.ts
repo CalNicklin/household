@@ -115,6 +115,18 @@ describe("HOU-151 the blocking decision", () => {
     expect(second.blocking).toBe(true);
   });
 
+  it("a new, more severe finding on the code of an open low is raised, not hidden behind it", () => {
+    const first = merge(emptyState(), answers({ code: { findings: [finding({ severity: "low", line: 10 })], earlier: [] } }), head("aaaaaaa", a));
+    const second = merge(first.state, answers({ code: { findings: [finding({ severity: "high", line: 10, summary: "a real bug here" }), finding({ severity: "low", line: 12 })], earlier: [{ id: "AR-1", outcome: "still_open", reason: "same" }] } }), head("bbbbbbb", a));
+    expect(second.raised.map((f) => [f.id, f.severity, f.line])).toEqual([
+      ["AR-2", "high", 10],
+      ["AR-3", "low", 12],
+    ]);
+    expect(second.blocking).toBe(true);
+    // The same low again, on the same code, is the open one: not counted twice.
+    expect(merge(first.state, answers({ code: { findings: [finding({ severity: "low", line: 10 })], earlier: [] } }), head("bbbbbbb", a)).raised).toEqual([]);
+  });
+
   it("a stage only judges its own earlier findings", () => {
     const first = merge(emptyState(), answers({ security: { findings: [finding()], earlier: [] } }), head("aaaaaaa", a));
     const second = merge(first.state, answers({ code: { findings: [], earlier: [{ id: "AR-1", outcome: "accepted", reason: "fine" }] }, security: { findings: [], earlier: [{ id: "AR-1", outcome: "still_open", reason: "no" }] } }), head("bbbbbbb", a));
