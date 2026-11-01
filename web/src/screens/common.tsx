@@ -1,5 +1,6 @@
 import { type Block, type ConversationView, ExchangeState, type NotifyAction } from "@household/contracts";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useEffect } from "react";
 import type { BlockHandlers } from "../blocks/BlockRenderer.tsx";
 import { say } from "../data/send.ts";
 import { useTRPC } from "../data/trpc.ts";
@@ -85,12 +86,18 @@ function houseLine(e: ConversationView[number]): ExchangeLine["house"] {
  */
 function TodaysConversation() {
   const trpc = useTRPC();
-  const { said, conversationOpen, setConversationOpen } = useUiState();
+  const { said, clearSaid, conversationOpen, setConversationOpen } = useUiState();
   const conversation = useQuery(trpc.conversation.queryOptions());
   const exchanges: ExchangeLine[] = (conversation.data ?? []).map((e) => ({ id: e.id, said: e.said, house: houseLine(e) }));
   // Ids, not times, tell what is new: the server's clock (the practice clock) can differ from this device's.
   const newest = conversation.data === undefined ? undefined : (conversation.data.at(-1)?.id ?? null);
-  if (said !== null && (newest === undefined || newest === said.before)) exchanges.push({ id: "pending", said: said.text, house: WAITING });
+  // The server has something newer than when it was said, so it has this: stop holding it as waiting.
+  // Otherwise, after midnight empties the view, the day's first message would look unsent again.
+  const arrived = said !== null && newest !== undefined && newest !== said.before;
+  useEffect(() => {
+    if (arrived) clearSaid();
+  }, [arrived, clearSaid]);
+  if (said !== null && !arrived) exchanges.push({ id: "pending", said: said.text, house: WAITING });
   return <Conversation exchanges={exchanges.slice(-SHOWN_EXCHANGES)} total={exchanges.length} open={conversationOpen} onOpen={() => setConversationOpen(true)} onClose={() => setConversationOpen(false)} />;
 }
 

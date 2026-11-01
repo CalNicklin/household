@@ -17,6 +17,8 @@ type UiState = {
    */
   said: Said | null;
   markSaid: (before: string | null | undefined, text: string) => void;
+  /** Forget what was last said, once the server has it, so it can't come back as waiting later. */
+  clearSaid: () => void;
   /** HOU-159: whether today's conversation is open above the composer. Saying something opens it. */
   conversationOpen: boolean;
   setConversationOpen: (open: boolean) => void;
@@ -34,7 +36,8 @@ export function UiStateProvider({ children }: { children: ReactNode }) {
     setSaid({ before, text });
     setConversationOpen(true);
   }, []);
-  const value = useMemo(() => ({ hidden, hide, about, setAbout, said, markSaid, conversationOpen, setConversationOpen }), [hidden, hide, about, said, markSaid, conversationOpen]);
+  const clearSaid = useCallback(() => setSaid(null), []);
+  const value = useMemo(() => ({ hidden, hide, about, setAbout, said, markSaid, clearSaid, conversationOpen, setConversationOpen }), [hidden, hide, about, said, markSaid, clearSaid, conversationOpen]);
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
 
