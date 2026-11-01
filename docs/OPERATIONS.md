@@ -312,6 +312,13 @@ Backlog in the app, as yours. Then `sudo household-telegram status` shows no del
 waiting, and `sudo household-telegram senders` doesn't show your ID again. Urgent messages from the house
 now come to you on Telegram (Settings in the app chooses which).
 
+*Tried on the build sandbox, 1 November 2026:* `deploy/test-telegram.sh` sets up a house on local Docker as
+`test-deploy.sh` does, with a stand-in for api.telegram.org on the house's network, and runs the real
+`household-telegram`: `connect` without a token says what to do, bad command lines are refused, `connect`
+sets the webhook with the house's secret for only messages and button taps, a wrong secret gets 401, a
+stranger's message is dropped with no reply and `senders` shows only their ID, `set` makes their next
+message arrive as them (and refuses the other adult's ID), and no output contains the token or the secret.
+
 ### Backups on the server
 
 `household-backup.timer` runs `household-backup` at about 03:17 every night. It runs the same backup as
