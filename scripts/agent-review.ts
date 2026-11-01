@@ -135,15 +135,15 @@ async function postCommand(): Promise<void> {
     slop: { rating: slop?.rating ?? null, rationale: slop?.rationale ?? null },
   };
   const { failures } = await publish(gh, pr, before, merged, run, commentableLines(diff));
-  for (const failure of failures) process.stdout.write(`::warning title=Agent review comment::${annotation(failure)}\n`);
+  for (const failure of failures) process.stdout.write(`::warning title=Agent review comment::${message(failure)}\n`);
   const blocking = merged.open.filter((f) => blockingSeverities.includes(f.severity));
   summary(`### agent-review: ${merged.blocking ? `✗ ${blocking.length} open medium or high` : "✓ nothing blocks"} (${merged.open.length} open, ${merged.raised.length} new, ${merged.settled.length} settled on this push)`);
-  for (const f of blocking) process.stdout.write(`::error title=${f.id} ${f.severity} (${f.stage})::${annotation(`${f.file === "" ? "" : `${f.file}${f.line === null ? "" : `:${f.line}`} `}${f.summary}`)}\n`);
+  for (const f of blocking) process.stdout.write(`::error title=${f.id} ${f.severity} (${f.stage})::${message(`${f.file === "" ? "" : `${f.file}${f.line === null ? "" : `:${f.line}`} `}${f.summary}`)}\n`);
   if (merged.blocking) process.exit(1);
 }
 
-/** One line of an annotation: the first line only, with the characters workflow commands give meaning to escaped. */
-const annotation = (s: string) => (s.split("\n")[0] ?? "").replaceAll("%", "%25").replaceAll("\r", "%0D").replaceAll(":", "%3A");
+/** An annotation's message: its first line, with the escapes workflow commands undo in a message (%, CR). */
+const message = (s: string) => (s.split("\n")[0] ?? "").replaceAll("%", "%25").replaceAll("\r", "%0D");
 
 const commands: Record<string, () => Promise<void>> = { review: reviewCommand, prior: priorCommand, post: postCommand };
 const command = commands[positionals[0] ?? ""];
