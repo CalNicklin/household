@@ -66,8 +66,8 @@ export function BacklogScreen() {
   const waiting = shown(data?.waiting ?? [], (r) => r.item);
   const justAdded = shown(data?.justAdded ?? [], (r) => r.item);
   const parked = shown(data?.parked ?? [], (r) => r);
-  // The count leaves out parked items, and anything just deleted here.
-  const count = data === undefined ? 0 : data.count - (data.soon.length - soon.length) - (data.waiting.length - waiting.length) - (data.justAdded.length - justAdded.length);
+  // Not parked, and not just deleted here.
+  const count = soon.length + waiting.length + justAdded.length;
   return (
     <Page label="Backlog">
       <Header title="Backlog" line={`${count} ${count === 1 ? "thing" : "things"} with no deadline · nothing here is overdue, ever`} nav={navFor("/backlog")} />
