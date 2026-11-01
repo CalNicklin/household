@@ -3,7 +3,7 @@ import { findSlot, partOfDay } from "../rules/fit.ts";
 import { adultsOf, type HouseFacts, nameOf } from "../rules/day.ts";
 import type { Runtime } from "../runtime.ts";
 import { addLocalDays, atLocal, daysBetween, localDate, shortWeekday, startOfLocalDay } from "../time.ts";
-import type { BacklogPick, OneThing } from "./compose.ts";
+import { type BacklogPick, isShopNews, type OneThing } from "./compose.ts";
 import { type HouseFill, START_REF_PREFIX } from "./first-day.ts";
 
 /** Everything the rules need, read through each domain's router (no cross-database reads, CODE-4). */
@@ -101,7 +101,8 @@ export async function oneThingCandidates(rt: Runtime, facts: HouseFacts, date: L
     });
   }
   for (const b of plan?.blocks ?? []) {
-    if (closed.has(b.id) || b.id.startsWith(START_REF_PREFIX)) continue;
+    // HOU-157: shop news is never the one thing to do now.
+    if (closed.has(b.id) || b.id.startsWith(START_REF_PREFIX) || isShopNews(b)) continue;
     if (b.type === BlockType.suggestion) out.push({ ref: b.ref, title: b.title, why: b.reason, actions: withHandOver(b.ref, b.actions) });
   }
   // HOU-149: a thin house still gets one answer — the oldest small job that needs nothing it can't check.
@@ -138,7 +139,7 @@ function oldestSmall(items: readonly BacklogItem[]): BacklogItem | undefined {
 export async function houseFill(rt: Runtime): Promise<HouseFill> {
   const api = rt.system("planner");
   const backlogItems = (await api.backlog.list()).filter((i) => i.status === BacklogStatus.active).length;
-  return { calendarConnected: (await api.calendar.syncToken()) !== null, backlogItems };
+  return { calendarConnected: Object.keys(await api.calendar.syncTokens()).length > 0, backlogItems };
 }
 
 /** Notifications waiting for the morning screen (PRO-7) or routed to it (CH-7). */

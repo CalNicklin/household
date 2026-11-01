@@ -488,3 +488,12 @@ export const ListWriteOutcome = {
 } as const;
 export type ListWriteOutcome = ValueOf<typeof ListWriteOutcome>;
 export const zListWriteOutcome = z.enum(ListWriteOutcome);
+
+/**
+ * HOME-1: whose a Google calendar is. A person's own calendar is named by their person ID (`cal`,
+ * `chloe`); `shared` is the household's shared calendar, whose events keep the attendee-email rule.
+ */
+export const CalendarOwnerKind = {
+  shared: "shared",
+} as const;
+export type CalendarOwnerKind = ValueOf<typeof CalendarOwnerKind>;
