@@ -1,8 +1,8 @@
 /** Router inputs (CODE-5). Outputs are the records in domain.ts and blocks.ts. */
 import { z } from "zod";
 import { zBlock } from "./blocks.ts";
-import { zArrival, zCalendarEvent, zJob, zLearningEvent, zNurseryEvent, zPersonSettings, zProductOption, zQuestion, zRhythm, zRuleSpec } from "./domain.ts";
-import { LongTool, zActionKind, zBacklogTag, zChannel, zDeliveryChannel, zLongTool, zModeKind, zModelProvider, zNotificationStatus, zShoppingStatus, zTimerKind } from "./enums.ts";
+import { zArrival, zCalendarEvent, zJob, zLearningEvent, zListItem, zNurseryEvent, zPersonSettings, zProductOption, zQuestion, zRhythm, zRuleSpec } from "./domain.ts";
+import { LongTool, zActionKind, zBacklogTag, zChannel, zDeliveryChannel, zListWriteOutcome, zLongTool, zModeKind, zModelProvider, zNotificationStatus, zShoppingStatus, zTimerKind } from "./enums.ts";
 import { zInboundMessage, zNotifyInput } from "./message.ts";
 
 export const zIdInput = z.object({ id: z.string() });
@@ -82,3 +82,28 @@ export const zSummaryInput = z.object({ person: z.string(), deliveryDate: z.iso.
 export const zScreenInput = z.object({ date: z.iso.date().optional() });
 export const zEditRhythmInput = z.object({ id: z.string(), everyDays: z.number().int().min(1) });
 export const zForgetSentenceInput = z.object({ id: z.string(), kind: z.string() });
+
+/** CAP-6: the lists domain. Names and items are trimmed; an empty one is refused. */
+export const zListCreateInput = z.object({ name: z.string().trim().min(1), emoji: z.string().trim().min(1) });
+export const zListUpdateInput = z.object({ id: z.string(), name: z.string().trim().min(1).optional(), emoji: z.string().trim().min(1).optional() });
+/** `sourceMessage` is the message a job is handling when the house adds it (PRV-1); null when a person types it on the Lists screen. */
+export const zListItemAddInput = z.object({ listId: z.string(), text: z.string().trim().min(1), sourceMessage: z.string().nullable() });
+export const zListItemCheckInput = z.object({ id: z.string(), checked: z.boolean() });
+export const zListItemRenameInput = z.object({ id: z.string(), text: z.string().trim().min(1) });
+/** The item as it now stands; on `duplicate` it is the one already on the list, unchanged. */
+export const zListWriteResult = z.object({ outcome: zListWriteOutcome, item: zListItem });
+export type ListWriteResult = z.infer<typeof zListWriteResult>;
+/** A one-off copy of Family Lists (order, ticks and emoji kept). */
+export const zListImportInput = z.object({
+  lists: z.array(
+    z.object({
+      name: z.string().trim().min(1),
+      emoji: z.string().trim().min(1),
+      position: z.number().int(),
+      createdAt: z.iso.datetime({ offset: true }),
+      items: z.array(z.object({ text: z.string().trim().min(1), checked: z.boolean(), position: z.number().int(), createdAt: z.iso.datetime({ offset: true }) })),
+    }),
+  ),
+});
+export type ListImportInput = z.infer<typeof zListImportInput>;
+export const zListImportOutput = z.object({ lists: z.number().int(), items: z.number().int() });

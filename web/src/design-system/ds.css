@@ -815,6 +815,221 @@ a:hover {
   flex-wrap: wrap;
 }
 
+/* ── Checklists: shared lists (CAP-6) ──────────────────────────────────── */
+
+.ds-checklist {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px var(--space-card-x) 8px;
+}
+
+.ds-checklist__head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-tight);
+  min-height: var(--size-target-tap);
+}
+
+.ds-checklist__head--editing {
+  flex-wrap: wrap;
+}
+
+.ds-checklist__title {
+  flex-grow: 1;
+  min-width: 0;
+  margin: 0;
+  font-size: var(--size-item);
+  font-weight: var(--weight-bold);
+  letter-spacing: var(--tracking-title-small);
+}
+
+.ds-checklist__emoji-input {
+  width: 56px;
+  text-align: center;
+}
+
+.ds-checklist__name-input {
+  flex: 1 1 140px;
+}
+
+.ds-checklist__items {
+  display: flex;
+  flex-direction: column;
+}
+
+.ds-checklist__adder {
+  border-top: 1px solid var(--color-hairline);
+}
+
+.ds-check-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-height: var(--size-target-tap);
+  border-bottom: 1px solid var(--color-hairline);
+}
+
+.ds-check-row:last-child {
+  border-bottom: 0;
+}
+
+.ds-check-row__box,
+.ds-check-row__delete,
+.ds-menu__button {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--size-target-tap);
+  height: var(--size-target-tap);
+  margin-left: -10px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-button);
+  background: transparent;
+  color: var(--color-muted);
+}
+
+.ds-check-row__delete,
+.ds-menu__button {
+  margin: 0 -10px 0 0;
+}
+
+.ds-check-row__box:focus-visible,
+.ds-check-row__text:focus-visible,
+.ds-check-row__delete:focus-visible,
+.ds-menu__button:focus-visible,
+.ds-menu__item:focus-visible {
+  outline: 2px solid var(--color-suggestion-accent);
+  outline-offset: 2px;
+}
+
+.ds-check-row__mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border: 2px solid var(--color-border-strong);
+  border-radius: 8px;
+  color: transparent;
+}
+
+.ds-check-row--done .ds-check-row__mark {
+  background: var(--color-suggestion-accent);
+  border-color: var(--color-suggestion-accent);
+  color: var(--color-on-ink);
+}
+
+.ds-check-row__text {
+  flex-grow: 1;
+  min-width: 0;
+  min-height: var(--size-target-tap);
+  padding: 10px 0;
+  border: 0;
+  background: transparent;
+  color: var(--color-text);
+  font-size: var(--size-body-small);
+  font-weight: var(--weight-medium);
+  line-height: 1.35;
+  text-align: left;
+  cursor: text;
+  overflow-wrap: anywhere;
+}
+
+.ds-check-row--done .ds-check-row__text {
+  color: var(--color-muted);
+  text-decoration: line-through;
+}
+
+.ds-check-row__edit {
+  flex-grow: 1;
+  min-width: 0;
+  padding: 4px 0;
+}
+
+.ds-check-row__input,
+.ds-add-item__input {
+  width: 100%;
+  min-height: var(--size-target-tap);
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--color-text);
+  font-size: var(--size-body-small);
+  font-weight: var(--weight-medium);
+  outline: none;
+}
+
+.ds-check-row__input {
+  border-bottom: 2px solid var(--color-suggestion-accent);
+}
+
+.ds-add-item__input::placeholder {
+  color: var(--color-muted);
+}
+
+.ds-check-row__error {
+  margin: 0 0 6px;
+  font-size: var(--size-label);
+  color: var(--color-alert-text);
+}
+
+.ds-confirm {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.ds-confirm__question {
+  margin: 0;
+  font-size: var(--size-label);
+  color: var(--color-muted);
+}
+
+.ds-confirm__actions {
+  display: flex;
+  gap: 4px;
+}
+
+.ds-menu {
+  position: relative;
+}
+
+.ds-menu__list {
+  position: absolute;
+  right: -10px;
+  top: 100%;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  min-width: 180px;
+  padding: 4px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-button);
+  background: var(--color-surface);
+  box-shadow: 0 8px 24px var(--color-border-strong);
+}
+
+.ds-menu__item {
+  min-height: var(--size-target-tap);
+  padding: 0 14px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--color-text);
+  font-size: var(--size-body-small);
+  font-weight: var(--weight-medium);
+  text-align: left;
+}
+
+.ds-menu__item:hover {
+  background: var(--color-ground);
+}
+
 /* ── Phone: one column, nothing cut off (HOME-10) ───────────────────────── */
 
 @media (max-width: 899px) {

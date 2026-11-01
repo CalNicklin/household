@@ -12,6 +12,8 @@ import * as jobs from "./domains/jobs/schema.ts";
 import { jobsRouter } from "./domains/jobs/router.ts";
 import * as learning from "./domains/learning/schema.ts";
 import { learningRouter } from "./domains/learning/router.ts";
+import * as lists from "./domains/lists/schema.ts";
+import { listsRouter } from "./domains/lists/router.ts";
 import * as parcels from "./domains/parcels/schema.ts";
 import { parcelsRouter } from "./domains/parcels/router.ts";
 import * as plans from "./domains/plans/schema.ts";
@@ -25,7 +27,7 @@ import { LiveBus } from "./live/bus.ts";
 import type { Ports } from "./ports.ts";
 import { type Actor, createCallerFactory, router } from "./trpc.ts";
 
-export const schemas = { household, calendar, backlog, plans, parcels, learning, wellbeing, jobs, health, shopping } as const satisfies Record<Domain, Record<string, unknown>>;
+export const schemas = { household, calendar, backlog, plans, parcels, learning, wellbeing, jobs, health, shopping, lists } as const satisfies Record<Domain, Record<string, unknown>>;
 
 type Dbs = { [D in Domain]: DomainDb<(typeof schemas)[D]> };
 
@@ -41,6 +43,7 @@ export function connectAll(env: Env): Dbs {
     jobs: connectDomain(env.DATABASE_URL, env.DB_PREFIX, Domain.jobs, jobs),
     health: connectDomain(env.DATABASE_URL, env.DB_PREFIX, Domain.health, health),
     shopping: connectDomain(env.DATABASE_URL, env.DB_PREFIX, Domain.shopping, shopping),
+    lists: connectDomain(env.DATABASE_URL, env.DB_PREFIX, Domain.lists, lists),
   };
 }
 
@@ -57,6 +60,7 @@ function buildAppRouter(dbs: Dbs, timeZone: string, healthOwner: string | null) 
     jobs: jobsRouter(dbs.jobs),
     health: healthRouter(dbs.health, healthOwner),
     shopping: shoppingRouter(dbs.shopping),
+    lists: listsRouter(dbs.lists),
   });
 }
 type AppRouter = ReturnType<typeof buildAppRouter>;

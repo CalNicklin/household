@@ -17,6 +17,7 @@ export const Domain = {
   jobs: "jobs",
   health: "health",
   shopping: "shopping",
+  lists: "lists",
 } as const;
 export type Domain = ValueOf<typeof Domain>;
 
@@ -437,3 +438,24 @@ export const ModelProvider = {
 } as const;
 export type ModelProvider = ValueOf<typeof ModelProvider>;
 export const zModelProvider = z.enum(ModelProvider);
+
+/** CAP-6: how an item got onto a shared list. Only a person's own taps change or remove one (PRV-1). */
+export const ListItemSource = {
+  /** Typed on the Lists screen. */
+  person: "person",
+  /** Said or typed to the house; the agent added it on that person's behalf. */
+  agent: "agent",
+  /** Brought over once from Family Lists. */
+  import: "import",
+} as const;
+export type ListItemSource = ValueOf<typeof ListItemSource>;
+export const zListItemSource = z.enum(ListItemSource);
+
+/** CAP-6: what adding or renaming an item did. A list never holds the same item twice (case and surrounding spaces ignored). */
+export const ListWriteOutcome = {
+  added: "added",
+  renamed: "renamed",
+  duplicate: "duplicate",
+} as const;
+export type ListWriteOutcome = ValueOf<typeof ListWriteOutcome>;
+export const zListWriteOutcome = z.enum(ListWriteOutcome);

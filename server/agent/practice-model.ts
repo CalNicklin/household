@@ -82,7 +82,9 @@ function practiceIntent(prompt: string): Call[] {
   if (sitter !== null) return [{ tool: "sitter_booked", input: { sitter: sitter[1], when: sitter[2] } }];
 
   const list = LIST_ADD.exec(text);
-  if (list !== null && !/\b(shop|shopping|basket|order)\b/i.test(list[2] ?? "")) return [{ tool: "add_to_list", input: { list: list[2], item: list[1] } }];
+  // CAP-6: naming a list ("the shopping list", "the presents list") adds to that list in the app;
+  // "we're out of…" or "add … to the shop/basket/order" still goes to the supermarket (AUT-1).
+  if (list !== null && !/\b(shop|basket|order|ocado|supermarket)\b/i.test(list[2] ?? "")) return [{ tool: "add_to_list", input: { list: list[2], item: list[1] } }];
   const shop = SHOP_ADD.exec(text) ?? SHOP_OUT.exec(text) ?? SHOP_NEED.exec(text);
   if (shop?.[1] !== undefined) return [{ tool: "shop", input: { items: splitItems(shop[1]) } }];
 

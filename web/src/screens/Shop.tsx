@@ -71,11 +71,9 @@ export function ShopScreen() {
           )}
         </Section>
         <Section label="Our lists">
-          {(data?.lists ?? []).map((l) => (
-            <ListCard key={l.name} label={l.name}>
-              <BacklogRow title={l.name} meta={l.items.length === 0 ? "Empty" : l.items.join(" · ")} />
-            </ListCard>
-          ))}
+          <Text tone="muted" small>
+            <Link to="/lists">Shopping and simple lists are on the Lists screen</Link>
+          </Text>
         </Section>
       </Grid3>
     </Page>

@@ -1,4 +1,4 @@
-import { ActionKind, ActorKind, BacklogStatus, BlockType, Limits, Section, TimerKind, zBacklogItem } from "@household/contracts";
+import { ActionKind, ActorKind, BacklogStatus, BlockType, Limits, LiveTopic, Section, TimerKind, zBacklogItem } from "@household/contracts";
 import { afterAll, beforeAll, describe, expect, test } from "vitest";
 import { acceptTimer } from "../coordinator/accept.ts";
 import { testHousehold, type TestHousehold } from "../testing/household.ts";
@@ -159,11 +159,16 @@ describe("Morning glance", () => {
     expect(Object.keys(zBacklogItem.shape).sort()).toEqual(["confirmedTags", "createdAt", "createdBy", "createdVia", "id", "notNowCount", "status", "tags", "text"]);
   });
 
-  test("[CAP-6] the shared lists app stays the source: we add to it and read it, never copy it", async () => {
-    await h.sayAndWait("add wrapping paper to the christmas presents list");
-    const lists = await h.ports.lists.lists();
-    expect(lists.find((l) => l.name === "Christmas presents")?.items).toContain("wrapping paper");
+  test("[CAP-6] shopping and simple lists live in the app: what is said adds to them, and both of us see the same list straight away", async () => {
     const { schemas } = await import("../runtime.ts");
-    for (const [domain, tables] of Object.entries(schemas)) for (const name of Object.keys(tables)) expect(`${domain}.${name}`).not.toMatch(/list/i);
+    expect(Object.keys(schemas.lists)).toEqual(expect.arrayContaining(["lists", "items"]));
+    const topics: string[] = [];
+    const unsubscribe = h.rt.bus.subscribe((e) => topics.push(e.topic));
+    await h.sayAndWait("add wrapping paper to the christmas presents list", { person: "priya" });
+    unsubscribe();
+    expect(topics).toContain(LiveTopic.lists);
+    const seenBy = async (person: string) => (await h.rt.as({ kind: ActorKind.person, person }).lists.list()).find((l) => l.name === "Christmas presents")?.items.map((i) => i.text);
+    expect(await seenBy("tom")).toContain("wrapping paper");
+    expect(await seenBy("tom")).toEqual(await seenBy("priya"));
   });
 });

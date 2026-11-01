@@ -11,6 +11,7 @@ import {
   zJob,
   zJobTrace,
   zLearnedSentence,
+  zList,
   zPersonSettings,
   zProductOption,
   zQuestion,
@@ -52,9 +53,12 @@ export const zShopView = z.object({
   deliveryDate: zLocalDate.nullable(),
   changeUrl: z.string(),
   requests: z.array(zShoppingRequest),
-  lists: z.array(z.object({ name: z.string(), items: z.array(z.string()) })),
 });
 export type ShopView = z.infer<typeof zShopView>;
+
+/** CAP-6: every shared list, in order, with its items in order. */
+export const zListsView = z.array(zList);
+export type ListsView = z.infer<typeof zListsView>;
 
 export const zSettingsView = z.object({
   me: zPersonSettings,
@@ -113,6 +117,7 @@ export const LiveTopic = {
   replies: "replies",
   mode: "mode",
   shopping: "shopping",
+  lists: "lists",
   learning: "learning",
   settings: "settings",
 } as const;
