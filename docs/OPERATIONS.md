@@ -584,7 +584,8 @@ given `--mail-domain`, so until then a deploy runs exactly the four containers a
     `250` and dropped unchecked, like any unproven mail.
   - Connections are limited: at most four from the internet at once and two from any one address. Each
     is closed after a minute idle or ten minutes in all, and ten messages per connection.
-  - One message is checked at a time, for at most 30 seconds.
+  - One message is checked at a time, for at most 30 seconds. A check that runs past that is answered
+    `451` and abandoned. It stops at its next step and never reaches the app.
   - The container's healthcheck always gets in, so a flood can't fail a deploy.
   - The reasons are in `contracts/limits.ts` (`inboundEmail*`).
 - **Who sent it:** anyone can send to `orders@`, and a forwarded order's `From:` is the shop. So the

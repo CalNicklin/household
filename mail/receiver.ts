@@ -50,7 +50,7 @@ async function take(options: ReceiverOptions, stream: SMTPServerDataStream, sess
     log("mail-refused-size");
     return smtpError(552, "5.3.4 message too big");
   }
-  const handled = queue.then(() => withDeadline(receive(options, raw, session)));
+  const handled = queue.then(() => withDeadline((signal) => receive(options, raw, session, signal)));
   queue = handled.catch(() => undefined);
   try {
     await handled;
@@ -61,13 +61,16 @@ async function take(options: ReceiverOptions, stream: SMTPServerDataStream, sess
   }
 }
 
-function withDeadline<T>(work: Promise<T>): Promise<T> {
-  let timer: NodeJS.Timeout | undefined;
-  const deadline = new Promise<never>((_, reject) => {
-    // limit: inboundEmailCheckMs
-    timer = setTimeout(() => reject(new Error("the checks took too long")), Limits.inboundEmailCheckMs.value);
-  });
-  return Promise.race([work, deadline]).finally(() => clearTimeout(timer));
+/**
+ * The work, given until inboundEmailCheckMs. Past it the answer is 451 and the next message starts; the
+ * abandoned work is told to stop (`signal`) and does nothing more at its next step: it never saves a
+ * code or posts to the app after the sender was told to try again.
+ */
+function withDeadline<T>(work: (signal: AbortSignal) => Promise<T>): Promise<T> {
+  // limit: inboundEmailCheckMs
+  const signal = AbortSignal.timeout(Limits.inboundEmailCheckMs.value);
+  const deadline = new Promise<never>((_, reject) => signal.addEventListener("abort", () => reject(new Error("the checks took too long")), { once: true }));
+  return Promise.race([work(signal), deadline]);
 }
 
 export function createReceiver(options: ReceiverOptions): SMTPServer {
@@ -187,7 +190,7 @@ const authorOf = (author: { name: string; address?: string | undefined } | undef
 /** In a forward by hand, the shop is the From of the forwarded message ("---- Forwarded message ----\nFrom: …"). */
 const forwardedAuthor = (text: string): string | null => /^[>\s*]*From:\s*\**\s*(.+?)\s*$/im.exec(text)?.[1] ?? null;
 
-async function receive(options: ReceiverOptions, raw: Buffer, session: SMTPServerSession): Promise<void> {
+async function receive(options: ReceiverOptions, raw: Buffer, session: SMTPServerSession, signal: AbortSignal): Promise<void> {
   const recipient = recipientFor(options.domain);
   // limit: inboundEmailMaxSignatures
   if (signatureCount(raw) > Limits.inboundEmailMaxSignatures.value) {
@@ -203,6 +206,7 @@ async function receive(options: ReceiverOptions, raw: Buffer, session: SMTPServe
     disableBimi: true,
     ...(options.resolver === undefined ? {} : { resolver: options.resolver }),
   });
+  signal.throwIfAborted();
   const senders = provenSenders(auth, envelopeFrom, recipient);
   if (senders.length === 0) {
     if (undecided(auth)) throw new Error("a DNS lookup failed for now");
@@ -212,6 +216,7 @@ async function receive(options: ReceiverOptions, raw: Buffer, session: SMTPServe
   }
   // Only a proven email is parsed.
   const mail = await simpleParser(raw, { skipImageLinks: true });
+  signal.throwIfAborted();
   const subject = mail.subject ?? "";
   const code = forwardingConfirmationCode(senders, subject);
   if (code !== null) {
@@ -219,7 +224,7 @@ async function receive(options: ReceiverOptions, raw: Buffer, session: SMTPServe
     log("mail-forwarding-confirmation");
     return;
   }
-  await handToApp(options, toEmail(mail, raw, senders, recipient, options.domain), senders);
+  await handToApp(options, toEmail(mail, raw, senders, recipient, options.domain), senders, signal);
 }
 
 function toEmail(mail: Awaited<ReturnType<typeof simpleParser>>, raw: Buffer, senders: ProvenSender[], recipient: string, domain: string): InboundEmail {
@@ -236,13 +241,13 @@ function toEmail(mail: Awaited<ReturnType<typeof simpleParser>>, raw: Buffer, se
   };
 }
 
-async function handToApp(options: ReceiverOptions, email: InboundEmail, senders: ProvenSender[]): Promise<void> {
+async function handToApp(options: ReceiverOptions, email: InboundEmail, senders: ProvenSender[], deadline: AbortSignal): Promise<void> {
   const response = await fetch(options.webhookUrl, {
     method: "POST",
     headers: { "content-type": "application/json", "x-webhook-secret": options.webhookSecret },
     body: JSON.stringify(email),
     // limit: inboundEmailWebhookMs
-    signal: AbortSignal.timeout(Limits.inboundEmailWebhookMs.value),
+    signal: AbortSignal.any([deadline, AbortSignal.timeout(Limits.inboundEmailWebhookMs.value)]),
   });
   if (!response.ok) throw new Error(`the app answered ${response.status}`);
   const { outcome } = zAnswer.parse(await response.json());
