@@ -11,7 +11,7 @@ import { realPorts } from "../../integrations/index.ts";
 import { launchJobs, stopJobs } from "../../jobs/launch.ts";
 import { createRuntime, type Runtime } from "../../runtime.ts";
 import { testHousehold, type TestHousehold } from "../../testing/household.ts";
-import { jobForKey } from "../../testing/http.ts";
+import { jobForKey, poll } from "../../testing/http.ts";
 import type { HttpEnv } from "../registry.ts";
 import { adapter, ensureWatch, WATCH_CHECK_CRON } from "./index.ts";
 
@@ -76,7 +76,7 @@ describe("Google Calendar on the real adapter (HOU-147)", () => {
     adapter.routes?.(app, rt);
 
     // Starting the adapter opened a channel to the house's public address and synced once.
-    const watch = await rt.system("test").calendar.watch();
+    const watch = await poll(() => rt.system("test").calendar.watch());
     expect(watch).toMatchObject({ calendarId: "family@group.calendar.google.com", address: "https://house.example/webhooks/calendar", expiresAt: "2026-11-09T08:00:00.000Z", openedAt: "2026-11-02T08:00:00.000Z" });
     const opened = posts()[0];
     expect(JSON.parse(opened?.body.toString() ?? "{}")).toEqual({ id: watch?.channelId, type: "web_hook", address: "https://house.example/webhooks/calendar", token: "practice-calendar-token" });

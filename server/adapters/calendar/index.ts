@@ -108,7 +108,8 @@ export const adapter: Adapter = {
     runtime = rt;
     if (rt.ports.calendarPush === undefined) return;
     await DBOS.applySchedules([{ scheduleName: "household:calendar-watch", workflowFn: watchCheck, schedule: WATCH_CHECK_CRON, cronTimezone: rt.timeZone, automaticBackfill: false }]);
-    await checkWatch(rt);
+    // Not awaited: the server starts listening (and passes its healthcheck) whatever Google is doing.
+    void checkWatch(rt);
   },
   routes: (app, rt) => {
     app.post("/webhooks/calendar", async (c) => {
