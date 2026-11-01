@@ -51,6 +51,22 @@ function ProvenanceIcon({ provenance, size }: { provenance: Provenance; size: nu
   }
 }
 
+const NO_TIME_LABEL: Record<Provenance, string> = {
+  calendar: "All day, from the calendar",
+  email: "No set time, from an email",
+  rule: "No set time, from the house's rules",
+  planner: "No set time, suggested by the house",
+};
+
+/** HOU-153: stands in for a time, so it says what it means to a screen reader too. */
+function NoTime({ provenance, size }: { provenance: Provenance; size: number }) {
+  return (
+    <span role="img" aria-label={NO_TIME_LABEL[provenance]}>
+      <ProvenanceIcon provenance={provenance} size={size} />
+    </span>
+  );
+}
+
 /**
  * HOU-153: a card whose layout follows its own width (a CSS container), not the viewport. In a
  * narrow column or on a phone its actions sit under the text, as on the Phone canvas and the
@@ -70,7 +86,7 @@ type EventProps = { time: string | null; title: string; detail: string; provenan
 export function EventCard({ time, title, detail, provenance = "calendar", onSelect, selected }: EventProps) {
   return (
     <RowCard selected={selected}>
-      <div className="ds-card__lead">{time ?? <ProvenanceIcon provenance={provenance} size={22} />}</div>
+      <div className="ds-card__lead">{time ?? <NoTime provenance={provenance} size={22} />}</div>
       <div className="ds-card__main">
         <Title onSelect={onSelect}>{title}</Title>
         {detail === "" ? null : <p className="ds-card__detail">{detail}</p>}
@@ -98,7 +114,7 @@ export function EventRow({ time, title, detail, provenance = "calendar", onSelec
   return (
     <div className={`ds-list-row${selectedClass(selected)}`} role="listitem">
       {/* HOU-153: an all-day item has no time, so the column shows where it came from, not a gap. */}
-      <div className="ds-list-row__time">{time ?? <ProvenanceIcon provenance={provenance} size={20} />}</div>
+      <div className="ds-list-row__time">{time ?? <NoTime provenance={provenance} size={20} />}</div>
       {onSelect === undefined ? (
         <div className="ds-list-row__text">{text}</div>
       ) : (
