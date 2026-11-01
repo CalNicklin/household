@@ -23,8 +23,8 @@ const workflows = readdirSync(dir)
   });
 
 const triggers = (on: z.infer<typeof zWorkflow>["on"]) => (typeof on === "string" ? [on] : Array.isArray(on) ? on : Object.keys(on));
-/** Names the key, or takes every secret at once. */
-const READS_KEY = /HOUSEHOLD_SSH_KEY\b|toJSON\(\s*secrets\s*\)|secrets"?:\s*"?inherit/;
+/** Names the key, picks a secret by a computed name, or takes every secret at once. */
+const READS_KEY = /HOUSEHOLD_SSH_KEY\b|secrets\s*\[|toJSON\(\s*secrets\s*\)|secrets"?:\s*"?inherit/;
 const environmentName = (env: unknown) => (typeof env === "string" ? env : z.object({ name: z.string() }).safeParse(env).data?.name);
 
 describe("the deploy key", () => {
