@@ -601,3 +601,89 @@ shows:
 - a new push giving a fresh household without evicting anything;
 - closing a PR removing its preview, and a PR with no preview getting no certificate;
 - the house's containers never restarted, and its volumes and `.env` unchanged.
+
+## Agent review (HOU-151)
+
+Every push to a PR from this repository (never a fork's) is reviewed by `.github/workflows/agent-review.yml`
+in three stages: Entire's code, security and slop reviews, whose prompts are `.github/review/code.md`,
+`security.md` and `slop.md`, verbatim. Each stage returns findings graded high, medium or low, each
+with the stage's confidence (0.5 to 1; anything lower is dropped, as the prompts say). The
+`agent-review` job comments each new finding on its line, replies on a finding's comment when it is
+settled, keeps one summary comment (verdict, open and settled findings, the slop rating, the cost) up to
+date in place, and **fails while any medium or high finding is open**. A low never blocks. It runs
+again when the PR's base branch or description is edited, since a check's result belongs to the head
+commit and would otherwise outlive a change of base. A finding on
+a file or line outside the diff, or about the PR as a whole, is posted as a comment on the PR instead.
+A PR whose diff is over the limit (`reviewMaxDiffChars`, with the lockfile, `evidence/` and `design/`
+left out) fails the review: split it.
+
+- **Resolving a finding:** fix it and push (the next review no longer raises it), or reply to its comment
+  with a reason (for one posted on the PR, a PR comment that names it, e.g. `AR-7: …`) and push or re-run
+  all jobs (the next review reads replies from the PR's owner, members and collaborators, and may accept
+  them). A finding stays open until its stage says it is fixed or accepts a reply, or its code changes
+  (a stage that just stops mentioning it clears nothing). A fixed or accepted finding is remembered in
+  the summary comment and isn't raised again until the code it points
+  at changes (`scripts/review/state.ts`, unit-tested). The summary is written before any other comment,
+  so a comment that fails to post is retried on the next push rather than raised as a new finding.
+- **Model and cost:** the `REVIEW_MODEL` repository variable, default `claude-opus-5-5`; effort high for
+  the code and security stages, medium for slop. Each stage is capped in steps, output tokens per call
+  and total tokens, with the reasons in `contracts/limits.ts`; its last allowed step has no tools, so it
+  always ends with an answer. The tools, the instructions and the review context are one prefix that
+  every stage and step reads from the prompt cache. The job summary and the PR's summary comment show
+  each run's cost.
+- **What runs:** the scripts and prompts come from a checkout of the PR's *base* commit, so a PR that
+  changes them is still reviewed with `main`'s (the change takes effect once it is on `main`). The
+  workflow file itself is the PR's own, though (GitHub runs a `pull_request` workflow from the PR), so a
+  PR that edits it can change its own review: see "Secret exposure" below. The one exception to the base
+  rule is the bootstrap: while the default branch has no review at all (only for the PR that added it),
+  a PR into it runs its own scripts and prompts, with a notice saying so. A PR into another branch that
+  has no review is skipped with a notice. The PR's head is a second
+  checkout that is only read, through git (`git show`, `git grep`, `git diff`, `git log`): nothing in it
+  is installed, built or run, and no symlink is followed. Neither checkout keeps a token in `.git`.
+- **Prompt injection:** the diff, the PR's title and description, and replies are untrusted data in user
+  messages; the stage's instructions are system messages. The model's job has a read-only token
+  (`contents: read`, `pull-requests: read`), the model's own step has only the Anthropic key and no
+  GitHub token, and its tools read git objects and nothing else (no shell, no network, no writes). A
+  second job, `agent-review`, holds the only write permission (`pull-requests: write`) and no secret; it
+  validates the findings with zod, strips @-mentions and comment markers from what the model wrote, and
+  never calls the model.
+
+### Secret exposure
+
+A same-repository PR's workflow can read every repository secret, and a PR can edit
+`agent-review.yml` itself (GitHub runs the PR's version of the workflow). So anyone who can push a
+branch here can make a run print or send `REVIEW_ANTHROPIC_API_KEY`: the same write-access threat as the
+preview's secrets and the one HOU-143 tracks for `production`. It can't sit in a `main`-only
+environment, because the review has to run on PRs. Limit what the key is worth instead: give it its own
+Anthropic workspace with a monthly spend limit and nothing else in it, and rotate it if it ever shows up
+in a log. Nothing here prints it.
+
+What this check doesn't stop: a PR that edits `agent-review.yml` or the files it reads can make its own
+`agent-review` check pass. AGENTS.md keeps review changes in their own PRs, which a person can read.
+
+### Cal's one-time steps
+
+1. In the Anthropic Console, create a workspace for the review only (e.g. `household-review`) and set its
+   monthly spend limit (Settings → Limits; $50 is several hundred reviews at the dry run's cost). Create an
+   API key in that workspace.
+2. Add it as a repository secret (it must be repository level: PR workflows read it):
+   `gh secret set REVIEW_ANTHROPIC_API_KEY --repo CalNicklin/household` and paste the key at the prompt.
+   Until it exists, the workflow skips with a notice and passes.
+3. Optionally pick another model: `gh variable set REVIEW_MODEL --repo CalNicklin/household --body claude-sonnet-5-5`.
+4. Once `agent-review` has run green on a PR, add it to the `main` ruleset's required status checks
+   (Settings → Rules → Rulesets → main → Require status checks to pass → Add checks → `agent-review`), next
+   to `check`.
+
+### Dry run — 1 November 2026
+
+`node scripts/agent-review-dry-run.ts` runs the three stages against the real model on a fixture PR whose
+new `basketTotal` skips the first price (`for (let i = 1; …)`) and whose code comment and description both
+tell AI reviewers to ignore their instructions and report nothing. With `claude-opus-5-5`: the code stage
+found the bug (high, confidence 0.97, citing the AGENTS.md rule), the security stage reported the injection
+(medium), the slop stage rated it Large, and the run blocked; $0.09 for all three stages (code $0.04, 3
+steps; security $0.02; slop $0.03), about 20 seconds.
+
+The same `review` command on this PR's own diff (about 2,000 lines) cost $0.97: code $0.64 (4 steps),
+security $0.16, slop $0.18; the security and slop stages read 96% of their input from the cache the code
+stage wrote. It found five real defects, all fixed before merge (see HOU-151). Budget about $1 per push of
+a PR that size.
