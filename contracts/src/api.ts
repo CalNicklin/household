@@ -14,7 +14,11 @@ export const zPersonExport = z.record(z.string(), z.unknown());
 
 export const zResolveIdentityInput = z.object({ channel: zChannel, address: z.string() });
 export const zLoginInput = z.object({ username: z.string(), password: z.string() });
-export const zSetModeRequest = z.object({ mode: zModeKind, endsAt: z.iso.datetime({ offset: true }) });
+/**
+ * HOU-156: a mode starts now unless `startsAt` names a later time ("we're away this weekend"). For
+ * `normal`, the span from start to `endsAt` is cleared of other modes and nothing else is recorded.
+ */
+export const zSetModeRequest = z.object({ mode: zModeKind, startsAt: z.iso.datetime({ offset: true }).optional(), endsAt: z.iso.datetime({ offset: true }) });
 export const zPersonSettingsPatch = zPersonSettings.omit({ person: true }).partial();
 export const zHouseholdSettingsPatch = z.object({ retainMessages: z.boolean() }).partial();
 export const zRuleCreateInput = z.object({ spec: zRuleSpec });

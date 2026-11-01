@@ -29,7 +29,7 @@ export async function gatherFacts(rt: Runtime, from: LocalDate, days: number): P
     sitters: await api.household.sitters(),
     sitterBookings: await api.household.sitterBookings(),
     arrivals: await api.parcels.between({ from: start, to: end }),
-    mode: await api.household.activeMode(),
+    modes: await api.household.modesBetween({ from: start, to: end }),
     forecast,
   };
 }

@@ -69,3 +69,18 @@ export function dayIn(phrase: string, today: LocalDate): LocalDate | null {
   if (/\b(today|tonight|this evening)\b/.test(text)) return today;
   return null;
 }
+
+/**
+ * HOU-156: the days a phrase spans, for a mode set ahead. "this weekend", "the weekend" or "weekend"
+ * is the coming Saturday and Sunday (only Sunday when today is Sunday); anything else is the one day
+ * `dayIn` reads. null when it names no day.
+ */
+export function daysIn(phrase: string, today: LocalDate): { from: LocalDate; to: LocalDate } | null {
+  if (/\bweekend\b/i.test(phrase) && !/\bnext\b/i.test(phrase)) {
+    if (weekdayOf(today) === Weekday.sun) return { from: today, to: today };
+    const saturday = dayIn("saturday", today);
+    return saturday === null ? null : { from: saturday, to: addLocalDays(saturday, 1) };
+  }
+  const day = dayIn(phrase, today);
+  return day === null ? null : { from: day, to: day };
+}

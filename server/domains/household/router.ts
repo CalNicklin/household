@@ -2,6 +2,7 @@ import {
   ActorKind,
   Channel,
   type Mode,
+  ModeKind,
   PersonRole,
   type PersonSettings,
   zDateRangeInput,
@@ -30,7 +31,7 @@ import {
   zWellbeingIdea,
   zWellbeingIdeaInput,
 } from "@household/contracts";
-import { and, desc, eq, gt, inArray } from "drizzle-orm";
+import { and, desc, eq, gt, inArray, lt, lte } from "drizzle-orm";
 import { randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
 import { z } from "zod";
 import type { DomainDb } from "../../db/index.ts";
@@ -53,7 +54,7 @@ function checkPassword(password: string, stored: string): boolean {
   return candidate.length === expected.length && timingSafeEqual(candidate, expected);
 }
 
-const toMode = (r: typeof schema.modes.$inferSelect): Mode => ({ id: r.id, mode: r.mode, setBy: r.setBy, setAt: iso(r.setAt), endsAt: iso(r.endsAt) });
+const toMode = (r: typeof schema.modes.$inferSelect): Mode => ({ id: r.id, mode: r.mode, setBy: r.setBy, setAt: iso(r.setAt), startsAt: iso(r.startsAt), endsAt: iso(r.endsAt) });
 const toSettings = (r: typeof schema.personSettings.$inferSelect): PersonSettings => ({
   person: r.personId,
   dailyMessageBudget: r.dailyMessageBudget,
@@ -131,18 +132,42 @@ export function householdRouter(db: HouseholdDb) {
 
     /** MOM-1/3/4: one mode for the whole house; it ends at `endsAt` (midnight unless extended). */
     activeMode: readProcedure.output(zMode.nullable()).query(async ({ ctx }) => {
-      const row = await db.query.modes.findFirst({ where: gt(schema.modes.endsAt, ctx.now), orderBy: desc(schema.modes.setAt) });
+      const row = await db.query.modes.findFirst({ where: and(lte(schema.modes.startsAt, ctx.now), gt(schema.modes.endsAt, ctx.now)), orderBy: desc(schema.modes.setAt) });
       return row === undefined ? null : toMode(row);
     }),
+    /** HOU-156: every mode in effect at some point in the range, including those set ahead. */
     modesBetween: readProcedure.input(zDateRangeInput).output(z.array(zMode)).query(async ({ input }) => {
-      const rows = await db.select().from(schema.modes);
-      return rows.filter((r) => r.setAt < new Date(input.to) && r.endsAt > new Date(input.from)).map(toMode);
+      const rows = await db.select().from(schema.modes).where(and(lt(schema.modes.startsAt, new Date(input.to)), gt(schema.modes.endsAt, new Date(input.from)), gt(schema.modes.endsAt, schema.modes.startsAt)));
+      return rows.map(toMode);
     }),
+    /**
+     * MOM-3/4, HOU-156: a mode starts now, or at a later `startsAt` ("we're away this weekend"). Set
+     * now, it replaces whatever is on, as it always did. Set ahead, it replaces only its own span: a
+     * mode on when it starts pauses and carries on after it. Either way, modes set ahead inside its
+     * span start when it ends, or go if they end inside it. `normal` only clears the span.
+     */
     setMode: actorProcedure.input(zSetModeRequest).output(zMode).mutation(async ({ ctx, input }) => {
       const by = actingPerson(ctx.actor);
       if (by === null) forbid("a mode is set by a person");
-      await db.update(schema.modes).set({ endsAt: ctx.now }).where(gt(schema.modes.endsAt, ctx.now));
-      const [row] = await db.insert(schema.modes).values({ mode: input.mode, setBy: by, setAt: ctx.now, endsAt: new Date(input.endsAt) }).returning();
+      const asked = input.startsAt === undefined ? null : new Date(input.startsAt);
+      const ahead = asked !== null && asked > ctx.now;
+      const start = ahead ? asked : ctx.now;
+      const end = new Date(input.endsAt);
+      if (input.mode !== ModeKind.normal && end <= start) forbid("a mode ends after it starts");
+      const row = await db.transaction(async (tx) => {
+        const m = schema.modes;
+        const inEffect = and(lte(m.startsAt, start), gt(m.endsAt, start));
+        // Set ahead, it replaces only the days it covers: what was on before it carries on after it.
+        const resumes = ahead ? (await tx.select().from(m).where(and(inEffect, gt(m.endsAt, end)))).map((r) => ({ mode: r.mode, setBy: r.setBy, setAt: r.setAt, startsAt: end, endsAt: r.endsAt })) : [];
+        await tx.update(m).set({ endsAt: start }).where(inEffect);
+        if (resumes.length > 0) await tx.insert(m).values(resumes);
+        if (end > start) {
+          await tx.update(m).set({ endsAt: m.startsAt }).where(and(gt(m.startsAt, start), lt(m.startsAt, end), lte(m.endsAt, end)));
+          await tx.update(m).set({ startsAt: end }).where(and(gt(m.startsAt, start), lt(m.startsAt, end), gt(m.endsAt, end)));
+        }
+        const [inserted] = await tx.insert(m).values({ mode: input.mode, setBy: by, setAt: ctx.now, startsAt: start, endsAt: input.mode === ModeKind.normal ? start : end }).returning();
+        return inserted;
+      });
       if (row === undefined) throw new Error("insert failed");
       ctx.publish("mode");
       return toMode(row);

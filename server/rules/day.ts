@@ -3,7 +3,7 @@
  * windows, and the one context line at the top of the screen (HOME-2).
  */
 import type { Arrival, CalendarEvent, LocalDate, Mode, NurseryEvent, NurseryTerm, Person, Rule, Sitter, SitterBooking } from "@household/contracts";
-import { PersonRole } from "@household/contracts";
+import { ModeKind, PersonRole } from "@household/contracts";
 import { getTimes } from "suncalc";
 import type { HourlyForecast } from "../ports.ts";
 import { addLocalDays, atLocal, hourWord, localDate, localHour, localTime, startOfLocalDay } from "../time.ts";
@@ -25,10 +25,21 @@ export type HouseFacts = {
   sitters: Sitter[];
   sitterBookings: SitterBooking[];
   arrivals: Arrival[];
-  mode: Mode | null;
+  /** HOU-156: every mode in effect at some point in the window, including those set ahead. */
+  modes: Mode[];
   /** Hourly forecast per local date. */
   forecast: Record<LocalDate, HourlyForecast[]>;
 };
+
+/**
+ * MOM-1/4, HOU-156: the slow, sick or away day this date is, if any: a mode that has started by the
+ * date (set that day or ahead for it) and is still on at midday. The most recently set one wins.
+ */
+export function modeOn(facts: Pick<HouseFacts, "modes" | "timeZone">, date: LocalDate): Mode | null {
+  const midday = atLocal(date, 12, 0, facts.timeZone);
+  const on = facts.modes.filter((m) => m.mode !== ModeKind.normal && localDate(new Date(m.startsAt), facts.timeZone) <= date && new Date(m.endsAt) > midday);
+  return on.sort((a, b) => b.setAt.localeCompare(a.setAt))[0] ?? null;
+}
 
 export const adultsOf = (people: readonly Person[]) => people.filter((p) => p.role === PersonRole.adult);
 export const kidsOf = (people: readonly Person[]) => people.filter((p) => p.role === PersonRole.child);

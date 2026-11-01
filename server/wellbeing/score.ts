@@ -4,7 +4,7 @@
  * one health flag. There is no message text anywhere in the inputs: it never reads mood from words.
  */
 import { type LocalDate, ModeKind, WellbeingFactor, type WellbeingScore } from "@household/contracts";
-import { adultsOf, type HouseFacts, isAway, isBusy, kidsOf } from "../rules/day.ts";
+import { adultsOf, type HouseFacts, isAway, isBusy, kidsOf, modeOn } from "../rules/day.ts";
 import { kidsAtNursery } from "../rules/nudges.ts";
 import { atLocal, localDate, localHour, localTime } from "../time.ts";
 
@@ -61,10 +61,8 @@ function soloAt(facts: HouseFacts, person: string, date: LocalDate, hour: number
 }
 
 function hardModeOn(facts: HouseFacts, date: LocalDate): boolean {
-  const m = facts.mode;
-  if (m === null || (m.mode !== ModeKind.slow && m.mode !== ModeKind.sick)) return false;
-  const noon = atLocal(date, 12, 0, facts.timeZone);
-  return localDate(new Date(m.setAt), facts.timeZone) <= date && new Date(m.endsAt) > noon;
+  const m = modeOn(facts, date);
+  return m !== null && (m.mode === ModeKind.slow || m.mode === ModeKind.sick);
 }
 
 export function scoreDay(input: ScoreInput): WellbeingScore {
