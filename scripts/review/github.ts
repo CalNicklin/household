@@ -168,7 +168,8 @@ export function summaryBody(merged: Merged, run: RunSummary): string {
   let tables = true;
   for (;;) {
     const body = renderSummary({ ...merged.state, findings }, run, tables);
-    if (body.length <= Limits.reviewMaxCommentChars.value) return body;
+    // (With nothing left to forget the body is a few kilobytes: every model-written field is capped.)
+    if (body.length <= Limits.reviewMaxCommentChars.value || findings.length === 0) return body;
     // Too long for GitHub. First forget the oldest settled finding (it may then be raised again)…
     const settled = findings.findIndex((f) => f.status !== ReviewStatus.open);
     if (settled !== -1) findings.splice(settled, 1);
@@ -195,7 +196,7 @@ function renderSummary(state: ReviewState, run: RunSummary, tables: boolean): st
     "",
     `Reviewed \`${run.sha.slice(0, 7)}\` against its diff base \`${run.base.slice(0, 7)}\` with \`${run.model}\`. Cost ${dollars(total)} (${run.stages.map((s) => `${s.stage} ${dollars(s.costMicros)}, ${s.steps} steps`).join("; ")}).`,
     "",
-    `**Slop:** ${run.slop.rating ?? "not rated"}${run.slop.rationale === null ? "" : ` — ${sanitise(run.slop.rationale).replaceAll("\n", " ")}`}`,
+    `**Slop:** ${run.slop.rating ?? "not rated"}${run.slop.rationale === null ? "" : ` — ${sanitise(run.slop.rationale.slice(0, Limits.reviewMaxTextChars.value)).replaceAll("\n", " ")}`}`,
     "",
   ];
   if (open.length === 0) lines.push("No open findings.");

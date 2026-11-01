@@ -212,5 +212,8 @@ describe("HOU-151 the comment updater", () => {
     const crowded = summaryBody({ state: openOnly, raised: [], settled: [], open: [], blocking: true }, run("aaaaaaa"));
     expect(crowded.length).toBeLessThanOrEqual(65_000);
     expect(crowded).toContain("Too many to list here");
+    // A model that writes a huge rationale can't stop the summary being written.
+    const huge = summaryBody({ state: openOnly, raised: [], settled: [], open: [], blocking: true }, { ...run("aaaaaaa"), slop: { rating: "Large", rationale: "r".repeat(200_000) } });
+    expect(huge.length).toBeLessThanOrEqual(65_000);
   });
 });
