@@ -1,6 +1,12 @@
 import { TZDate } from "@date-fns/tz";
 import { type LocalDate, type Weekday, WeekdayOrder } from "@household/contracts";
-import { addDays, differenceInCalendarDays, format, getISOWeek, parseISO } from "date-fns";
+import { addDays, differenceInCalendarDays, format, getISOWeek, isValid, parseISO } from "date-fns";
+
+/** Is this yyyy-MM-dd a day that exists (not 31 November, not 30 February)? */
+export function isRealDate(date: string): boolean {
+  const parsed = parseISO(date);
+  return isValid(parsed) && format(parsed, "yyyy-MM-dd") === date;
+}
 
 /** The house's local calendar date for an instant. */
 export function localDate(at: Date, timeZone: string): LocalDate {
