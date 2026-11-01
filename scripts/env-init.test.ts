@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, test } from "vitest";
@@ -9,12 +9,18 @@ const dirs: string[] = [];
 afterEach(() => {
   for (const d of dirs.splice(0)) rmSync(d, { recursive: true, force: true });
 });
-function envInit(env: string | null, ...args: string[]): { out: string; env: string } {
+function envInit(env: string | null, ...args: string[]): { out: string; env: string; rewritten: boolean } {
   const dir = mkdtempSync(path.join(tmpdir(), "env-init-"));
   dirs.push(dir);
   if (env !== null) writeFileSync(path.join(dir, ".env"), env);
+  const before = env === null ? null : statSync(path.join(dir, ".env")).ino;
   const out = execFileSync(process.execPath, [script, ...args], { cwd: dir, encoding: "utf8" });
-  return { out, env: readFileSync(path.join(dir, ".env"), "utf8") };
+  expect(readdirSync(dir).filter((f) => f.startsWith(".env.tmp"))).toEqual([]);
+  const after = statSync(path.join(dir, ".env"));
+  const rewritten = before !== after.ino;
+  // A .env it writes is readable by its owner only.
+  if (rewritten) expect(after.mode & 0o777).toBe(0o600);
+  return { out, env: readFileSync(path.join(dir, ".env"), "utf8"), rewritten };
 }
 
 // A .env as install.sh wrote it before HOU-148: no MODEL_PROVIDER or MODEL_ID, credentials filled in by hand.
@@ -56,6 +62,9 @@ describe("env-init", () => {
     expect(once.out).toContain("added to .env: PRACTICE, DB_PREFIX, HOUSEHOLD_ID, MODEL_PROVIDER, MODEL_ID");
     const twice = envInit(once.env, "--real");
     expect(twice.env).toBe(once.env);
+    // Nothing to add: .env is not written at all (not even rewritten with the same bytes).
+    expect(twice.rewritten).toBe(false);
+    expect(once.rewritten).toBe(true);
     expect(twice.out).toContain("added to .env: nothing");
     const emptied = envInit(once.env.replace(/^MCP_TOKEN=.*$/m, "MCP_TOKEN=").replace(/^MODEL_ID=.*\n/m, ""), "--real");
     expect(emptied.out).toContain("added to .env: MODEL_ID, MCP_TOKEN");
