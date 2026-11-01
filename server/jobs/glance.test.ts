@@ -22,7 +22,7 @@ beforeAll(async () => {
 afterAll(async () => h.close());
 
 describe("Morning glance", () => {
-  test("[HOME-1] the home screen shows Now, Later today and Tomorrow from the shared calendar", async () => {
+  test("[HOME-1] the home screen shows Now, Later today and Tomorrow from the calendars", async () => {
     const s = await screen();
     const sections = [...new Set(s.blocks.map((b) => b.section))];
     expect(sections).toEqual(expect.arrayContaining([Section.now, Section.later, Section.tomorrow]));
