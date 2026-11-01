@@ -1,9 +1,9 @@
 import { type ShoppingRequest, ShoppingStatus, zBasketAddInput, zIdInput, zPersonInput, zShoppingRequest, zShoppingRequestInput, zShoppingRequestUpdate, zShoppingRun, zShoppingRunInput, zSummaryInput } from "@household/contracts";
-import { desc, eq, gt, ne } from "drizzle-orm";
+import { and, desc, eq, gt, inArray, ne } from "drizzle-orm";
 import { z } from "zod";
 import type { DomainDb } from "../../db/index.ts";
 import { iso } from "../../db/map.ts";
-import { actingPerson, actorProcedure, forbid, personProcedure, readProcedure, router, systemProcedure } from "../../trpc.ts";
+import { actingPerson, actorProcedure, forbid, readProcedure, router, systemProcedure } from "../../trpc.ts";
 import * as schema from "./schema.ts";
 
 export type ShoppingDb = DomainDb<typeof schema>;
@@ -39,15 +39,17 @@ export function shoppingRouter(db: ShoppingDb) {
       Promise.all((await db.select().from(schema.requests).where(ne(schema.requests.status, ShoppingStatus.dismissed)).orderBy(desc(schema.requests.createdAt)).limit(50)).map(toRequest)),
     ),
     /**
-     * HOU-148: a person dismisses a request that went nowhere (saved, or not found) from the Shop
-     * screen. The row is kept as dismissed, never deleted; anything else is left as it is.
+     * HOU-148: a person's tap dismisses a request that went nowhere (saved, or not found). The row is
+     * kept as dismissed, never deleted; a request in any other state is left as it is.
      */
-    dismiss: personProcedure.input(zIdInput).output(zShoppingRequest).mutation(async ({ ctx, input }) => {
-      const row = await db.query.requests.findFirst({ where: eq(schema.requests.id, input.id) });
-      if (row === undefined) forbid("no such request");
-      if (row.status !== ShoppingStatus.failed && row.status !== ShoppingStatus.saved) forbid("only a request that went nowhere can be dismissed");
-      const [updated] = await db.update(schema.requests).set({ status: ShoppingStatus.dismissed }).where(eq(schema.requests.id, input.id)).returning();
-      if (updated === undefined) throw new Error("no request");
+    dismiss: actorProcedure.input(zIdInput).output(zShoppingRequest).mutation(async ({ ctx, input }) => {
+      if (actingPerson(ctx.actor) === null) forbid("a dismissal is a person's");
+      const [updated] = await db
+        .update(schema.requests)
+        .set({ status: ShoppingStatus.dismissed })
+        .where(and(eq(schema.requests.id, input.id), inArray(schema.requests.status, [ShoppingStatus.failed, ShoppingStatus.saved])))
+        .returning();
+      if (updated === undefined) forbid("only a request that went nowhere can be dismissed");
       ctx.publish("shopping");
       return toRequest(updated);
     }),

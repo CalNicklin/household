@@ -1,5 +1,5 @@
 import { ActionKind, type ShoppingRequest, ShoppingStatus } from "@household/contracts";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { say } from "../data/send.ts";
 import { useTRPC } from "../data/trpc.ts";
@@ -22,8 +22,10 @@ const DISMISSABLE: ReadonlySet<ShoppingStatus> = new Set([ShoppingStatus.failed,
 /** AUT-3: no exact match → one question with two or three options to tap. */
 function Request({ request }: { request: ShoppingRequest }) {
   const queryClient = useQueryClient();
-  const trpc = useTRPC();
-  const dismiss = useMutation(trpc.dismissShopping.mutationOptions({ onSettled: () => queryClient.invalidateQueries() }));
+  // HOU-148: a tap like any other (CH-8), so it is dismissed everywhere and the reply says what happened.
+  const dismiss = () => {
+    void say({ text: "Dismiss", ref: `shopping:${request.id}`, action: ActionKind.notToday }).then(() => queryClient.invalidateQueries());
+  };
   const choose = (sku: string, name: string) => {
     void say({ text: name, ref: `shopping:${request.id}`, action: ActionKind.answer, value: sku }).then(() => queryClient.invalidateQueries());
   };
@@ -40,7 +42,7 @@ function Request({ request }: { request: ShoppingRequest }) {
       ) : null}
       {DISMISSABLE.has(request.status) ? (
         <Row>
-          <Button variant="ghost" label={`Dismiss ${request.item}`} disabled={dismiss.isPending} onClick={() => dismiss.mutate({ id: request.id })}>
+          <Button variant="ghost" label={`Dismiss ${request.item}`} onClick={dismiss}>
             Dismiss
           </Button>
         </Row>

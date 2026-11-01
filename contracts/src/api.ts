@@ -7,7 +7,8 @@ import { zInboundMessage, zNotifyInput } from "./message.ts";
 
 export const zIdInput = z.object({ id: z.string() });
 export const zPersonInput = z.object({ person: z.string() });
-export const zBacklogCreateInput = z.object({ text: z.string().min(1), tags: z.array(zBacklogTag), createdVia: zChannel, sourceMessage: z.string() });
+/** `index`: which capture of its message this is (0 = the first), so a retried job finds each item again (HOU-148). */
+export const zBacklogCreateInput = z.object({ text: z.string().min(1), tags: z.array(zBacklogTag), createdVia: zChannel, sourceMessage: z.string(), index: z.number().int().min(0).optional() });
 export const zBacklogSetTagsInput = z.object({ id: z.string(), tags: z.array(zBacklogTag) });
 export const zPersonExport = z.record(z.string(), z.unknown());
 

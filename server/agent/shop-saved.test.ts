@@ -1,8 +1,10 @@
-import { ActorKind, ShoppingStatus } from "@household/contracts";
+import { ActionKind, ShoppingStatus } from "@household/contracts";
 import { afterAll, beforeAll, describe, expect, test } from "vitest";
 import { NoShoppingHelper } from "../integrations/shopping-helper.ts";
 import { testHousehold, type TestHousehold } from "../testing/household.ts";
+import { localDate } from "../time.ts";
 import { runLongStep } from "./long-steps.ts";
+import { respond } from "./respond.ts";
 import { jobScope } from "./scope.ts";
 import { houseTools } from "./tools.ts";
 
@@ -31,16 +33,19 @@ describe("HOU-148: with no shopping helper connected, a shop request is saved, n
 });
 
 describe("HOU-148: a person dismisses a shopping request that went nowhere; it is kept, not deleted", () => {
-  test("[HOME-4][PRV-1] the person dismisses a saved request and it leaves the Shop list; the agent cannot, and nothing else can be dismissed", async () => {
+  test("[HOME-4][PRO-9][PRV-1] a tap dismisses a saved request everywhere and replans today; only a request that went nowhere can be, and only for a person", async () => {
     const { scope } = await shop(["saffron"]);
     const id = scope.effects.long[0]?.requestId ?? "";
-    const agent = h.rt.as({ kind: ActorKind.agent, job: "job-x", onBehalfOf: "tom", message: "msg-x" });
-    await expect(agent.shopping.dismiss({ id })).rejects.toThrow(/person/);
-    const cal = h.rt.as({ kind: ActorKind.person, person: "tom" });
-    expect((await cal.shopping.dismiss({ id })).status).toBe(ShoppingStatus.dismissed);
+    await expect(h.rt.system("t").shopping.dismiss({ id })).rejects.toThrow(/person/);
+    const tap = jobScope(h.rt, "job-dismiss", "msg-dismiss", "tom", "app");
+    expect(await respond(tap, `shopping:${id}`, ActionKind.notToday, null)).toBe("Okay, dismissed.");
+    expect(tap.effects.replan).toEqual([localDate(h.ports.clock.now(), h.rt.timeZone)]);
+    expect(tap.effects.closeRefs).toEqual([{ ref: `shopping:${id}`, status: "dismissed" }]);
     expect((await h.rt.system("t").shopping.recent()).map((r) => r.id)).not.toContain(id);
     expect((await h.rt.system("t").shopping.get({ id }))?.status).toBe(ShoppingStatus.dismissed);
+    expect((await h.rt.system("t").learning.events()).some((e) => e.ref === `shopping:${id}` && e.subject === "saffron")).toBe(true);
     const queued = await scope.api.shopping.request({ item: "pasta", sourceMessage: "msg-queued:pasta" });
-    await expect(cal.shopping.dismiss({ id: queued.id })).rejects.toThrow(/went nowhere/);
+    await expect(tap.api.shopping.dismiss({ id: queued.id })).rejects.toThrow(/went nowhere/);
+    expect((await h.rt.system("t").shopping.get({ id: queued.id }))?.status).toBe(ShoppingStatus.queued);
   });
 });

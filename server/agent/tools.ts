@@ -31,7 +31,8 @@ export function houseTools(scope: JobScope) {
     execute: record("capture", async (input: { text: string; tags?: BacklogTag[] | undefined }) => {
       const hints = await rt.system("tags").household.tagHints();
       const tags = input.tags !== undefined && input.tags.length > 0 ? input.tags : guessTags(input.text, hints);
-      const item = await api.backlog.create({ text: input.text, tags, createdVia: scope.channel, sourceMessage: scope.messageId });
+      const index = scope.toolCalls.filter((c) => c.tool === "capture").length;
+      const item = await api.backlog.create({ text: input.text, tags, createdVia: scope.channel, sourceMessage: scope.messageId, index });
       return { id: item.id, tags: item.tags, say: `Added to the backlog: ${item.text}.` };
     }),
   });

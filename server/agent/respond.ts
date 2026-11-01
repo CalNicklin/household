@@ -13,6 +13,10 @@ export async function subjectFor(scope: JobScope, ref: string, date: LocalDate):
     const item = await api.backlog.get({ id: ref.slice("backlog:".length) });
     if (item !== null) return item.text;
   }
+  if (ref.startsWith("shopping:")) {
+    const request = await api.shopping.get({ id: ref.slice("shopping:".length) });
+    if (request !== null) return request.item;
+  }
   for (const d of [date, addLocalDays(date, -1)]) {
     const plan = await api.plans.latest({ date: d });
     for (const b of plan?.blocks ?? []) {
@@ -93,6 +97,13 @@ export async function respond(scope: JobScope, ref: string, action: ActionKind, 
   if (ref.startsWith("wellbeing:") && action === ActionKind.notHelpful) {
     scope.effects.remember.push("Said wellbeing suggestions were not helpful.");
     return "Understood. I'll keep those to myself for a month.";
+  }
+  // HOU-148: a shopping request that went nowhere, dismissed with one tap; today is replanned so it
+  // leaves the home screen too (HOME-4, PRO-9).
+  if (ref.startsWith("shopping:") && action === ActionKind.notToday) {
+    await scope.api.shopping.dismiss({ id: ref.slice("shopping:".length) });
+    if (!scope.effects.replan.includes(date)) scope.effects.replan.push(date);
+    return "Okay, dismissed.";
   }
   if (ref.startsWith("shopping:") && action === ActionKind.answer && value !== null) {
     scope.effects.long.push({ tool: LongTool.shop, requestId: ref.slice("shopping:".length), sku: value });

@@ -85,8 +85,6 @@ export function viewsRouter(rt: Runtime) {
 
     setTags: personProcedure.input(zBacklogSetTagsInput).mutation(async ({ ctx, input }) => me(ctx.actor.person).backlog.setTags(input)),
     bringBack: personProcedure.input(zIdInput).mutation(async ({ ctx, input }) => me(ctx.actor.person).backlog.bringBack(input)),
-    // HOU-148: a shopping request that went nowhere, dismissed by the person tapping it (kept, not deleted).
-    dismissShopping: personProcedure.input(zIdInput).mutation(async ({ ctx, input }) => me(ctx.actor.person).shopping.dismiss(input)),
     removeBacklog: personProcedure.input(zIdInput).mutation(async ({ ctx, input }) => me(ctx.actor.person).backlog.remove(input)),
     updateMySettings: personProcedure.input(zPersonSettingsPatch).mutation(async ({ ctx, input }) => me(ctx.actor.person).household.updateMySettings(input)),
     updateHousehold: personProcedure.input(zHouseholdSettingsPatch).mutation(async ({ ctx, input }) => {

@@ -26,6 +26,14 @@ describe("HOU-148: the practice model routes the household's phrases the way a p
     expect(inputs[0]).toMatchObject({ text: "Get the canon printer working and connected to laptop so we can print loads of photos up to A3" });
   });
 
+  test.each(["grab a loaf of bread", "get a pint of milk", "buy a dozen eggs"])("[AUT-1] groceries after an article are still shopping: %s", async (text) => {
+    expect((await toolsFor(text)).tools).toEqual(["shop"]);
+  });
+
+  test("[CAP-1] 'prioritise the boiler service' is a job to capture, not a question", async () => {
+    expect((await toolsFor("prioritise the boiler service")).tools).toEqual(["capture"]);
+  });
+
   test("[AUT-1] groceries in one sentence are still separate shop items", async () => {
     expect(await toolsFor("we're out of oat milk and bread")).toEqual({ tools: ["shop"], inputs: [{ items: ["oat milk", "bread"] }] });
   });

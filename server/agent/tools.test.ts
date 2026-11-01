@@ -70,7 +70,7 @@ describe("MOM-6 through the real tool", () => {
 const idOf = (output: unknown) => z.object({ id: z.string() }).parse(output).id;
 
 describe("CAP-1 through the real tool", () => {
-  test("[CAP-1] one message that lists two jobs captures both; capturing the same job again (a retried job) writes it once", async () => {
+  test("[CAP-1] one message that lists two jobs captures both; a retried job, even worded differently, writes each once", async () => {
     const scope = jobScope(h.rt, "job-two-jobs", "msg-two-jobs", "priya", "app");
     const execute = houseTools(scope).capture.execute;
     if (execute === undefined) throw new Error("capture has no execute");
@@ -78,7 +78,12 @@ describe("CAP-1 through the real tool", () => {
     const shed = await execute({ text: "Paint the shed" }, {});
     expect(shed).toMatchObject({ say: "Added to the backlog: Paint the shed." });
     expect(idOf(shed)).not.toBe(gate);
-    expect(idOf(await execute({ text: "Paint the shed" }, {}))).toBe(idOf(shed));
+    // DBOS re-runs the agent step: a fresh scope for the same message, and the model words it anew.
+    const retry = jobScope(h.rt, "job-two-jobs", "msg-two-jobs", "priya", "app");
+    const again = houseTools(retry).capture.execute;
+    if (again === undefined) throw new Error("capture has no execute");
+    expect(idOf(await again({ text: "Fix the garden gate" }, {}))).toBe(gate);
+    expect(idOf(await again({ text: "Paint the shed, please" }, {}))).toBe(idOf(shed));
     const mine = (await h.rt.system("t").backlog.list()).filter((i) => i.text === "Fix the gate" || i.text === "Paint the shed");
     expect(mine.map((i) => i.text).sort()).toEqual(["Fix the gate", "Paint the shed"]);
   });
