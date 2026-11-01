@@ -83,8 +83,12 @@ export async function connect(s: Settings, bot: BotAdmin, print: Print): Promise
   return showStatus(s, bot, print);
 }
 
-/** `senders`: everyone the house dropped on Telegram, newest first: an adult messages the bot, then finds their ID here. */
-export function showSenders(senders: readonly DroppedSender[], print: Print): void {
+/**
+ * `senders`: everyone the house dropped on Telegram and still doesn't know, newest first: an adult
+ * messages the bot, then finds their ID here. An ID given to someone since (`set`) is left out.
+ */
+export function showSenders(dropped: readonly DroppedSender[], known: ReadonlySet<string>, print: Print): void {
+  const senders = dropped.filter((d) => !known.has(d.address));
   if (senders.length === 0) {
     print("nobody unknown has messaged the bot yet: send it a message from your own Telegram, then run this again");
     return;

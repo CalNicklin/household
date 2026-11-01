@@ -47,7 +47,11 @@ try {
     const bot = { username: () => transport.username(), setWebhook: (url: string, secret: string) => transport.setWebhook(url, secret), webhookInfo: () => transport.webhookInfo() };
     code = command.kind === "connect" ? await connect(settings, bot, print) : await showStatus(settings, bot, print);
   } else if (command.kind === "senders") {
-    await withHouse(async (rt) => showSenders(await rt.system("household-telegram").jobs.droppedSenders({ channel: Channel.telegram }), print));
+    await withHouse(async (rt) => {
+      const api = rt.system("household-telegram");
+      const known = new Set((await api.household.allowedRecipients()).filter((r) => r.channel === Channel.telegram).map((r) => r.address));
+      showSenders(await api.jobs.droppedSenders({ channel: Channel.telegram }), known, print);
+    });
   } else {
     await withHouse(async (rt) => {
       const result = await rt.system("household-telegram").household.setTelegramId({ person: command.person, telegram: command.telegram });

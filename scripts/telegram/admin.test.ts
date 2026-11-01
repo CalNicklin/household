@@ -166,7 +166,7 @@ describe("finding and adding an adult's Telegram ID", () => {
     expect(out).not.toContain("-1001234");
     expect(out).not.toContain("Cal's new phone");
     const lines: string[] = [];
-    showSenders([], (l) => lines.push(l));
+    showSenders([{ address: "1001", lastAt: "2026-11-01T09:00:00.000Z", times: 1 }], new Set(["1001"]), (l) => lines.push(l));
     expect(lines[0]).toMatch(/nobody unknown has messaged the bot yet/);
   });
 
@@ -177,6 +177,10 @@ describe("finding and adding an adult's Telegram ID", () => {
     const { messageId, job } = await jobForKey(h.rt, `telegram:update:${id}`);
     expect(job.status).toBe("succeeded");
     expect(await storedShape(h.rt, messageId)).toMatchObject({ person: "priya", channel: "telegram", text: "we need to descale the kettle" });
+    // Her ID is known now, so senders no longer lists it; the other stranger is still there.
+    const senders = (await cli(["senders"])).stdout;
+    expect(senders).not.toContain("555000111");
+    expect(senders).toContain("555000222");
     // The old ID is no longer hers: it is dropped like any stranger's.
     const old = await post(1001, "still me?");
     expect(await messageByKey(h.rt, `telegram:update:${old}`)).toBeNull();
