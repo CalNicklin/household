@@ -147,6 +147,8 @@ export type CalendarEvent = z.infer<typeof zCalendarEvent>;
  */
 export const zCalendarWatch = z.object({
   channelId: z.string(),
+  /** The Google calendar the channel watches (GOOGLE_CALENDAR_ID when it was opened). */
+  calendarId: z.string(),
   resourceId: z.string(),
   /** Where Google sends the notifications: `${PUBLIC_URL}/webhooks/calendar`. */
   address: z.string(),

@@ -23,7 +23,7 @@ afterEach(async () => {
 const clock = { now: () => new Date("2026-11-02T08:00:00Z") };
 const SECRET = "csecret-never-printed";
 const REFRESH = "1//refresh-never-printed";
-const openWatch: CalendarWatch = { channelId: "c1", resourceId: "r1", address: "https://house.example/webhooks/calendar", expiresAt: "2026-11-08T11:00:00.000Z", openedAt: "2026-11-01T11:00:00.000Z" };
+const openWatch: CalendarWatch = { channelId: "c1", calendarId: "family123@group.calendar.google.com", resourceId: "r1", address: "https://house.example/webhooks/calendar", expiresAt: "2026-11-08T11:00:00.000Z", openedAt: "2026-11-01T11:00:00.000Z" };
 
 async function check(options: { tokenStatus?: number; calendarId?: string; watch?: CalendarWatch | null; creds?: unknown }) {
   const google = await fakeServer((req, res) => {
@@ -73,6 +73,7 @@ describe("household-google check (HOU-147)", () => {
     expect((await check({ calendarId: "nope@group.calendar.google.com" })).text).toContain("is not one of them");
     expect((await check({ calendarId: "family123@group.calendar.google.com", watch: { ...openWatch, expiresAt: "2026-11-02T07:00:00.000Z" } })).text).toContain("✗ watch: ended");
     expect((await check({ calendarId: "family123@group.calendar.google.com", watch: { ...openWatch, address: "https://old.example/webhooks/calendar" } })).code).toBe(1);
+    expect((await check({ calendarId: "family123@group.calendar.google.com", watch: { ...openWatch, calendarId: "cal@example.com" } })).text).toContain("✗ watch: on cal@example.com, not GOOGLE_CALENDAR_ID");
   });
 
   test("an expired or revoked refresh token says to connect again, and lists nothing", async () => {

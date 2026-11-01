@@ -170,7 +170,9 @@ export function refreshingTokenProvider(options: { clientId: string; clientSecre
  */
 export class GoogleCalendarPush implements CalendarPush {
   readonly #o: { calendarId: string; getAccessToken: () => Promise<string>; baseUrl: string; fetch: Fetch };
+  readonly calendarId: string;
   constructor(options: { calendarId: string; getAccessToken: () => Promise<string>; baseUrl?: string; fetch?: Fetch }) {
+    this.calendarId = options.calendarId;
     this.#o = { calendarId: options.calendarId, getAccessToken: options.getAccessToken, baseUrl: options.baseUrl ?? CALENDAR_API, fetch: options.fetch ?? defaultFetch };
   }
 

@@ -20,6 +20,8 @@ export interface CalendarSource {
  * opening or closing one changes nothing in the calendar (PRV-1).
  */
 export interface CalendarPush {
+  /** The calendar this pushes for. */
+  readonly calendarId: string;
   open(channel: { id: string; address: string; token: string }): Promise<{ resourceId: string; expiresAt: string }>;
   close(channel: { id: string; resourceId: string }): Promise<void>;
 }

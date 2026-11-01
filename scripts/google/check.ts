@@ -72,6 +72,7 @@ function watchState(env: Env, w: CalendarWatch | null, now: Date, r: Report): vo
   if (w === null) return r.bad("watch: none open yet. The app opens it when it starts with GOOGLE_CALENDAR_ID and the token file set: redeploy, then check again");
   const left = new Date(w.expiresAt).getTime() - now.getTime();
   if (left <= 0) return r.bad(`watch: ended ${w.expiresAt}. The app renews it hourly; see \`docker logs household-app-1 | grep calendar-watch\``);
+  if (w.calendarId !== env.GOOGLE_CALENDAR_ID) return r.bad(`watch: on ${w.calendarId}, not GOOGLE_CALENDAR_ID; the hourly check moves it, or redeploy`);
   if (w.address !== address) return r.bad(`watch: sends to ${w.address}, not ${address}; the hourly check moves it, or redeploy`);
   r.ok(`✓ watch: open since ${w.openedAt}, sending to ${w.address}; Google ends it ${w.expiresAt} (in ${inDaysHours(left)}), and the house renews it a day before`);
 }

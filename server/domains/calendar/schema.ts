@@ -33,6 +33,7 @@ export const syncsRelations = relations(syncs, ({ many }) => ({ events: many(eve
 export const watches = pgTable("watches", {
   id: id(),
   channelId: text("channel_id").notNull().unique(),
+  calendarId: text("calendar_id").notNull(),
   resourceId: text("resource_id").notNull(),
   address: text("address").notNull(),
   expiresAt: at("expires_at").notNull(),

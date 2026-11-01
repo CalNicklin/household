@@ -38,7 +38,7 @@ export type WatchOutcome = { action: "no-push" } | { action: "kept"; expiresAt: 
 
 /**
  * CH-6 / HOME-1: keep one Google push channel open on the calendar. With none, or one that ends within
- * WATCH_RENEW_BEFORE_MS, or one pointing at another address, open a new one, record it, close the old
+ * WATCH_RENEW_BEFORE_MS, or one on another calendar or pointing at another address, open a new one, record it, close the old
  * one, and sync once at once (the calendar may have changed while no channel was open). Opening a channel
  * is a subscription, never a change to the calendar (PRV-1).
  */
@@ -49,10 +49,10 @@ export async function ensureWatch(rt: Runtime): Promise<WatchOutcome> {
   const now = rt.ports.clock.now();
   const address = `${rt.env.PUBLIC_URL.replace(/\/+$/, "")}/webhooks/calendar`;
   const current = await api.calendar.watch();
-  if (current !== null && current.address === address && new Date(current.expiresAt).getTime() - now.getTime() > WATCH_RENEW_BEFORE_MS) return { action: "kept", expiresAt: current.expiresAt };
+  if (current !== null && current.calendarId === push.calendarId && current.address === address && new Date(current.expiresAt).getTime() - now.getTime() > WATCH_RENEW_BEFORE_MS) return { action: "kept", expiresAt: current.expiresAt };
   const id = randomUUID();
   const opened = await push.open({ id, address, token: rt.env.CALENDAR_WEBHOOK_TOKEN });
-  await api.calendar.recordWatch({ channelId: id, resourceId: opened.resourceId, address, expiresAt: opened.expiresAt, openedAt: now.toISOString() });
+  await api.calendar.recordWatch({ channelId: id, calendarId: push.calendarId, resourceId: opened.resourceId, address, expiresAt: opened.expiresAt, openedAt: now.toISOString() });
   if (current !== null) {
     // Best effort: an old channel that can't be closed ends by itself at its expiry, and its
     // notifications only cause a sync that finds nothing new.

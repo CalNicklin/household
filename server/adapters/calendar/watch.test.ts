@@ -6,6 +6,7 @@ import { Hono } from "hono";
 import { afterAll, beforeAll, describe, expect, test } from "vitest";
 import { z } from "zod";
 import { fakeServer, json, type Recorded } from "../../integrations/fake-http.ts";
+import { GoogleCalendarPush } from "../../integrations/google-calendar.ts";
 import { realPorts } from "../../integrations/index.ts";
 import { launchJobs, stopJobs } from "../../jobs/launch.ts";
 import { createRuntime, type Runtime } from "../../runtime.ts";
@@ -29,7 +30,7 @@ function standInGoogle(req: Recorded, res: Parameters<Parameters<typeof fakeServ
   const url = new URL(req.path, "http://google");
   if (url.pathname === "/token") return json(res, 200, { access_token: `access-${google.requests.length}`, expires_in: 3600 });
   if (url.pathname === "/channels/stop") return res.writeHead(204).end();
-  if (url.pathname === "/calendars/family%40group.calendar.google.com/events/watch") {
+  if (/^\/calendars\/[^/]+\/events\/watch$/.test(url.pathname)) {
     const { id } = z.object({ id: z.string() }).parse(JSON.parse(req.body.toString()));
     // Google's own default: a channel lasts a week from when it was opened.
     return json(res, 200, { kind: "api#channel", id, resourceId: `res-${id}`, expiration: String(h.ports.clock.now().getTime() + 7 * DAY) });
@@ -76,7 +77,7 @@ describe("Google Calendar on the real adapter (HOU-147)", () => {
 
     // Starting the adapter opened a channel to the house's public address and synced once.
     const watch = await rt.system("test").calendar.watch();
-    expect(watch).toMatchObject({ address: "https://house.example/webhooks/calendar", expiresAt: "2026-11-09T08:00:00.000Z", openedAt: "2026-11-02T08:00:00.000Z" });
+    expect(watch).toMatchObject({ calendarId: "family@group.calendar.google.com", address: "https://house.example/webhooks/calendar", expiresAt: "2026-11-09T08:00:00.000Z", openedAt: "2026-11-02T08:00:00.000Z" });
     const opened = posts()[0];
     expect(JSON.parse(opened?.body.toString() ?? "{}")).toEqual({ id: watch?.channelId, type: "web_hook", address: "https://house.example/webhooks/calendar", token: "practice-calendar-token" });
     const first = await jobForKey(rt, `calendar:${watch?.channelId}:opened`);
@@ -132,6 +133,17 @@ describe("Google Calendar on the real adapter (HOU-147)", () => {
 
     h.ports.clock.set("2026-11-08T09:17:00Z", true);
     expect((await ensureWatch(rt)).action).toBe("kept");
+  });
+
+  test("[CH-6] after GOOGLE_CALENDAR_ID changes, the next check opens a channel on the new calendar and closes the old one", async () => {
+    const before = await rt.system("test").calendar.watch();
+    if (before === null) throw new Error("no watch from the earlier tests");
+    const other = new GoogleCalendarPush({ calendarId: "cal@example.com", getAccessToken: async () => "a", baseUrl: google.url });
+    const moved = await ensureWatch({ ...rt, ports: { ...rt.ports, calendarPush: other } });
+    expect(moved).toMatchObject({ action: "opened", replaced: before.channelId });
+    expect(await rt.system("test").calendar.watch()).toMatchObject({ calendarId: "cal@example.com" });
+    expect(posts().at(-2)?.path).toBe("/calendars/cal%40example.com/events/watch");
+    expect(JSON.parse(posts().at(-1)?.body.toString() ?? "{}")).toEqual({ id: before.channelId, resourceId: before.resourceId });
   });
 
   test("[CH-6] the practice household has no push, so it opens nothing", async () => {

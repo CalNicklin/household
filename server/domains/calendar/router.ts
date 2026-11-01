@@ -41,7 +41,7 @@ export function calendarRouter(db: CalendarDb, timeZone: string) {
     /** CH-6: the push channel in use (the newest opened), or null before the first one. */
     watch: readProcedure.output(zCalendarWatch.nullable()).query(async (): Promise<CalendarWatch | null> => {
       const w = await db.query.watches.findFirst({ orderBy: desc(schema.watches.openedAt) });
-      return w === undefined ? null : { channelId: w.channelId, resourceId: w.resourceId, address: w.address, expiresAt: iso(w.expiresAt), openedAt: iso(w.openedAt) };
+      return w === undefined ? null : { channelId: w.channelId, calendarId: w.calendarId, resourceId: w.resourceId, address: w.address, expiresAt: iso(w.expiresAt), openedAt: iso(w.openedAt) };
     }),
     recordWatch: systemProcedure.input(zCalendarWatch).mutation(async ({ input }) => {
       await db.insert(schema.watches).values({ ...input, expiresAt: new Date(input.expiresAt), openedAt: new Date(input.openedAt) });
