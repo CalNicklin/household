@@ -5,4 +5,8 @@ source "$(dirname "$(readlink -f "$0")")/household-common.sh"
 image="$(deployed_image)"
 [ -n "$image" ] || { echo "deploy once first, so there is an app to restore into" >&2; exit 1; }
 export HOUSEHOLD_IMAGE="$image"
+# The object store's login file is made from .env, which may just have been put back from the password
+# manager (a new server): remake it from this .env, so storage and the app agree. Keeps every value.
+docker run --rm --network none --memory 128m --user 0 -v "$HOUSEHOLD_DIR:/work" -w /work --entrypoint node "$image" /app/scripts/env-init.ts --real > /dev/null
+chmod 600 "$HOUSEHOLD_DIR/.env"
 "$HOUSEHOLD_LIB/restore.sh" "${1:?usage: household-restore <backup directory>}"

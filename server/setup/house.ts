@@ -1,5 +1,6 @@
 import { randomBytes } from "node:crypto";
 import { Channel, DeliveryChannel, type HouseSetup, Limits, PersonRole, Urgency } from "@household/contracts";
+import { sql } from "drizzle-orm";
 import { z } from "zod";
 import { closePool } from "../db/index.ts";
 import { hashPassword } from "../domains/household/router.ts";
@@ -33,7 +34,8 @@ const zPgError = z.object({ code: z.string().optional(), cause: z.object({ code:
 export async function isHouseSetUp(env: Env): Promise<boolean> {
   const dbs = connectAll(env);
   try {
-    return (await dbs.household.query.settings.findFirst()) !== undefined;
+    // Only "is there a row": no column list, so a newer image's schema can ask an older database.
+    return (await dbs.household.execute(sql`select 1 from settings limit 1`)).rows.length > 0;
   } catch (e) {
     const pg = zPgError.safeParse(e);
     const code = pg.success ? (pg.data.cause?.code ?? pg.data.code) : undefined;

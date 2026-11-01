@@ -35,6 +35,7 @@ echo "pushed $digest"
 
 step "the server as install.sh leaves it: deploy files, settings, secrets generated in place"
 install -d -m 750 "$work/srv"
+install -d -o 10001 -m 700 "$work/srv/credentials"
 cp "$repo"/deploy/compose.yml "$repo"/deploy/compose.hindsight.yml "$repo"/deploy/Caddyfile "$work/srv/"
 cat > "$HOUSEHOLD_CONF" <<CONF
 HOUSEHOLD_DIR=$work/srv
@@ -102,7 +103,11 @@ step "household-backup and household-restore"
 "$lib/household-backup.sh"
 backup="$(find "$work/backups" -mindepth 1 -maxdepth 1 -type d | head -n1)"
 ( cd "$backup" && sha256sum -c SHA256SUMS > /dev/null ) || fail "backup sums"
+# A new server: the old .env comes back from the password manager, so storage's login file (made from the
+# new server's .env) no longer matches it. The restore remakes it from .env.
+printf '%s' '{"identities":[{"name":"stale","credentials":[{"accessKey":"stale","secretKey":"stale-secret"}],"actions":["Admin"]}]}' > "$work/srv/.secrets/seaweedfs-s3.json"
 "$lib/household-restore.sh" "$backup" > /dev/null
+grep -q "$(grep '^S3_ACCESS_KEY_ID=' "$work/srv/.env" | cut -d= -f2)" "$work/srv/.secrets/seaweedfs-s3.json" || fail "the restore left storage on another login"
 for _ in $(seq 60); do [ "$(docker inspect -f '{{.State.Health.Status}}' household-app-1)" = healthy ] && break; sleep 2; done
 [ "$(docker inspect -f '{{.State.Health.Status}}' household-app-1)" = healthy ] || fail "app not healthy after the restore"
 grep -q '^  sam ' "$work/logins" && [ -n "$(curl -sk -D - -o /dev/null -H 'content-type: application/json' -d "{\"username\":\"sam\",\"password\":\"$password\"}" https://localhost/api/login | grep -i '^set-cookie')" ] || fail "sam's login did not survive the restore"

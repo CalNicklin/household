@@ -81,6 +81,8 @@ describe("the production compose project", () => {
     // The app runs whatever image household-deploy names, and compose refuses to start without one.
     expect(main.services["app"]?.image).toMatch(/^\$\{HOUSEHOLD_IMAGE:\?.*\}$/);
     expect(main.services["app"]?.["environment"]).toMatchObject({ PRACTICE: "false", HELPER_URL: "" });
+    // Credential files (the Google token) reach the app read-only.
+    expect(main.services["app"]?.volumes).toEqual(["./credentials:/run/household-credentials:ro"]);
     expect(Object.keys(main.services)).not.toContain("helper");
   });
 

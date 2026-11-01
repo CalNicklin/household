@@ -43,6 +43,9 @@ services:
     memswap_limit: *app-memory
     logging: *logging
     env_file: [.env]
+    # Credential files the app reads (e.g. GOOGLE_ACCESS_TOKEN_FILE=/run/household-credentials/google.json),
+    # owned by the app's uid 10001 and readable by nothing else on the server.
+    volumes: ["./credentials:/run/household-credentials:ro"]
     environment:
       # PRV-6: the real house; it refuses to start while any secret is still a practice default.
       PRACTICE: "false"

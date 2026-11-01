@@ -161,7 +161,15 @@ sudo household-setup < house.json
 `healthOwner` is the one adult whose health tracking may exist (PRV-2). Leave it out and nobody's does.
 It prints each adult's app login once (username and a generated password): put them in the password
 manager. Then fill in the credentials `.env` still lacks (`sudo nano /srv/household/.env`:
-`ANTHROPIC_API_KEY`, `TELEGRAM_BOT_TOKEN`, the Google settings; see `.env.example`). Redeploy what's running with
+`ANTHROPIC_API_KEY`, `TELEGRAM_BOT_TOKEN`, the Google settings; see `.env.example`). The Google token file
+goes where only the app can read it, and `.env` names it by its path inside the container:
+
+```bash
+sudo install -o 10001 -m 400 google.json /srv/household/credentials/google.json
+# in /srv/household/.env:
+GOOGLE_ACCESS_TOKEN_FILE=/run/household-credentials/google.json
+```
+ Redeploy what's running with
 `sudo household-deploy "$(sudo cut -d@ -f2 /srv/household/image)"`. Every later push to `main` deploys
 itself.
 
