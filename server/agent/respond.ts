@@ -64,7 +64,12 @@ export async function respond(scope: JobScope, ref: string, action: ActionKind, 
   await scope.api.plans.respond({ ref, action, channel: scope.channel, date, value });
   const subject = await subjectFor(scope, ref, date);
 
-  // HOU-149: "Getting started" cards are about the app, not the house's life: nothing to learn or remember.
+  // HOU-149: "Getting started" cards are about the app, not the house's life: nothing to learn or
+  // remember. HOU-157: nor is an "Added to the shop" card.
+  if (ref.startsWith("shopping:") && ref.endsWith(":added") && action === ActionKind.notToday) {
+    scope.effects.closeRefs.push({ ref, status: "dismissed" });
+    return "Okay, dismissed.";
+  }
   if (ref.startsWith(START_REF_PREFIX)) {
     scope.effects.closeRefs.push({ ref, status: "dismissed" });
     return "Okay, not now.";
