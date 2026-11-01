@@ -153,7 +153,11 @@ object backups can't be read.
 **3. The `production` environment and the GitHub secrets.** First make the environment the deploy key
 lives in: Settings → Environments → New environment, name it `production`, then under **Deployment
 branches and tags** choose **Selected branches and tags** and add the rule `main` (no other branch or
-tag). Save it before adding the key. Then, with `gh`:
+tag). Save it before adding the key. If `production` already exists (a deploy run after this change
+creates it, with no branch rule), open it and set that rule before adding the key. Check it:
+`gh api repos/CalNicklin/household/environments/production --jq .deployment_branch_policy` must show
+`"custom_branch_policies": true`, and `gh api repos/CalNicklin/household/environments/production/deployment-branch-policies --jq '.branch_policies[].name'`
+only `main`. Then, with `gh`:
 
 ```bash
 gh secret set HOUSEHOLD_SSH_KEY --env production < household-deploy   # the private key, in production only
@@ -165,6 +169,12 @@ Never set `HOUSEHOLD_SSH_KEY` at repository level (`gh secret set HOUSEHOLD_SSH_
 every pull request's workflow runs from the PR's own branch and can read every repository secret.
 Check it's only in the environment: `gh secret list --env production` shows it and `gh secret list`
 doesn't. The host and known_hosts stay at repository level because the preview workflow uses them too.
+
+What the branch rule doesn't stop: for a pull request's run, GitHub checks the rule against the PR's
+*head* branch. Someone who can push to this repo could push a branch with their own workflow that asks
+for `production`, then open a PR from `main` into that branch; the head is `main`, so the run gets the
+key. Only people with write access can do that. HOU-143 tracks closing it (a required reviewer on
+`production`, which would mean approving each deploy).
 
 Check the scanned key against the server's own (`ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub` on
 the server, `ssh-keygen -lf <(ssh-keyscan -t ed25519 203.0.113.10)` locally), then delete the private key
