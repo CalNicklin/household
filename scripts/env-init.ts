@@ -79,7 +79,7 @@ chmodSync(".secrets/seaweedfs-s3.json", 0o644);
 if (!real) writeFileSync(".secrets/supermarket.json", JSON.stringify({ url: "http://supermarket:3002", username: "practice-shopper", password: values["PRACTICE_SUPERMARKET_PASSWORD"] }), { mode: 0o600 });
 console.log(
   [
-    `wrote .env and .secrets/ (${real ? "the real house" : "a practice household"})`,
+    `${added.length > 0 ? "wrote .env and .secrets/" : "left .env as it was; wrote .secrets/"} (${real ? "the real house" : "a practice household"})`,
     // Names only, never values: install.sh prints this line.
     `added to .env: ${added.length === 0 ? "nothing" : added.join(", ")}`,
     "The shopping helper runs as uid 1001 and refuses a login file anyone else can read:",

@@ -66,6 +66,7 @@ describe("env-init", () => {
     expect(once.mode).toBe(0o600);
     expect(envInit("PRACTICE=false\n", "--real")).toMatchObject({ rewritten: true, mode: 0o600 });
     expect(twice.out).toContain("added to .env: nothing");
+    expect(twice.out).toContain("left .env as it was");
     const emptied = envInit(once.env.replace(/^MCP_TOKEN=.*$/m, "MCP_TOKEN=").replace(/^MODEL_ID=.*\n/m, ""), "--real");
     expect(emptied.out).toContain("added to .env: MODEL_ID, MCP_TOKEN");
     expect(emptied.env).toMatch(/^MCP_TOKEN=.{8,}$/m);
