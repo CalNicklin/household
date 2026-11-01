@@ -9,6 +9,11 @@ export const PRACTICE_TZ = "Europe/London";
 /** Monday 2 November 2026, 07:00 in London (GMT). The practice clock starts here. */
 export const PRACTICE_START = "2026-11-02T07:00:00.000Z";
 export const PRACTICE_PASSWORD = "practice";
+/** The practice household's app logins (all with PRACTICE_PASSWORD). Public on purpose: nothing behind them is real. */
+export const logins = [
+  { personId: "priya", username: "priya" },
+  { personId: "tom", username: "tom" },
+] as const;
 
 export const people = [
   { id: "priya", name: "Priya", role: PersonRole.adult, nurseryDays: [] },

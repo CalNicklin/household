@@ -2,6 +2,11 @@
 # HOUSEHOLD_DOMAIN itself; the app behind it asks for a login for everything but /healthz.
 {
 	admin off
+	# FB-5: a preview's certificate is got when it is first visited, and only if Caddyfile.previews says
+	# that preview is running. Unused while there are no previews.
+	on_demand_tls {
+		ask http://127.0.0.1:5555/
+	}
 }
 
 {$HOUSEHOLD_DOMAIN} {
@@ -14,3 +19,6 @@
 	}
 	reverse_proxy app:3001
 }
+
+# FB-5: the PR previews' sites, present only when install.sh was given --preview-domain.
+import /etc/caddy/previews/*.caddy

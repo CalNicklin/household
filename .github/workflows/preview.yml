@@ -1,0 +1,151 @@
+# FB-5: every PR from this repository gets a preview on the VPS, with its own practice household, at
+# https://pr-<n>.<preview domain>/. Not a check: CI (ci.yml) still runs `pnpm check` and nothing else
+# (CODE-11). On each push to the PR it builds the PR's image, pushes it to GHCR, and asks the server for
+# `preview <n> sha256:<digest>` over SSH as the `household` user with the preview key, which can only run
+# household-preview. When the PR closes it asks for `preview-stop <n>`. It comments the URL and the
+# practice logins on the PR. Never for a PR from a fork. Until the secrets are added, it skips cleanly.
+name: preview
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, closed]
+
+# One run at a time per PR, in order: a deploy is never cut off halfway, and a close always runs last.
+concurrency:
+  group: preview-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+
+permissions: {}
+
+jobs:
+  ready:
+    # A fork's code never runs on the server (GitHub gives a fork's PR no secrets either).
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    outputs:
+      configured: ${{ steps.secrets.outputs.configured }}
+    steps:
+      - id: secrets
+        env:
+          HAS_KEY: ${{ secrets.HOUSEHOLD_PREVIEW_SSH_KEY != '' }}
+          HAS_HOST: ${{ secrets.HOUSEHOLD_SSH_HOST != '' }}
+          HAS_KNOWN_HOSTS: ${{ secrets.HOUSEHOLD_SSH_KNOWN_HOSTS != '' }}
+        run: |
+          if [ "$HAS_KEY" = true ] && [ "$HAS_HOST" = true ] && [ "$HAS_KNOWN_HOSTS" = true ]; then
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            echo "::notice title=Preview skipped::Add HOUSEHOLD_PREVIEW_SSH_KEY, HOUSEHOLD_SSH_HOST and HOUSEHOLD_SSH_KNOWN_HOSTS (docs/OPERATIONS.md) to get a preview per PR."
+          fi
+
+  image:
+    needs: ready
+    if: needs.ready.outputs.configured == 'true' && github.event.action != 'closed'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      digest: ${{ steps.build.outputs.digest }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: ghcr.io/calnicklin/household:pr-${{ github.event.pull_request.number }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  deploy:
+    needs: image
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: deploy/preview-comment.sh
+          sparse-checkout-cone-mode: false
+      - name: Deploy the preview over SSH
+        env:
+          SSH_KEY: ${{ secrets.HOUSEHOLD_PREVIEW_SSH_KEY }}
+          SSH_HOST: ${{ secrets.HOUSEHOLD_SSH_HOST }}
+          KNOWN_HOSTS: ${{ secrets.HOUSEHOLD_SSH_KNOWN_HOSTS }}
+          PR: ${{ github.event.pull_request.number }}
+          DIGEST: ${{ needs.image.outputs.digest }}
+          # Read-only, and only valid while this job runs: lets the server pull a private image.
+          REGISTRY_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/household-preview
+          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/household-preview ~/.ssh/known_hosts
+          set -o pipefail
+          printf '%s\n' "$REGISTRY_TOKEN" | ssh -i ~/.ssh/household-preview -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o BatchMode=yes "household@$SSH_HOST" "preview $PR $DIGEST" | tee "$RUNNER_TEMP/preview.log"
+          rm -f ~/.ssh/household-preview
+      - name: Comment the URL and the logins
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+          SHA: ${{ github.event.pull_request.head.sha }}
+          RUN: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          log="$RUNNER_TEMP/preview.log"
+          url="$(sed -nE "s#^preview pr-$PR: (https://[a-z0-9.-]+/)\$#\1#p" "$log" 2> /dev/null | tail -n1)"
+          if [ -n "$url" ]; then
+            logins="$(sed -nE 's#^  ([a-z0-9-]+)  ([A-Za-z0-9-]+)$#- `\1` / `\2`#p' "$log")"
+            printf '**Preview:** %s\nThe practice household, freshly seeded, running %s.\n\nLog in as (the practice household'"'"'s logins, not secrets):\n%s\n' "$url" "${SHA:0:7}" "$logins" > "$RUNNER_TEMP/body"
+          else
+            printf '**Preview:** the deploy of %s failed; see %s\n' "${SHA:0:7}" "$RUN" > "$RUNNER_TEMP/body"
+          fi
+          deploy/preview-comment.sh "$PR" "$RUNNER_TEMP/body"
+          # The budget is shared: tell any PR whose preview was removed to make room.
+          for evicted in $(sed -nE 's#^evicted pr-([0-9]+):.*$#\1#p' "$log" 2> /dev/null); do
+            printf '**Preview:** removed to make room for #%s (the previews share a fixed memory budget). Push again to bring it back.\n' "$PR" > "$RUNNER_TEMP/evicted"
+            deploy/preview-comment.sh "$evicted" "$RUNNER_TEMP/evicted" || true
+          done
+
+  stop:
+    needs: ready
+    if: needs.ready.outputs.configured == 'true' && github.event.action == 'closed'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: deploy/preview-comment.sh
+          sparse-checkout-cone-mode: false
+      - name: Remove the preview over SSH
+        env:
+          SSH_KEY: ${{ secrets.HOUSEHOLD_PREVIEW_SSH_KEY }}
+          SSH_HOST: ${{ secrets.HOUSEHOLD_SSH_HOST }}
+          KNOWN_HOSTS: ${{ secrets.HOUSEHOLD_SSH_KNOWN_HOSTS }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/household-preview
+          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/household-preview ~/.ssh/known_hosts
+          ssh -i ~/.ssh/household-preview -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o BatchMode=yes "household@$SSH_HOST" "preview-stop $PR" < /dev/null
+          rm -f ~/.ssh/household-preview
+      - name: Say so on the PR
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          printf '**Preview:** removed (the PR is closed).\n' > "$RUNNER_TEMP/body"
+          deploy/preview-comment.sh "$PR" "$RUNNER_TEMP/body"

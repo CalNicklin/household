@@ -32,10 +32,7 @@ export async function seedPractice(env: Env, now: Date = new Date(data.PRACTICE_
     await h.insert(H.people).values(data.people.map((p) => ({ ...p, nurseryDays: [...p.nurseryDays] })));
     await h.insert(H.identities).values([...data.identities]);
     const passwordHash = hashPassword(data.PRACTICE_PASSWORD);
-    await h.insert(H.logins).values([
-      { personId: "priya", username: "priya", passwordHash },
-      { personId: "tom", username: "tom", passwordHash },
-    ]);
+    await h.insert(H.logins).values(data.logins.map((l) => ({ ...l, passwordHash })));
     await h.insert(H.personSettings).values([
       { personId: "priya", ...personDefaults() },
       { personId: "tom", ...personDefaults() },

@@ -1,0 +1,38 @@
+# FB-5: the PR previews, served by the house's own Caddy (the only thing on 80 and 443). Mounted into it
+# by compose.caddy-previews.yml only when install.sh was given --preview-domain; without it the main
+# Caddyfile's import matches nothing.
+
+# On-demand TLS asks here before getting a certificate (the main Caddyfile's on_demand_tls): yes only
+# for a preview that is running, which household-preview marks with a file named after its host.
+http://127.0.0.1:5555 {
+	bind 127.0.0.1
+	@live file {
+		root /previews
+		try_files {query.domain}
+	}
+	respond @live 200
+	respond 404
+}
+
+*.{$PREVIEW_DOMAIN} {
+	tls {
+		on_demand
+	}
+	encode zstd gzip
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options nosniff
+		Referrer-Policy same-origin
+		X-Robots-Tag noindex
+		-Server
+	}
+	# pr-<n>.<preview domain> goes to that preview's app, which household-preview names pr-<n> on the
+	# household-previews network. Any other name gets nothing.
+	@preview header_regexp preview Host ^(pr-[1-9][0-9]{0,5})\.
+	handle @preview {
+		reverse_proxy {re.preview.1}:3001
+	}
+	handle {
+		respond 404
+	}
+}
