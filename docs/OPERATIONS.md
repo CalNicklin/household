@@ -270,7 +270,12 @@ preview.
   deployed longest ago) first, and the workflow tells that PR so; a push to it brings it back. With the
   house's 552 MB that is 1.1 GB at most, inside the 1.9 GiB that was free.
 - **Isolation:** a preview gets none of the real house's `.env`, credentials, volumes or networks, and no
-  Hindsight. Its two networks are internal (no internet at all). The only house container on the
+  Hindsight. Its two networks are internal (no internet at all, DNS included on Docker 26 or later:
+  check with `docker version`). Its containers run as non-root users with every capability dropped,
+  no privilege escalation, and at most 0.75 (app) and 0.5 (Postgres) of a core and 256/128 processes.
+  Its tokens and secrets (session, MCP, webhooks) are made at random on each deploy, never the practice
+  defaults. Previews can reach each other's apps on the shared network, as they could through the
+  internet. The only house container on the
   previews' network is Caddy, the public front, which a preview reaches exactly as the internet does;
   the house's app, Postgres and object storage are not on it. The house's Caddy serves the previews by
   adding `deploy/Caddyfile.previews` (via `deploy/compose.caddy-previews.yml`, only once a preview domain
@@ -279,10 +284,12 @@ preview.
   while that preview is running (it asks `household-preview`'s list of running previews first), so no one
   can make it ask Let's Encrypt for arbitrary names.
 - **Deploys:** `.github/workflows/preview.yml` on each push to a PR builds the image, pushes it to GHCR as
-  `household:pr-<n>`, and runs `ssh household@<server> "preview <n> sha256:<digest>"`; on close,
+  `household-preview:pr-<n>` (its own package: `household-deploy` only pulls from `household`), and runs `ssh household@<server> "preview <n> sha256:<digest>"`; on close,
   `"preview-stop <n>"`. That uses a **second** key, forced to `household-preview`, which accepts exactly
   those two forms and nothing else. The deploy key still runs only `household-deploy`, and neither can
-  run the other's command. A preview key that leaks can only start and stop practice previews.
+  run the other's command. The preview key on its own can only start and stop practice previews. But the
+  workflow runs from the PR's own branch, so a PR can read any repository secret, the deploy key
+  included, until step 3 below moves that key into an environment only `main` may use.
   By hand on the server: `sudo household-preview "preview-stop 12"`; running ones are listed in
   `/srv/household-previews/live`.
 
@@ -316,8 +323,11 @@ gh secret set HOUSEHOLD_PREVIEW_SSH_KEY < household-preview
 ```
 
 Then delete the private key from the laptop. Until it exists, the preview workflow skips with a notice.
-Optionally, to keep the deploy key away from PR branches entirely, move `HOUSEHOLD_SSH_KEY` into a GitHub
-environment that only `main` may use.
+
+Before adding it, keep the deploy key away from PR branches (a PR's workflow can read every repository
+secret): Settings → Environments → New environment `production`, Deployment branches: `main` only; add
+`HOUSEHOLD_SSH_KEY` there and delete the repository-level one. The deploy workflow's `deploy` job then
+needs `environment: production` (a follow-up change to `deploy.yml`, outside this issue).
 
 **4. The cloud environment's network allowlist.** For the building agent to perform journeys on a preview
 with computer use (FB-4), add the preview domain (`*.preview.example.com`) to the claude.ai cloud
@@ -337,8 +347,9 @@ standing in for GHCR. It shows:
 - 20 malformed commands refused (and `household-deploy` refusing both preview forms);
 - two previews up at once behind the house's Caddy, each with its own database; `priya` logs in to each,
   the house's login does not, and no practice login works on the house;
-- a preview finding and reaching no house container, no stand-in Hindsight, no internet, and not Caddy's
-  on-demand check; none of the house's secrets or files in a preview;
+- a preview finding and reaching no house container, no stand-in Hindsight, no internet (not even a DNS
+  lookup), and not Caddy's on-demand check; none of the house's secrets or files in a preview; each
+  preview running as non-root with no capabilities and its own random tokens;
 - a third preview evicting the oldest (containers, volumes and image gone), the caps adding up to 576 MB;
 - a new push giving a fresh household without evicting anything;
 - closing a PR removing its preview, and a PR with no preview getting no certificate;

@@ -15,6 +15,8 @@ BACKUP_REMOTE="${BACKUP_REMOTE:-}"
 # FB-5: the PR previews: where household-preview keeps them, and the memory all of them may use together.
 PREVIEWS_DIR="${PREVIEWS_DIR:-/srv/household-previews}"
 PREVIEW_BUDGET_MB="${PREVIEW_BUDGET_MB:-600}"
+# PR images live in their own package, so household-deploy (HOUSEHOLD_REPO) can never pull one.
+PREVIEW_REPO="${PREVIEW_REPO:-ghcr.io/calnicklin/household-preview}"
 export PREVIEWS_DIR
 
 [ -f "$HOUSEHOLD_DIR/.env" ] || { echo "no $HOUSEHOLD_DIR/.env: run deploy/install.sh first" >&2; exit 1; }

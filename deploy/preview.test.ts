@@ -76,7 +76,7 @@ describe("a PR's preview", () => {
     expect(app?.environment).toMatchObject({ PRACTICE: "true", HELPER_URL: "", DATABASE_URL: "postgres://postgres@postgres:5432/postgres" });
     const env = Object.keys(app?.environment ?? {});
     // None of the real house's secrets or settings (deploy/compose.yml, scripts/env-init.ts).
-    for (const name of ["POSTGRES_PASSWORD", "STORAGE_KEY", "S3_ACCESS_KEY_ID", "S3_SECRET_ACCESS_KEY", "MCP_TOKEN", "HELPER_TOKEN", "TELEGRAM_BOT_TOKEN", "ANTHROPIC_API_KEY", "HINDSIGHT_URL", "GOOGLE_ACCESS_TOKEN_FILE"]) expect(env).not.toContain(name);
+    for (const name of ["POSTGRES_PASSWORD", "STORAGE_KEY", "S3_ACCESS_KEY_ID", "S3_SECRET_ACCESS_KEY", "TELEGRAM_BOT_TOKEN", "ANTHROPIC_API_KEY", "HINDSIGHT_URL", "GOOGLE_ACCESS_TOKEN_FILE"]) expect(env).not.toContain(name);
     for (const [name, s] of Object.entries(preview.services)) {
       expect(s.env_file, `${name} reads an env file`).toBeUndefined();
       expect(s.ports, `${name} publishes a port`).toBeUndefined();
@@ -86,6 +86,17 @@ describe("a PR's preview", () => {
       // Only its own named volumes: no host path, so not the house's files, credentials or the Docker socket.
       for (const v of s.volumes ?? []) expect(Object.keys(preview.volumes ?? {}), `${name} mounts ${v}`).toContain(v.split(":")[0]);
     }
+    // A PR's image is unreviewed code: not root, no capabilities, no escalation, bounded CPU and processes.
+    for (const [name, s] of Object.entries(preview.services)) {
+      expect(s["user"], `${name} may run as root`).toMatch(/^[1-9]\d*:[1-9]\d*$/);
+      expect(s["cap_drop"], `${name} keeps capabilities`).toEqual(["ALL"]);
+      expect(s["security_opt"]).toEqual(["no-new-privileges:true"]);
+      expect(s["cpus"], `${name} may take every core`).toBeLessThan(1);
+      expect(s["pids_limit"], `${name} has no process limit`).toBeGreaterThan(0);
+    }
+    // Nothing runs on a token or secret whose practice default is published in server/env.ts.
+    for (const name of ["SESSION_SECRET", "MCP_TOKEN", "TELEGRAM_WEBHOOK_SECRET", "EMAIL_WEBHOOK_SECRET", "CALENDAR_WEBHOOK_TOKEN", "HELPER_TOKEN"])
+      expect(app?.environment, name).toMatchObject({ [name]: `\${PREVIEW_${name}:?}` });
     // Its volumes are its own (compose prefixes them with household-pr-<n>), never the house's.
     expect(Object.keys(preview.volumes ?? {}).sort()).toEqual(["objects", "pgdata"]);
   });
@@ -163,5 +174,9 @@ describe("the preview workflow", () => {
     const keys = runs.map((s) => s.env?.["SSH_KEY"]).filter((k) => k !== undefined);
     expect(keys).toEqual(["${{ secrets.HOUSEHOLD_PREVIEW_SSH_KEY }}", "${{ secrets.HOUSEHOLD_PREVIEW_SSH_KEY }}"]);
     expect(read("../.github/workflows/preview.yml")).not.toContain("secrets.HOUSEHOLD_SSH_KEY");
+    // PR images go to their own package, which household-deploy (HOUSEHOLD_REPO) never pulls from.
+    expect(read("../.github/workflows/preview.yml")).toContain("tags: ghcr.io/calnicklin/household-preview:pr-${{ github.event.pull_request.number }}");
+    expect(read("household-common.sh")).toContain('PREVIEW_REPO="${PREVIEW_REPO:-ghcr.io/calnicklin/household-preview}"');
+    expect(read("household-preview.sh")).toContain('image="$PREVIEW_REPO@$digest"');
   });
 });

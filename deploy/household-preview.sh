@@ -3,7 +3,7 @@
 # household-preview "preview-stop <PR number>"
 # FB-5: a PR's preview on the VPS, and the only thing the preview deploy key can run (its SSH key is
 # forced to this command, and sudoers lets the `household` user run this one file as root). It runs the
-# PR's image, by digest, as its own compose project household-pr-<n> from compose.preview.yml: the
+# PR's image from PREVIEW_REPO (never the house's HOUSEHOLD_REPO), by digest, as its own compose project household-pr-<n> from compose.preview.yml: the
 # practice household, freshly seeded every time, at https://pr-<n>.<PREVIEW_DOMAIN>/. It never passes
 # the real house's .env, credentials or volumes to a preview. All previews together stay within
 # PREVIEW_BUDGET_MB of memory; when a new one would not fit, the oldest is removed first.
@@ -37,10 +37,16 @@ install -d -m 755 "$live"
 preview_compose() {
   local pr="$1"
   shift
+  local defaults=() name
+  # Taking a preview down still needs every setting compose.preview.yml requires; none is used then.
+  for name in PREVIEW_IMAGE $PREVIEW_SECRETS; do [ -n "${!name:-}" ] || defaults+=("$name=none"); done
   env -u COMPOSE_PROJECT_NAME -u COMPOSE_PROJECT_DIRECTORY -u COMPOSE_ENV_FILES -u COMPOSE_FILE \
-    PREVIEW_NUMBER="$pr" PREVIEW_DOMAIN="$domain" PREVIEW_IMAGE="${PREVIEW_IMAGE:-none}" PREVIEW_SESSION_SECRET="${PREVIEW_SESSION_SECRET:-none}" \
+    PREVIEW_NUMBER="$pr" PREVIEW_DOMAIN="$domain" "${defaults[@]}" \
     docker compose -p "household-pr-$pr" --project-directory "$PREVIEWS_DIR" --env-file /dev/null -f "$PREVIEWS_DIR/compose.preview.yml" "$@"
 }
+
+# Each made at random per deploy (compose.preview.yml), so no preview runs on a published practice default.
+PREVIEW_SECRETS="PREVIEW_SESSION_SECRET PREVIEW_MCP_TOKEN PREVIEW_TELEGRAM_WEBHOOK_SECRET PREVIEW_EMAIL_WEBHOOK_SECRET PREVIEW_CALENDAR_WEBHOOK_TOKEN PREVIEW_HELPER_TOKEN"
 
 # One file per running preview, named after its host (Caddy's on-demand TLS asks for it), holding
 # "<started, epoch seconds> <image>".
@@ -60,7 +66,7 @@ remove() {
 }
 
 exec 9> "$PREVIEWS_DIR/.lock"
-flock -w 900 9
+flock -w 900 9 || { echo "another preview command held the lock for 15 minutes; nothing was changed" >&2; exit 1; }
 
 if [ "$action" = stop ]; then
   remove "$n"
@@ -68,7 +74,7 @@ if [ "$action" = stop ]; then
   exit 0
 fi
 
-image="$HOUSEHOLD_REPO@$digest"
+image="$PREVIEW_REPO@$digest"
 token=""
 if [ ! -t 0 ]; then IFS= read -r -t 10 token || true; fi
 if docker image inspect "$image" > /dev/null 2>&1; then
@@ -76,7 +82,7 @@ if docker image inspect "$image" > /dev/null 2>&1; then
 elif [ -n "$token" ]; then
   login_dir="$(mktemp -d)"
   trap 'rm -rf "$login_dir"' EXIT
-  printf '%s' "$token" | DOCKER_CONFIG="$login_dir" docker login "${HOUSEHOLD_REPO%%/*}" -u household --password-stdin > /dev/null 2>&1 || { echo "the registry refused the token" >&2; exit 1; }
+  printf '%s' "$token" | DOCKER_CONFIG="$login_dir" docker login "${PREVIEW_REPO%%/*}" -u household --password-stdin > /dev/null 2>&1 || { echo "the registry refused the token" >&2; exit 1; }
   DOCKER_CONFIG="$login_dir" docker pull -q "$image" > /dev/null
   rm -rf "$login_dir"
 else
@@ -101,8 +107,11 @@ while [ "$(running | wc -l)" -ge "$fit" ]; do
   echo "evicted pr-$oldest: the oldest preview, to keep all previews within ${PREVIEW_BUDGET_MB} MB ($fit of ${cost} MB)"
 done
 
-PREVIEW_SESSION_SECRET="$(head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n')"
-export PREVIEW_IMAGE="$image" PREVIEW_SESSION_SECRET
+export PREVIEW_IMAGE="$image"
+for name in $PREVIEW_SECRETS; do
+  printf -v "$name" '%s' "$(head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n')"
+  export "${name?}"
+done
 if ! preview_compose "$n" up -d --wait --wait-timeout 300 > /dev/null 2>&1; then
   echo "pr-$n did not come up healthy; its app's last lines:" >&2
   preview_compose "$n" logs --no-color --tail 30 app >&2 || true
@@ -113,4 +122,6 @@ echo "$(date +%s) $image" > "$(marker "$n")"
 chmod 644 "$(marker "$n")"
 echo "preview pr-$n: https://pr-$n.$domain/"
 echo "logins (the practice household's, not secrets):"
-preview_compose "$n" exec -T app node scripts/practice-logins.ts < /dev/null 2> /dev/null || echo "  see practice/data.ts"
+# Printed by the PR's own code, so every line is marked as such: nothing it prints can pass for one of
+# this script's lines (the workflow reads the URL and evictions from those).
+{ preview_compose "$n" exec -T app node scripts/practice-logins.ts < /dev/null 2> /dev/null || echo "  see practice/data.ts"; } | head -n 20 | sed 's/^/login:/'

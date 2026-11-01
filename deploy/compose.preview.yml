@@ -17,12 +17,24 @@ x-logging: &logging
   driver: json-file
   options: { max-size: 5m, max-file: "2" }
 
+# A PR's image is code nobody has reviewed yet: no root, no capabilities, no privilege escalation, and
+# a bounded share of the server's two cores and its process table, so it can't starve the house or
+# the trading containers.
+x-confined: &confined
+  cap_drop: [ALL]
+  security_opt: ["no-new-privileges:true"]
+
 services:
   app:
     image: ${PREVIEW_IMAGE:?household-preview sets PREVIEW_IMAGE}
     restart: unless-stopped
     mem_limit: *app-memory
     memswap_limit: *app-memory
+    <<: *confined
+    # The image's own `house` user, whatever the PR's Dockerfile says.
+    user: "10001:10001"
+    cpus: 0.75
+    pids_limit: 256
     logging: *logging
     environment:
       # The practice household on fakes (QA-9): no real calendar, model, messages or supermarket.
@@ -30,8 +42,14 @@ services:
       PUBLIC_URL: https://pr-${PREVIEW_NUMBER:?}.${PREVIEW_DOMAIN:?}
       DATABASE_URL: postgres://postgres@postgres:5432/postgres
       PORT: "3001"
-      # Made per deploy by household-preview and kept nowhere else.
+      # Made per deploy by household-preview and kept nowhere else, so no preview runs on the practice
+      # defaults published in server/env.ts.
       SESSION_SECRET: ${PREVIEW_SESSION_SECRET:?}
+      MCP_TOKEN: ${PREVIEW_MCP_TOKEN:?}
+      TELEGRAM_WEBHOOK_SECRET: ${PREVIEW_TELEGRAM_WEBHOOK_SECRET:?}
+      EMAIL_WEBHOOK_SECRET: ${PREVIEW_EMAIL_WEBHOOK_SECRET:?}
+      CALENDAR_WEBHOOK_TOKEN: ${PREVIEW_CALENDAR_WEBHOOK_TOKEN:?}
+      HELPER_TOKEN: ${PREVIEW_HELPER_TOKEN:?}
       HELPER_URL: ""
       NODE_OPTIONS: --max-old-space-size=112
     # The object store: S3 is unset, so the app keeps its (encrypted) objects in files here.
@@ -53,6 +71,11 @@ services:
     restart: unless-stopped
     mem_limit: *postgres-memory
     memswap_limit: *postgres-memory
+    <<: *confined
+    # The image's postgres user (70 in the alpine image) from the start, so it needs no capabilities.
+    user: "70:70"
+    cpus: 0.5
+    pids_limit: 128
     logging: *logging
     # Only this preview's app can reach it, on this project's own internal network; the data is made up.
     environment: { POSTGRES_HOST_AUTH_METHOD: trust }

@@ -61,7 +61,8 @@ jobs:
         with:
           context: .
           push: true
-          tags: ghcr.io/calnicklin/household:pr-${{ github.event.pull_request.number }}
+          # Its own package, never the house's: household-deploy can't be pointed at a PR's image.
+          tags: ghcr.io/calnicklin/household-preview:pr-${{ github.event.pull_request.number }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -103,9 +104,10 @@ jobs:
           RUN: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           log="$RUNNER_TEMP/preview.log"
-          url="$(sed -nE "s#^preview pr-$PR: (https://[a-z0-9.-]+/)\$#\1#p" "$log" 2> /dev/null | tail -n1)"
+          # household-preview's own lines; anything the PR's code printed starts with "login:".
+          url="$(sed -nE "s#^preview pr-$PR: (https://[a-z0-9.-]+/)\$#\1#p" "$log" 2> /dev/null | head -n1)"
           if [ -n "$url" ]; then
-            logins="$(sed -nE 's#^  ([a-z0-9-]+)  ([A-Za-z0-9-]+)$#- `\1` / `\2`#p' "$log")"
+            logins="$(sed -nE 's#^login:  ([a-z0-9-]+)  ([A-Za-z0-9-]+)$#- `\1` / `\2`#p' "$log")"
             printf '**Preview:** %s\nThe practice household, freshly seeded, running %s.\n\nLog in as (the practice household'"'"'s logins, not secrets):\n%s\n' "$url" "${SHA:0:7}" "$logins" > "$RUNNER_TEMP/body"
           else
             printf '**Preview:** the deploy of %s failed; see %s\n' "${SHA:0:7}" "$RUN" > "$RUNNER_TEMP/body"
@@ -125,10 +127,6 @@ jobs:
       contents: read
       pull-requests: write
     steps:
-      - uses: actions/checkout@v4
-        with:
-          sparse-checkout: deploy/preview-comment.sh
-          sparse-checkout-cone-mode: false
       - name: Remove the preview over SSH
         env:
           SSH_KEY: ${{ secrets.HOUSEHOLD_PREVIEW_SSH_KEY }}
@@ -142,6 +140,11 @@ jobs:
           chmod 600 ~/.ssh/household-preview ~/.ssh/known_hosts
           ssh -i ~/.ssh/household-preview -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o BatchMode=yes "household@$SSH_HOST" "preview-stop $PR" < /dev/null
           rm -f ~/.ssh/household-preview
+      # Checked out only after the preview is gone, so nothing here can keep it running.
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: deploy/preview-comment.sh
+          sparse-checkout-cone-mode: false
       - name: Say so on the PR
         env:
           GH_TOKEN: ${{ github.token }}

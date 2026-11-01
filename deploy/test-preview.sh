@@ -42,17 +42,18 @@ house_state() {
 
 step "a registry standing in for GHCR: the house's image and three PRs' images"
 docker run -d --rm --name household-test-registry -p 127.0.0.1:5000:5000 "${REGISTRY_IMAGE:-registry:2}" > /dev/null
+# push <repo>:<tag>: prints the digest. The house's images and the PRs' live in separate repos, as on GHCR.
 push() {
-  docker push -q "localhost:5000/household:$1" > /dev/null 2>&1 || { sleep 1; push "$1"; return; }
-  docker image inspect --format '{{index .RepoDigests 0}}' "localhost:5000/household:$1" | cut -d@ -f2
-  docker image rm "localhost:5000/household:$1" > /dev/null
+  docker push -q "localhost:5000/$1" > /dev/null 2>&1 || { sleep 1; push "$1"; return; }
+  docker image inspect --format '{{index .RepoDigests 0}}' "localhost:5000/$1" | cut -d@ -f2
+  docker image rm "localhost:5000/$1" > /dev/null
 }
 docker tag "$local_image" localhost:5000/household:main
-house="$(push main)"
+house="$(push household:main)"
 declare -A pr
 for n in 1 2 3; do
-  printf 'FROM %s\nLABEL pr=%s\n' "$local_image" "$n" | docker build -q -t "localhost:5000/household:pr-$n" - > /dev/null
-  pr[$n]="$(push "pr-$n")"
+  printf 'FROM %s\nLABEL pr=%s\n' "$local_image" "$n" | docker build -q -t "localhost:5000/household-preview:pr-$n" - > /dev/null
+  pr[$n]="$(push "household-preview:pr-$n")"
 done
 echo "pushed the house's image and pr-1, pr-2, pr-3"
 
@@ -65,6 +66,7 @@ cp "$repo/deploy/compose.preview.yml" "$work/previews/"
 cat > "$HOUSEHOLD_CONF" <<CONF
 HOUSEHOLD_DIR=$work/srv
 HOUSEHOLD_REPO=localhost:5000/household
+PREVIEW_REPO=localhost:5000/household-preview
 PREVIEWS_DIR=$work/previews
 PREVIEW_BUDGET_MB=600
 CONF
@@ -123,7 +125,7 @@ step "two previews at once, each its own practice household at its own URL"
 for n in 1 2; do
   "$lib/household-preview.sh" "preview $n ${pr[$n]}" < /dev/null | tee "$work/pr-$n.log"
   grep -qx "preview pr-$n: https://pr-$n.preview.localhost/" "$work/pr-$n.log" || fail "pr-$n did not say its URL"
-  grep -qx "  priya  practice" "$work/pr-$n.log" || fail "pr-$n did not print the practice logins"
+  grep -qx "login:  priya  practice" "$work/pr-$n.log" || fail "pr-$n did not print the practice logins"
 done
 for n in 1 2; do
   host="pr-$n.preview.localhost"
@@ -131,7 +133,7 @@ for n in 1 2; do
   [ "$(https "$host" /api/trpc/views.home -o /dev/null -w '%{http_code}')" = 401 ] || fail "$host answered without a login (PRV-6)"
   [ -n "$(login_cookie "$host" priya practice)" ] || fail "priya cannot log in to $host"
   [ -z "$(login_cookie "$host" sam "$house_password")" ] || fail "the house's login works on $host"
-  [ "$(docker inspect -f '{{.Config.Image}}' "household-pr-$n-app-1")" = "localhost:5000/household@${pr[$n]}" ] || fail "$host runs the wrong image"
+  [ "$(docker inspect -f '{{.Config.Image}}' "household-pr-$n-app-1")" = "localhost:5000/household-preview@${pr[$n]}" ] || fail "$host runs the wrong image"
 done
 [ -z "$(login_cookie localhost priya practice)" ] || fail "a practice login works on the real house"
 # Their own households: a mark in pr-1's database is not in pr-2's.
@@ -147,7 +149,7 @@ docker run -d --rm --name household-test-hindsight --network household-test-hind
 ip_of() { docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}} {{end}}' "$1" | cut -d' ' -f1; }
 probe='const [h] = process.argv.slice(1); require("dns").lookup(h, (e) => { if (!e) { console.log("resolved " + h); process.exit(1); } })'
 reach='const [u] = process.argv.slice(1); fetch(u, { signal: AbortSignal.timeout(5000) }).then(() => { console.log("reached " + u); process.exit(1); }, () => process.exit(0))'
-for h in household-app-1 household-postgres-1 household-objects-1 hindsight household-test-hindsight; do
+for h in household-app-1 household-postgres-1 household-objects-1 hindsight household-test-hindsight example.com; do
   docker exec household-pr-1-app-1 node -e "$probe" "$h" || fail "pr-1 can find $h"
 done
 for u in "http://$(ip_of household-app-1):3001/healthz" "http://$(ip_of household-objects-1):8333/healthz" "http://$(ip_of household-test-hindsight):5000/" "https://example.com/" "http://household-caddy-1:5555/?domain=pr-1.preview.localhost"; do
@@ -160,14 +162,25 @@ grep -E '^[A-Z0-9_]+=.{8,}$' "$work/srv/.env" | grep -vE '^(PRACTICE|DB_PREFIX|H
 done
 [ -z "$(docker inspect -f '{{range .Mounts}}{{.Source}} {{end}}' household-pr-1-app-1 household-pr-1-postgres-1 | grep -F "$work/srv" || true)" ] || fail "a preview mounts the house's files"
 grep -qE '^PRACTICE=true$' <<< "$env_of_pr" || fail "a preview is not in practice mode"
-echo "a preview finds and reaches no house container, no Hindsight, no internet and not Caddy's ask; the house's Caddy, the public front, is the one house container on its network; none of the house's secrets or files in one"
+# No preview runs on a practice default published in server/env.ts, and no two share a value.
+for name in SESSION_SECRET MCP_TOKEN TELEGRAM_WEBHOOK_SECRET EMAIL_WEBHOOK_SECRET CALENDAR_WEBHOOK_TOKEN HELPER_TOKEN; do
+  values="$(grep -E "^$name=" <<< "$env_of_pr" | cut -d= -f2-)"
+  [ "$(sort -u <<< "$values" | grep -cE '^[0-9a-f]{64}$')" = 2 ] || fail "$name is not made per preview"
+done
+# Confined: not root, no capabilities, no privilege escalation, bounded CPU and processes.
+for c in household-pr-1-app-1 household-pr-1-postgres-1; do
+  docker inspect -f '{{.Config.User}} {{.HostConfig.CapDrop}} {{.HostConfig.SecurityOpt}} {{.HostConfig.NanoCpus}} {{.HostConfig.PidsLimit}}' "$c" \
+    | grep -qE '^(10001:10001|70:70) \[ALL\] \[no-new-privileges:true\] [1-9][0-9]+ [1-9][0-9]+$' || fail "$c is not confined"
+done
+[ "$(docker exec household-pr-1-app-1 id -u)" = 10001 ] || fail "pr-1's app runs as root"
+echo "a preview finds and reaches no house container, no Hindsight, no internet (not even DNS) and not Caddy's ask; it runs confined, with its own secrets; the house's Caddy, the public front, is the one house container on its network; none of the house's secrets or files in one"
 
 step "a third preview: the budget (600 MB, two previews) is full, so the oldest, pr-1, is removed"
 "$lib/household-preview.sh" "preview 3 ${pr[3]}" < /dev/null | tee "$work/pr-3.log"
 grep -q "^evicted pr-1: " "$work/pr-3.log" || fail "pr-1 was not evicted"
 [ -z "$(docker ps -aq --filter name='^household-pr-1-')" ] || fail "pr-1's containers are still there"
 [ -z "$(docker volume ls -q --filter label=com.docker.compose.project=household-pr-1)" ] || fail "pr-1's volumes are still there"
-! docker image inspect "localhost:5000/household@${pr[1]}" > /dev/null 2>&1 || fail "pr-1's image is still there"
+! docker image inspect "localhost:5000/household-preview@${pr[1]}" > /dev/null 2>&1 || fail "pr-1's image is still there"
 gone "pr-1" || fail "pr-1's URL still reaches a preview"
 for n in 2 3; do [ "$(https "pr-$n.preview.localhost" /healthz)" = ok ] || fail "pr-$n is not up"; done
 total=0
