@@ -30,4 +30,4 @@ driver="$(docker buildx inspect "$builder" | sed -nE 's/^Driver: +//p' | head -n
 [ "$driver" = docker-container ] || { echo "builder $builder uses the $driver driver; the workflow's uses docker-container" >&2; exit 1; }
 secret=()
 [ -z "${NPM_CA:-}" ] || secret=(--secret "id=npm_ca,src=$NPM_CA")
-docker buildx build --builder "$builder" "${secret[@]}" --load -t "$tag" "$work"
+docker buildx build --builder "$builder" ${secret[@]+"${secret[@]}"} --load -t "$tag" "$work"
