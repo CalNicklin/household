@@ -2,13 +2,18 @@ import { createTool } from "@mastra/core/tools";
 import { ActionKind, type BacklogTag, Limits, ListWriteOutcome, LongTool, type ModeKind as Mode, ModeKind, Urgency, zActionKind, zBacklogTag } from "@household/contracts";
 import { z } from "zod";
 import { gatherFacts, oneThingCandidates } from "../planner/gather.ts";
+import { inQuietHours } from "../rules/budget.ts";
 import { adultsOf, contextLine, eventsOn } from "../rules/day.ts";
 import { parseOrder } from "../rules/orders.ts";
 import { guessTags } from "../rules/tags.ts";
 import { dayIn } from "../rules/when.ts";
-import { addLocalDays, clock, localDate, localHour, longDate, nextLocalMidnight } from "../time.ts";
+import { addLocalDays, clock, localDate, longDate, nextLocalMidnight } from "../time.ts";
 import { respond, subjectFor } from "./respond.ts";
 import type { JobScope } from "./scope.ts";
+
+// limit: defaultQuietStartHour
+// limit: defaultQuietEndHour
+const personDefaults = { quietStartHour: Limits.defaultQuietStartHour.value, quietEndHour: Limits.defaultQuietEndHour.value };
 
 const NOTHING_PRESSING = { title: "Nothing pressing today", why: "No rule, calendar entry or quick backlog job needs doing now." } as const;
 
@@ -101,11 +106,8 @@ export function houseTools(scope: JobScope) {
       const closed = new Set((await api.plans.responsesOn({ date })).map((r) => r.ref));
       const now = rt.ports.clock.now();
       const [first] = await oneThingCandidates(rt, facts, date, now, closed, scope.person);
-      // HOU-149: the thin-house fallback waits out quiet hours; nobody should be told to ring someone at 11pm.
-      const hour = localHour(now, tz);
-      // limit: defaultQuietStartHour
-      // limit: defaultQuietEndHour
-      const quiet = hour >= Limits.defaultQuietStartHour.value || hour < Limits.defaultQuietEndHour.value;
+      // HOU-149: the thin-house fallback waits out the asker's quiet hours (PRO-7); nobody should be told to ring someone at 11pm.
+      const quiet = inQuietHours(scope.person === null ? personDefaults : await rt.system("what-now").household.personSettings({ person: scope.person }), now, tz);
       const best = first?.fallback === true && quiet ? undefined : first;
       // HOU-149: a thin house still gets one plain answer, never an error or a list.
       if (best === undefined) return { ref: null, title: NOTHING_PRESSING.title, why: NOTHING_PRESSING.why, say: `${NOTHING_PRESSING.title}. ${NOTHING_PRESSING.why}` };
