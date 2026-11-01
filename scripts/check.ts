@@ -68,13 +68,16 @@ const results = await Promise.all(
   }),
 );
 const total = (Date.now() - started) / 1000;
+// exitCode, not exit(): exit() can drop the end of a large step's output still queued for a pipe,
+// which in CI is where the failing tests are named (FB-7).
 if (results.includes(false)) {
   process.stdout.write(`\n✗ pnpm check failed in ${total.toFixed(1)}s\n`);
-  process.exit(1);
-}
-process.stdout.write(`\n✓ pnpm check passed in ${total.toFixed(1)}s (${timings.join(", ")})\n`);
-// FB-2: anything slower than three minutes must be split into check:full.
-if (!full && total > 180) {
-  process.stdout.write("FALSE FB-2: pnpm check took longer than three minutes on this machine\n");
-  process.exit(1);
+  process.exitCode = 1;
+} else {
+  process.stdout.write(`\n✓ pnpm check passed in ${total.toFixed(1)}s (${timings.join(", ")})\n`);
+  // FB-2: anything slower than three minutes must be split into check:full.
+  if (!full && total > 180) {
+    process.stdout.write("FALSE FB-2: pnpm check took longer than three minutes on this machine\n");
+    process.exitCode = 1;
+  }
 }
