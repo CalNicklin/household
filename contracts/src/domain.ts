@@ -141,6 +141,23 @@ export const zCalendarEvent = z.object({
 });
 export type CalendarEvent = z.infer<typeof zCalendarEvent>;
 
+/**
+ * CH-6: the Google push-notification channel the house has open on the shared calendar. A channel is
+ * a subscription, not an event; opening one changes nothing in the calendar (PRV-1).
+ */
+export const zCalendarWatch = z.object({
+  channelId: z.string(),
+  /** The Google calendar the channel watches (GOOGLE_CALENDAR_ID when it was opened). */
+  calendarId: z.string(),
+  resourceId: z.string(),
+  /** Where Google sends the notifications: `${PUBLIC_URL}/webhooks/calendar`. */
+  address: z.string(),
+  /** When Google stops the channel unless it is renewed. */
+  expiresAt: zIsoDateTime,
+  openedAt: zIsoDateTime,
+});
+export type CalendarWatch = z.infer<typeof zCalendarWatch>;
+
 // ── backlog ──────────────────────────────────────────────────────────────────
 
 export const zBacklogItem = z.object({
