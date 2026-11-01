@@ -6,5 +6,5 @@
   "LRN-9": "The recording format, export script and replay scoring exist; no real days have been recorded yet.",
   "FB-4": "Journeys were performed headless with Playwright against a local practice stack; screenshots are saved in evidence/screenshots and named in each Linear evidence comment. There is no deployed preview to perform them on (FB-5) and no computer use in this environment.",
   "FB-5": "No preview hosting is configured. Each preview would be `docker compose up` with PRACTICE=true (the practice household is the default); it needs a server and a deploy hook.",
-  "FB-2": "Measured in GitHub Actions on PR #1: pnpm check took 246 s (unit tests 127.5 s, e2e 91.8 s), over the 180 s limit. Fixed since: job waits poll every 25 ms instead of DBOS's 1 s, and CI's throwaway Postgres skips flushing to disk (unit tests 48 s to 25 s locally). Not proven until a CI run passes under 180 s."
+  "FB-2": "Measured in GitHub Actions: pnpm check took 246 s on PR #1, then 195.7 s on PR #2 after job waits stopped using DBOS's 1 s poll and CI's throwaway Postgres stopped flushing to disk. It now runs in three lanes at once (static checks, unit tests, web build + journeys): 83–93 s locally, against 113.5 s before. Not proven until a CI run passes under 180 s."
 }
