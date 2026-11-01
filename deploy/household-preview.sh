@@ -124,4 +124,4 @@ echo "preview pr-$n: https://pr-$n.$domain/"
 echo "logins (the practice household's, not secrets):"
 # Printed by the PR's own code, so every line is marked as such: nothing it prints can pass for one of
 # this script's lines (the workflow reads the URL and evictions from those).
-{ preview_compose "$n" exec -T app node scripts/practice-logins.ts < /dev/null 2> /dev/null || echo "  see practice/data.ts"; } | head -n 20 | sed 's/^/login:/'
+{ preview_compose "$n" exec -T app node scripts/practice-logins.ts < /dev/null 2> /dev/null || echo "  see practice/data.ts"; } | sed -n '1,20s/^/login:/p'
