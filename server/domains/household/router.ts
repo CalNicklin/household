@@ -1,5 +1,6 @@
 import {
   ActorKind,
+  Channel,
   type Mode,
   PersonRole,
   type PersonSettings,
@@ -21,6 +22,8 @@ import {
   zRuleCreateInput,
   zRuleUpdateInput,
   zSetModeRequest,
+  zSetTelegramIdInput,
+  zSetTelegramIdResult,
   zSitter,
   zSitterBooking,
   zSitterBookingInput,
@@ -86,6 +89,21 @@ export function householdRouter(db: HouseholdDb) {
     }),
     addressesFor: readProcedure.input(zPersonInput).output(z.array(z.object({ channel: z.string(), address: z.string() }))).query(async ({ input }) =>
       db.select({ channel: schema.identities.channel, address: schema.identities.address }).from(schema.identities).where(eq(schema.identities.personId, input.person)),
+    ),
+    /**
+     * CH-3: an adult's Telegram user ID, set after setup by `household-telegram set` on the server. It
+     * replaces any Telegram ID that adult had, and refuses an ID that is already someone else's.
+     */
+    setTelegramId: systemProcedure.input(zSetTelegramIdInput).output(zSetTelegramIdResult).mutation(async ({ input }) =>
+      db.transaction(async (tx) => {
+        const person = await tx.query.people.findFirst({ where: eq(schema.people.id, input.person) });
+        if (person?.role !== PersonRole.adult) forbid(`${input.person} is not one of the adults`);
+        const taken = await tx.query.identities.findFirst({ where: and(eq(schema.identities.channel, Channel.telegram), eq(schema.identities.address, input.telegram)) });
+        if (taken !== undefined && taken.personId !== input.person) forbid(`that Telegram ID is already ${taken.personId}'s`);
+        const old = await tx.delete(schema.identities).where(and(eq(schema.identities.personId, input.person), eq(schema.identities.channel, Channel.telegram))).returning({ address: schema.identities.address });
+        await tx.insert(schema.identities).values({ personId: input.person, channel: Channel.telegram, address: input.telegram });
+        return { person: input.person, telegram: input.telegram, replaced: old.map((r) => r.address).filter((a) => a !== input.telegram) };
+      }),
     ),
     /** PRV-8: everyone the app may ever message: the household's adults and the named sitters. */
     allowedRecipients: readProcedure.output(z.array(z.object({ channel: z.string(), address: z.string() }))).query(async () => [
