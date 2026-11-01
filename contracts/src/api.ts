@@ -27,6 +27,8 @@ export const zAcceptMessageInput = zInboundMessage;
 export const zAcceptMessageOutput = z.object({ messageId: z.string(), duplicate: z.boolean() });
 export const zJobStartInput = z.object({ id: z.string(), messageId: z.string(), provider: zModelProvider, model: z.string() });
 export const zJobFinishInput = zJob.pick({ id: true, intent: true, status: true, inputTokens: true, outputTokens: true, costMicros: true, durationMs: true, toolCalls: true, error: true });
+/** QA-8 / QA-10: model usage a job's child work (a shopping run's replan) adds after the job has finished. */
+export const zJobUsageInput = zJob.pick({ id: true, inputTokens: true, outputTokens: true, costMicros: true });
 export const zDropInput = z.object({ channel: zChannel, address: z.string(), reason: z.string() });
 export const zEnqueueNotificationInput = zNotifyInput.extend({ channel: zDeliveryChannel, status: zNotificationStatus, jobId: z.string().nullable() });
 export const zMarkNotificationInput = z.object({ id: z.string(), status: zNotificationStatus, externalId: z.string().optional() });

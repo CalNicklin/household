@@ -12,6 +12,7 @@ import {
   zJob,
   zJobFinishInput,
   zJobStartInput,
+  zJobUsageInput,
   zMarkNotificationInput,
   zNotification,
   zNotificationsForInput,
@@ -117,6 +118,17 @@ export function jobsRouter(db: JobsDb) {
     finishJob: systemProcedure.input(zJobFinishInput).mutation(async ({ input }) => {
       const { id, ...rest } = input;
       await db.update(schema.jobs).set(rest).where(eq(schema.jobs.id, id));
+    }),
+    /** Adds to a job's totals rather than replacing them, so child work can report after the job finished. */
+    addJobUsage: systemProcedure.input(zJobUsageInput).mutation(async ({ input }) => {
+      await db
+        .update(schema.jobs)
+        .set({
+          inputTokens: sql`${schema.jobs.inputTokens} + ${input.inputTokens}`,
+          outputTokens: sql`${schema.jobs.outputTokens} + ${input.outputTokens}`,
+          costMicros: sql`${schema.jobs.costMicros} + ${input.costMicros}`,
+        })
+        .where(eq(schema.jobs.id, input.id));
     }),
     job: readProcedure.input(zIdInput).output(zJob.nullable()).query(async ({ input }) => {
       const row = await db.query.jobs.findFirst({ where: eq(schema.jobs.id, input.id) });

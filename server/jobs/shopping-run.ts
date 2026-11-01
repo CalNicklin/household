@@ -62,7 +62,11 @@ async function runShoppingImpl(requestId: string, sku: string | null, parentJob:
     );
   }
   await DBOS.send(parentJob, { requestId, kind: stored.kind, runId: stored.runId }, "shopping");
-  await planDay(localDate(rt.ports.clock.now(), rt.timeZone), `shopping:${requestId}`, parentJob);
+  const replan = await planDay(localDate(rt.ports.clock.now(), rt.timeZone), `shopping:${requestId}`, parentJob);
+  // QA-8 / QA-10: the replan's cost belongs to the job that asked for the shopping. That job does not
+  // wait for this run (PLT-10) and writes its own totals when it finishes, so wait for it, then add.
+  await DBOS.retrieveWorkflow(parentJob).getResult();
+  await DBOS.runStep(async () => api.jobs.addJobUsage({ id: parentJob, inputTokens: replan.inputTokens, outputTokens: replan.outputTokens, costMicros: replan.costMicros }), { name: "replan-cost" });
 }
 
 export const runShopping = DBOS.registerWorkflow(runShoppingImpl, { name: "runShopping" });

@@ -20,6 +20,8 @@ Read `README.md` once. `VERIFICATIONS.md` is the only spec.
 ## Hand it over
 - One PR per issue. Commit messages end with the Entire checkpoint trailer; CI rejects commits without one.
 - PR body: the verification line verbatim, the evidence, anything you had to assume.
+- Entire reviews every PR: it opens a trail, its agents review each push, and its gates post an `Entire Gates` check. Fix every finding.
+- Merge it yourself, with a merge commit, only when `Entire Gates` and `check` are both green on the PR's latest commit and it has no conflicts. Never bypass a gate.
 - If a verification line is wrong or impossible, say so on the issue and stop. Do not reinterpret it.
 
 ## Never
