@@ -7,6 +7,33 @@ function localDay(): string {
 }
 
 /**
+ * HOU-161: run `task` one at a time. A burst of changes (a job and the re-plan it starts) would
+ * otherwise cancel every in-flight fetch on each change, so a slow screen like Shop never landed
+ * until the burst ended. Calls made while it runs are folded into one more run after it.
+ */
+function oneAtATime(task: () => Promise<void>): () => void {
+  let running = false;
+  let again = false;
+  return () => {
+    if (running) {
+      again = true;
+      return;
+    }
+    running = true;
+    void (async () => {
+      try {
+        do {
+          again = false;
+          await task();
+        } while (again);
+      } finally {
+        running = false;
+      }
+    })();
+  };
+}
+
+/**
  * PLT-11 / MOM-3 / CH-10: listen for changes and refetch. EventSource reconnects by itself; every
  * (re)connect refetches, so a screen left open all week catches up (HOME-6). The local date is
  * checked every minute and whenever the screen becomes visible.
@@ -16,9 +43,10 @@ export function useLive(): void {
   useEffect(() => {
     // Cancel first: a query still on its first load ignores invalidation and keeps the answer it is
     // fetching, so a change landing while the screen opens would otherwise never be shown (HOME-1).
-    const refresh = () => {
-      void queryClient.cancelQueries().then(() => queryClient.invalidateQueries());
-    };
+    const refresh = oneAtATime(async () => {
+      await queryClient.cancelQueries();
+      await queryClient.invalidateQueries();
+    });
     const source = new EventSource("/api/live");
     source.addEventListener("change", refresh);
     source.addEventListener("hello", () => {
