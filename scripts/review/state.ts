@@ -160,6 +160,8 @@ export function merge(prior: ReviewState, answers: Answers, head: { sha: string;
     if (f.status !== ReviewStatus.open) return f;
     const said = answers[f.stage].earlier.find((e) => e.id === f.id);
     const changed = !unchanged(f, read);
+    // A stage that restates it by name still sees it, whatever else it says: it stays open.
+    if (answers[f.stage].findings.some((x) => x.repeats === f.id)) return f;
     let next: StoredFinding;
     if (said?.outcome === ReviewOutcome.accepted) next = { ...f, status: ReviewStatus.accepted, reason: short(said.reason) || "accepted", settledOn: sha };
     else if (said?.outcome === ReviewOutcome.fixed || (said === undefined && changed)) next = { ...f, status: ReviewStatus.fixed, reason: (said === undefined ? "" : short(said.reason)) || "no longer raised after the code changed", settledOn: sha };

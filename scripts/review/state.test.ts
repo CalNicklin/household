@@ -137,6 +137,16 @@ describe("HOU-151 the blocking decision", () => {
     expect(regraded.blocking).toBe(true);
   });
 
+  it("a finding its stage restates by name stays open, even when its code changed and the stage left it out of earlier", () => {
+    const first = merge(emptyState(), answers({ code: { findings: [finding({ severity: "high", line: 10 })], earlier: [] } }), head("aaaaaaa", a));
+    const edited = { "server/a.ts": lines(20, [9, "const l9 = touched();"]) };
+    const second = merge(first.state, answers({ code: { findings: [finding({ severity: "high", line: 10, repeats: "AR-1" })], earlier: [] } }), head("bbbbbbb", edited));
+    expect(second.settled).toEqual([]);
+    expect(second.raised).toEqual([]);
+    expect(second.open.map((f) => f.id)).toEqual(["AR-1"]);
+    expect(second.blocking).toBe(true);
+  });
+
   it("a stage only judges its own earlier findings", () => {
     const first = merge(emptyState(), answers({ security: { findings: [finding()], earlier: [] } }), head("aaaaaaa", a));
     const second = merge(first.state, answers({ code: { findings: [], earlier: [{ id: "AR-1", outcome: "accepted", reason: "fine" }] }, security: { findings: [], earlier: [{ id: "AR-1", outcome: "still_open", reason: "no" }] } }), head("bbbbbbb", a));
