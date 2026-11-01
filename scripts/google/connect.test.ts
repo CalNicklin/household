@@ -29,7 +29,7 @@ function clientFile(body: unknown = { installed: { client_id: "cid.apps.googleus
 }
 
 /** Run the flow; `browser` decides where Google "sends the browser back" to, given the consent link. */
-async function run(options: { token?: (form: URLSearchParams) => { status: number; body: unknown }; browser?: (consent: URL) => string; client?: string }) {
+async function run(options: { token?: (form: URLSearchParams) => { status: number; body: unknown }; browser?: (consent: URL) => string; before?: (consent: URL) => Promise<void>; client?: string }) {
   const token = await fakeServer((req, res) => {
     const reply = (options.token ?? (() => ({ status: 200, body: { access_token: "ya29.x", expires_in: 3599, refresh_token: REFRESH, scope: GOOGLE_CALENDAR_SCOPE, token_type: "Bearer" } })))(new URLSearchParams(req.body.toString()));
     json(res, reply.status, reply.body);
@@ -49,7 +49,8 @@ async function run(options: { token?: (form: URLSearchParams) => { status: numbe
       lines.push(url);
       consent = new URL(url);
       const back = (options.browser ?? ((c) => `${c.searchParams.get("redirect_uri")}?state=${c.searchParams.get("state")}&code=4/auth-code&scope=${encodeURIComponent(GOOGLE_CALENDAR_SCOPE)}`))(consent);
-      browserDone = fetch(back);
+      const first = options.before?.(consent) ?? Promise.resolve();
+      browserDone = first.then(() => fetch(back));
     },
   }).then(
     () => null,
@@ -106,11 +107,17 @@ describe("pnpm google:connect (HOU-147)", () => {
     expect(statSync(r.out).mode & 0o777).toBe(0o600);
   });
 
-  test("a reply with another run's state is refused and nothing is written or swapped", async () => {
-    const r = await run({ browser: (c) => `${c.searchParams.get("redirect_uri")}?state=forged&code=4/stolen` });
-    expect(r.error?.message).toMatch(/state/);
-    expect(r.token.requests).toHaveLength(0);
-    expect(() => statSync(r.out)).toThrow(/ENOENT/);
+  test("a request with another run's state is refused and never swapped, and the real reply still connects", async () => {
+    let refused = 0;
+    const r = await run({
+      before: async (c) => {
+        refused = (await fetch(`${c.searchParams.get("redirect_uri")}?state=forged&code=4/stolen`)).status;
+      },
+    });
+    expect(refused).toBe(400);
+    expect(r.error).toBeNull();
+    expect(r.token.requests).toHaveLength(1);
+    expect(new URLSearchParams(r.token.requests[0]?.body.toString()).get("code")).toBe("4/auth-code");
   });
 
   test("Google saying no writes nothing", async () => {

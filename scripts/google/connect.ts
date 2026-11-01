@@ -71,7 +71,8 @@ function awaitRedirect(state: string, onListening: (redirectUri: string) => void
         server.closeAllConnections();
         outcome();
       };
-      if (url.searchParams.get("state") !== state) return done(() => reject(new ConnectError("the reply from Google didn't carry this run's state; nothing was written. Run it again.")), 400, "This doesn't match the link this run printed. Nothing was saved.");
+      // Not this run's reply (a stray request, a second tab): refuse it and keep waiting for Google's.
+      if (url.searchParams.get("state") !== state) return finish(res, 400, "This doesn't match the link this run printed. Nothing was saved.");
       const error = url.searchParams.get("error");
       if (error !== null) return done(() => reject(new ConnectError(`Google said "${error}"; nothing was written`)), 400, "Google didn't give access. Nothing was saved; you can close this tab.");
       const code = url.searchParams.get("code");
