@@ -44,6 +44,8 @@ export const Limits = {
   liveUpdateBudgetMs: { value: 2000, reason: "VERIFICATION", note: "MOM-3 / CH-10: other screens show a change within two seconds." },
   captureBudgetMs: { value: 5000, reason: "VERIFICATION", note: "CAP-1: appears for both of us within five seconds." },
   shoppingBudgetMs: { value: 600_000, reason: "VERIFICATION", note: "AUT-1: within ten minutes it is in our supermarket basket." },
+  undoWindowMs: { value: 5000, reason: "VERIFICATION", note: "PRV-1 / HOU-158: a person's own delete can be taken back for a few seconds before it is sent; five is the usual undo-toast length." },
+  deletedEverywhereMs: { value: 7000, reason: "VERIFICATION", note: "PRV-1 / MOM-3: once the five-second Undo window (undoWindowMs) ends, other screens show the delete within two seconds." },
   calendarRefreshMs: { value: 60_000, reason: "VERIFICATION", note: "HOME-1: updates within a minute of a calendar change." },
 } as const satisfies Record<string, Limit>;
 export type LimitName = keyof typeof Limits;

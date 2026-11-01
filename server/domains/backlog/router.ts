@@ -1,9 +1,9 @@
-import { ActorKind, type BacklogItem, BacklogStatus, Limits, zBacklogCreateInput, zBacklogItem, zBacklogSetTagsInput, zIdInput, zPersonInput } from "@household/contracts";
+import { ActorKind, type BacklogItem, BacklogStatus, DeletedThing, Limits, zBacklogCreateInput, zBacklogItem, zBacklogSetTagsInput, zIdInput, zPersonInput } from "@household/contracts";
 import { and, desc, eq, inArray } from "drizzle-orm";
 import { z } from "zod";
 import type { DomainDb } from "../../db/index.ts";
 import { iso } from "../../db/map.ts";
-import { actingPerson, actorProcedure, forbid, personProcedure, readProcedure, router, systemProcedure } from "../../trpc.ts";
+import { actingPerson, actorProcedure, forbid, logDeleted, personProcedure, readProcedure, router, systemProcedure } from "../../trpc.ts";
 import * as schema from "./schema.ts";
 
 export type BacklogDb = DomainDb<typeof schema>;
@@ -102,9 +102,14 @@ export function backlogRouter(db: BacklogDb) {
       return update(ctx, input.id, { status: BacklogStatus.active, notNowCount: 0 });
     }),
 
-    /** Only a person can delete a backlog item (PRV-1). */
+    /**
+     * Only a person can delete a backlog item (PRV-1), any adult's, from the app (HOU-158). It is gone
+     * from the backlog at once and from today's plan when it is next drawn. Logged with who did it.
+     */
     remove: personProcedure.input(zIdInput).mutation(async ({ ctx, input }) => {
-      await db.delete(schema.items).where(eq(schema.items.id, input.id));
+      const [row] = await db.delete(schema.items).where(eq(schema.items.id, input.id)).returning();
+      if (row === undefined) return;
+      logDeleted(DeletedThing.backlogItem, row.id, ctx.actor.person, row.createdBy);
       ctx.publish("backlog");
     }),
 

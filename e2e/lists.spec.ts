@@ -44,10 +44,11 @@ test("[CAP-6] shopping and simple lists live in the app: tick, add, rename, dele
   await shopping.getByRole("textbox", { name: "Rename Batteries" }).press("Enter");
   await expect(tomShopping.getByRole("button", { name: "AA batteries", exact: true })).toBeVisible(live);
 
-  // Delete asks first.
+  // Delete: gone at once, with Undo for a few seconds (HOU-158); then the other phone sees it gone.
   await shopping.getByRole("button", { name: "Delete AA batteries" }).click();
-  await shopping.getByRole("alertdialog", { name: "Delete this item?" }).getByRole("button", { name: "Delete" }).click();
-  await expect(tomShopping.getByRole("button", { name: "AA batteries", exact: true })).toHaveCount(0, live);
+  await expect(page.getByRole("status", { name: "Deleted" })).toContainText("AA batteries");
+  // limit: deletedEverywhereMs
+  await expect(tomShopping.getByRole("button", { name: "AA batteries", exact: true })).toHaveCount(0, { timeout: Limits.deletedEverywhereMs.value });
 
   // A new list, renamed with an emoji from its menu, then deleted.
   await page.getByRole("button", { name: "New list" }).click();
@@ -64,7 +65,8 @@ test("[CAP-6] shopping and simple lists live in the app: tick, add, rename, dele
   await list(page, "Camping").getByRole("button", { name: "Actions for Camping" }).click();
   await page.getByRole("menuitem", { name: "Delete list" }).click();
   await page.getByRole("alertdialog").getByRole("button", { name: "Delete list" }).click();
-  await expect(list(phone, "Camping")).toHaveCount(0, live);
+  // limit: deletedEverywhereMs
+  await expect(list(phone, "Camping")).toHaveCount(0, { timeout: Limits.deletedEverywhereMs.value });
   await phoneCtx.close();
 });
 

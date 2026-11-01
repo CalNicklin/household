@@ -1,4 +1,4 @@
-import { ActorKind, type LiveTopic } from "@household/contracts";
+import { ActorKind, type DeletedThing, type LiveTopic } from "@household/contracts";
 import { initTRPC, TRPCError } from "@trpc/server";
 
 /**
@@ -55,4 +55,12 @@ export function actingPerson(actor: Actor): string | null {
 
 export function forbid(message: string): never {
   throw new TRPCError({ code: "FORBIDDEN", message });
+}
+
+/**
+ * HOU-158: a person deleted something. Any adult may delete what another wrote; the log says who did
+ * and who wrote it. Never the words themselves.
+ */
+export function logDeleted(what: DeletedThing, id: string, by: string, writtenBy: string | null): void {
+  console.info(JSON.stringify({ event: "deleted-by-person", what, id, by, writtenBy }));
 }
