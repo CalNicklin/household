@@ -100,5 +100,7 @@ test("[HOME-7] on Week, only today has a Now or Later today label; a later day's
   const tuesday = page.getByRole("region", { name: "Tuesday 3 November" });
   await expect(tuesday.getByText(/Dinner at Sam's/).first()).toBeVisible();
   await expect(tuesday.getByRole("heading", { name: /^(Now|Later today)$/ })).toHaveCount(0);
+  // The evidence shows the later day, the half of the change that drops the labels.
+  await tuesday.scrollIntoViewIfNeeded();
   await evidence(page, "HOU-153-week", { fullPage: false });
 });
