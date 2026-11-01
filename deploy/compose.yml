@@ -1,0 +1,135 @@
+# PLT-8 in production: the real house on Cal's VPS, as its own compose project next to the apps already
+# there (the trader app, hindsight, docker-ib-gateway-1), which this file never names or touches.
+# Installed to /srv/household by deploy/install.sh; run by /usr/local/sbin/household-deploy, which sets
+# HOUSEHOLD_IMAGE to the image CI built (never built here). Secrets come from /srv/household/.env,
+# generated on the server by `pnpm env:init --real`.
+name: household
+
+# Every container's hard memory cap, in one place (about 550 MB together). Swap is capped at the same
+# value, so this project can never push the trading containers into swap or out of memory.
+x-memory:
+  app: &app-memory 288m
+  postgres: &postgres-memory 96m
+  objects: &objects-memory 128m
+  caddy: &caddy-memory 40m
+
+# Logs rotate, so the house can't fill the disk the other apps share.
+x-logging: &logging
+  driver: json-file
+  options: { max-size: 10m, max-file: "3" }
+
+services:
+  caddy:
+    image: caddy:2.10.2-alpine
+    restart: unless-stopped
+    mem_limit: *caddy-memory
+    memswap_limit: *caddy-memory
+    logging: *logging
+    # The only ports this project opens: HTTP (redirects to HTTPS and answers the ACME challenge) and HTTPS.
+    ports: ["80:80", "443:443", "443:443/udp"]
+    environment:
+      HOUSEHOLD_DOMAIN: ${HOUSEHOLD_DOMAIN:?set HOUSEHOLD_DOMAIN in /srv/household/.env}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      app: { condition: service_healthy }
+
+  app:
+    image: ${HOUSEHOLD_IMAGE:?household-deploy sets HOUSEHOLD_IMAGE}
+    restart: unless-stopped
+    mem_limit: *app-memory
+    memswap_limit: *app-memory
+    logging: *logging
+    env_file: [.env]
+    environment:
+      # PRV-6: the real house; it refuses to start while any secret is still a practice default.
+      PRACTICE: "false"
+      PUBLIC_URL: https://${HOUSEHOLD_DOMAIN}
+      DATABASE_URL: postgres://postgres@postgres:5432/postgres
+      PORT: "3001"
+      S3_ENDPOINT: http://objects:8333
+      S3_BUCKET: household
+      # No shopping helper on the VPS: the supermarket blocks data-centre addresses, so it will run at
+      # home. With HELPER_URL unset, shopping requests are kept and say nothing was added.
+      HELPER_URL: ""
+      # Node's heap stays well inside the container's cap.
+      NODE_OPTIONS: --max-old-space-size=176
+    expose: ["3001"]
+    depends_on:
+      postgres: { condition: service_healthy }
+      objects: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3001/healthz').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"]
+      interval: 10s
+      start_period: 60s
+      retries: 6
+
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    mem_limit: *postgres-memory
+    memswap_limit: *postgres-memory
+    logging: *logging
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?run pnpm env:init --real first}
+    # Tuned small: one family's data, a few connections per domain.
+    command:
+      - postgres
+      - -c
+      - shared_buffers=24MB
+      - -c
+      - effective_cache_size=64MB
+      - -c
+      - work_mem=1MB
+      - -c
+      - maintenance_work_mem=16MB
+      - -c
+      - wal_buffers=1MB
+      - -c
+      - max_connections=80
+      - -c
+      - max_wal_size=256MB
+      - -c
+      - max_worker_processes=2
+      - -c
+      - max_parallel_workers=0
+      - -c
+      - max_parallel_workers_per_gather=0
+      - -c
+      - autovacuum_max_workers=1
+    shm_size: 64m
+    volumes: [pgdata:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      retries: 30
+
+  # PLT-7: S3-compatible object storage we run ourselves. Objects arrive already encrypted.
+  objects:
+    image: chrislusf/seaweedfs:4.50
+    restart: unless-stopped
+    mem_limit: *objects-memory
+    memswap_limit: *objects-memory
+    logging: *logging
+    command: server -dir=/data -s3 -s3.port=8333 -s3.config=/etc/seaweedfs/s3.json -master.volumeSizeLimitMB=256 -volume.max=8
+    environment:
+      # Go's garbage collector keeps the heap under this, inside the cap (a restart reloads its index).
+      GOMEMLIMIT: 96MiB
+      # One family's objects: grow one volume at a time, not seven.
+      WEED_MASTER_VOLUME_GROWTH_COPY_1: "1"
+    volumes:
+      - objects:/data
+      - ./.secrets/seaweedfs-s3.json:/etc/seaweedfs/s3.json:ro
+    # The app creates its bucket at start, so it waits until the S3 port answers.
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8333/healthz"]
+      interval: 5s
+      retries: 30
+
+volumes:
+  pgdata:
+  objects:
+  caddy-data:
+  caddy-config:

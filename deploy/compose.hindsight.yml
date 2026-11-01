@@ -1,0 +1,15 @@
+# PLT-6 in production: reuse the Hindsight already running on the VPS (container `hindsight`, published
+# only on the host's 127.0.0.1:8888, which a container cannot reach). The app joins Hindsight's own Docker
+# network and calls it by container name; its banks are household-<HOUSEHOLD_ID>-person-<person>, so it
+# never reads or writes another app's memory. household-deploy adds this file when HINDSIGHT_NETWORK is
+# set in /srv/household/.env (deploy/install.sh finds it with `docker inspect hindsight`).
+services:
+  app:
+    environment:
+      HINDSIGHT_URL: ${HINDSIGHT_URL:-http://hindsight:8888}
+    networks: [default, hindsight]
+
+networks:
+  hindsight:
+    external: true
+    name: ${HINDSIGHT_NETWORK:?}

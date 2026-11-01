@@ -332,3 +332,17 @@ export const zWeeklyReport = z.object({
   costMicros: z.number().int(),
 });
 export type WeeklyReport = z.infer<typeof zWeeklyReport>;
+
+/**
+ * PLT-8: the real house, described once on the server (`pnpm house:setup < house.json`). It holds no
+ * secret: each adult's app password is generated on the server and printed once.
+ */
+export const zHouseSetup = z.object({
+  name: z.string().min(1),
+  timezone: z.string().min(1),
+  latitude: z.number(),
+  longitude: z.number(),
+  adults: z.array(z.object({ id: z.string().regex(/^[a-z][a-z0-9-]*$/), name: z.string().min(1), email: z.email().optional(), telegram: z.string().regex(/^\d+$/).optional() })).min(1),
+  children: z.array(z.object({ id: z.string().regex(/^[a-z][a-z0-9-]*$/), name: z.string().min(1), nurseryDays: z.array(zWeekday) })).default([]),
+});
+export type HouseSetup = z.infer<typeof zHouseSetup>;

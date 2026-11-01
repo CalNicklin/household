@@ -20,6 +20,8 @@ const keep = (name: string, make: () => string) => existing.get(name) ?? make();
 const values: Record<string, string> = {
   PRACTICE: keep("PRACTICE", () => (real ? "false" : "true")),
   DB_PREFIX: keep("DB_PREFIX", () => (real ? "home" : "practice")),
+  // PLT-6: the household's Hindsight banks are named after it (household-<id>-person-<person>).
+  HOUSEHOLD_ID: keep("HOUSEHOLD_ID", () => (real ? "home" : "practice")),
   POSTGRES_PASSWORD: keep("POSTGRES_PASSWORD", () => random()),
   SESSION_SECRET: keep("SESSION_SECRET", () => random(32)),
   STORAGE_KEY: keep("STORAGE_KEY", () => randomBytes(32).toString("hex")),

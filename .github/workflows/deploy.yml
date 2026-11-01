@@ -1,0 +1,91 @@
+# PLT-8: deploy the real house to the VPS. Not a check: CI (ci.yml) still runs `pnpm check` and nothing
+# else (CODE-11). This runs only after CI has passed on a push to main: it builds the image here, pushes
+# it to GHCR, then asks the server to deploy it by digest over SSH as the `household` user, whose key can
+# only run household-deploy. GitHub holds only the SSH key, host and known_hosts; every app secret is
+# generated on the server. Until those three secrets are added, it skips cleanly.
+name: deploy
+on:
+  workflow_run:
+    workflows: [ci]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-household
+  cancel-in-progress: false
+
+permissions: {}
+
+jobs:
+  ready:
+    # A dispatch (to redeploy by hand) only from main, which only holds code CI has passed.
+    if: (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push')
+    runs-on: ubuntu-latest
+    outputs:
+      configured: ${{ steps.secrets.outputs.configured }}
+    steps:
+      - id: secrets
+        env:
+          HAS_KEY: ${{ secrets.HOUSEHOLD_SSH_KEY != '' }}
+          HAS_HOST: ${{ secrets.HOUSEHOLD_SSH_HOST != '' }}
+          HAS_KNOWN_HOSTS: ${{ secrets.HOUSEHOLD_SSH_KNOWN_HOSTS != '' }}
+        run: |
+          if [ "$HAS_KEY" = true ] && [ "$HAS_HOST" = true ] && [ "$HAS_KNOWN_HOSTS" = true ]; then
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            echo "::notice title=Deploy skipped::Add HOUSEHOLD_SSH_KEY, HOUSEHOLD_SSH_HOST and HOUSEHOLD_SSH_KNOWN_HOSTS (docs/OPERATIONS.md) to deploy."
+          fi
+
+  image:
+    needs: ready
+    if: needs.ready.outputs.configured == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      digest: ${{ steps.build.outputs.digest }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: |
+            ghcr.io/calnicklin/household:${{ github.event.workflow_run.head_sha || github.sha }}
+            ghcr.io/calnicklin/household:main
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  deploy:
+    needs: image
+    runs-on: ubuntu-latest
+    permissions:
+      packages: read
+    steps:
+      - name: Deploy over SSH
+        env:
+          SSH_KEY: ${{ secrets.HOUSEHOLD_SSH_KEY }}
+          SSH_HOST: ${{ secrets.HOUSEHOLD_SSH_HOST }}
+          KNOWN_HOSTS: ${{ secrets.HOUSEHOLD_SSH_KNOWN_HOSTS }}
+          DIGEST: ${{ needs.image.outputs.digest }}
+          # Read-only, and only valid while this job runs: lets the server pull a private image.
+          REGISTRY_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/household
+          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/household ~/.ssh/known_hosts
+          printf '%s\n' "$REGISTRY_TOKEN" | ssh -i ~/.ssh/household -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o BatchMode=yes "household@$SSH_HOST" "$DIGEST"
+          rm -f ~/.ssh/household

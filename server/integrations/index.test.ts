@@ -5,6 +5,7 @@ import { GoogleCalendarSource } from "./google-calendar.ts";
 import { realPorts } from "./index.ts";
 import { HindsightMemory } from "./hindsight-memory.ts";
 import { S3ObjectStore } from "./s3-object-store.ts";
+import { NoShoppingHelper } from "./shopping-helper.ts";
 import { TelegramTransport } from "./telegram.ts";
 import { OpenMeteoWeather } from "./weather-open-meteo.ts";
 
@@ -46,5 +47,16 @@ describe("real ports", () => {
     expect(ports.objects).toBeInstanceOf(S3ObjectStore);
     expect(missing).not.toContain("calendar");
     expect(missing).toContain("lists");
+  });
+
+  it("[PLT-8] the real house with no shopping helper runs, and says nothing was added instead of using a practice basket", async () => {
+    const real = { PRACTICE: "false", SESSION_SECRET: "s", STORAGE_KEY: "ab".repeat(32), TELEGRAM_WEBHOOK_SECRET: "t", EMAIL_WEBHOOK_SECRET: "e", CALENDAR_WEBHOOK_TOKEN: "c", MCP_TOKEN: "m", HELPER_TOKEN: "h" };
+    const { ports, missing } = realPorts(loadEnv(real), clock, options);
+    expect(ports.shopping).toBeInstanceOf(NoShoppingHelper);
+    expect(missing).toContain("shopping (no helper: requests wait)");
+    const result = await ports.shopping.addItem("oat milk");
+    expect(result.kind).toBe("failed");
+    expect(result.kind === "failed" ? result.reason : "").toContain("not connected");
+    expect(await ports.shopping.basket()).toEqual({ items: [], deliveryDate: null, changeUrl: "" });
   });
 });

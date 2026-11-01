@@ -1,0 +1,16 @@
+# PLT-8 / PRV-6: the only way in from the internet. Caddy gets and renews the certificate for
+# HOUSEHOLD_DOMAIN itself; the app behind it asks for a login for everything but /healthz.
+{
+	admin off
+}
+
+{$HOUSEHOLD_DOMAIN} {
+	encode zstd gzip
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options nosniff
+		Referrer-Policy same-origin
+		-Server
+	}
+	reverse_proxy app:3001
+}

@@ -47,7 +47,8 @@ export type Env = z.infer<typeof zEnv>;
 const MUST_BE_SET_FOR_REAL = ["SESSION_SECRET", "STORAGE_KEY", "TELEGRAM_WEBHOOK_SECRET", "EMAIL_WEBHOOK_SECRET", "CALENDAR_WEBHOOK_TOKEN", "MCP_TOKEN", "HELPER_TOKEN"] as const;
 
 export function loadEnv(source: Record<string, string | undefined> = process.env): Env {
-  const env = zEnv.parse(source);
+  // A setting written as `NAME=` is unset, not an empty URL or token (compose's HELPER_URL: "" says "no helper").
+  const env = zEnv.parse(Object.fromEntries(Object.entries(source).filter(([, v]) => v !== "")));
   if (env.PRACTICE) return env;
   const practice = zEnv.parse({});
   const unset = MUST_BE_SET_FOR_REAL.filter((name) => env[name] === practice[name]);

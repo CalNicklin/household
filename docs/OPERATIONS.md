@@ -46,3 +46,167 @@ On the build sandbox, against the full compose stack:
 3. `docker compose down -v` — every volume deleted.
 4. `scripts/restore.sh backups/20261031T212300Z`, then logged in again: the loft item was on the Backlog
    and the run's first screenshot decrypted to a PNG through `/api/objects/…`.
+
+## The real house on the VPS
+
+The real house runs on Cal's Hetzner VPS (2 vCPU, 3.7 GiB) next to the trader app, `hindsight` and
+`docker-ib-gateway-1`, as its own compose project, `household`, from `deploy/`:
+
+| Container | Memory cap (swap capped too) | Reachable from |
+| --- | --- | --- |
+| `caddy` (HTTPS for `HOUSEHOLD_DOMAIN`, certificates automatic) | 40 MB | the internet, ports 80 and 443 only |
+| `app` | 288 MB | Caddy |
+| `postgres` (tuned small) | 96 MB | the app |
+| `objects` (SeaweedFS) | 128 MB | the app |
+
+The caps are in one place, `x-memory` at the top of `deploy/compose.yml` (552 MB in all), so the house
+can never push the trading containers into swap or out of memory. Nothing else is published: Postgres,
+SeaweedFS and the app have no host ports. The server never builds anything; CI builds the image and
+pushes it to GHCR.
+
+- **Shopping helper:** not on the VPS (Waitrose blocks data-centre addresses); it will run at home. Until
+  then shopping requests are kept and show that nothing was added, and the app says
+  `shopping (no helper: requests wait)` at start.
+- **Hindsight:** the existing instance, not a second copy. It publishes only on the host's 127.0.0.1:8888,
+  which no container can reach, so the app joins Hindsight's own Docker network and calls
+  `http://hindsight:8888`. `deploy/install.sh` finds that network (`docker inspect hindsight`) and writes
+  `HINDSIGHT_NETWORK` to `/srv/household/.env`; `household-deploy` then adds `deploy/compose.hindsight.yml`.
+  The house's memories are in their own banks, `household-home-person-<person>`, and it never reads another.
+  If Hindsight is on Docker's default `bridge` network (no names there), give it a named one, preferably
+  in Hindsight's own compose file so it survives a recreate: `docker network create hindsight-net &&
+  docker network connect hindsight-net hindsight`, then add `HINDSIGHT_NETWORK=hindsight-net` to
+  `/srv/household/.env` and redeploy. `HINDSIGHT_URL` in the same file overrides the address.
+- **Deploys:** `.github/workflows/deploy.yml` runs after CI passes on a push to `main` (or by hand from
+  Actions → deploy → Run workflow, on `main`). It builds and pushes the image, then runs
+  `ssh household@<server> sha256:<digest>`. The `household` user has no password and is not in the
+  docker group. Its only key is forced to `sudo -n /usr/local/sbin/household-deploy "$SSH_ORIGINAL_COMMAND"`,
+  and one sudoers rule lets it run exactly that file. The file deploys an image by digest and nothing
+  else. The compose file, Caddyfile and commands are the ones `install.sh` put on the server, so a push
+  to `main` can change what runs inside the containers but not how they run. If the image's `deploy/`
+  files differ, the deploy says so; re-run `install.sh` to take them. A deploy that doesn't come up
+  healthy rolls back to the previous image.
+- **Secrets:** generated on the server into `/srv/household/.env` (root only, mode 600) by
+  `pnpm env:init --real`, run by `install.sh`. GitHub holds only the SSH key, host and known_hosts. The
+  job passes its own short-lived token on stdin so the server can pull a private image; the server
+  removes it straight after the pull.
+
+### Cal's one-time steps, in order
+
+**1. DNS.** Add an A record pointing the domain at the VPS's IPv4 address (and an AAAA record if it has
+IPv6), e.g. `house.example.com. A 203.0.113.10`. Wait until `dig +short house.example.com` answers with
+that address. Caddy needs it to get the certificate. If the server runs a firewall, allow 80/tcp,
+443/tcp and 443/udp (`sudo ufw allow 80/tcp && sudo ufw allow 443`).
+
+**2. The `household` user and its restricted command.** On your laptop, make the deploy key (no
+passphrase; it can only deploy):
+
+```bash
+ssh-keygen -t ed25519 -N '' -C household-deploy -f household-deploy
+```
+
+On the server, from a checkout of this repo (any path; `git pull` it later to update `deploy/`):
+
+```bash
+git clone https://github.com/CalNicklin/household.git ~/household && cd ~/household
+sudo deploy/install.sh --domain house.example.com --deploy-key "$(cat household-deploy.pub)"   # paste the .pub line
+```
+
+It installs `/srv/household` (compose file, Caddyfile, `.env` with every secret generated there), the
+`household-deploy`, `household-setup`, `household-backup` and `household-restore` commands, the
+`household` user with its forced command and sudoers rule (`/etc/sudoers.d/household-deploy`), and the
+nightly backup timer. Running it again is safe: it keeps the secrets and changes only what you pass.
+Check what it found: `sudo grep -E '^(HOUSEHOLD_DOMAIN|HINDSIGHT_NETWORK)=' /srv/household/.env`.
+Copy `/srv/household/.env` into the password manager once. It holds `STORAGE_KEY`, without which the
+object backups can't be read.
+
+**3. The GitHub secrets** (Settings → Secrets and variables → Actions, or with `gh`):
+
+```bash
+gh secret set HOUSEHOLD_SSH_KEY < household-deploy                     # the private key
+gh secret set HOUSEHOLD_SSH_HOST --body "203.0.113.10"                 # the server's address
+ssh-keyscan -t ed25519 203.0.113.10 | gh secret set HOUSEHOLD_SSH_KNOWN_HOSTS
+```
+
+Check the scanned key against the server's own (`ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub` on
+the server, `ssh-keygen -lf <(ssh-keyscan -t ed25519 203.0.113.10)` locally), then delete the private key
+from the laptop. Until all three secrets exist, the deploy workflow skips with a notice.
+
+**4. The first deploy.** Actions → deploy → Run workflow (on `main`), or merge anything to `main`. The first
+deploy pulls the image, starts Postgres and SeaweedFS, and stops with "The house is not set up yet". Then,
+on the server, describe the house (no secrets in it):
+
+```json
+{
+  "name": "Home",
+  "timezone": "Europe/London",
+  "latitude": 51.45,
+  "longitude": -2.59,
+  "adults": [
+    { "id": "cal", "name": "Cal", "email": "cal@example.com", "telegram": "123456789" },
+    { "id": "chloe", "name": "Chloe", "email": "chloe@example.com" }
+  ],
+  "children": [{ "id": "kid", "name": "Kid", "nurseryDays": ["mon", "tue"] }]
+}
+```
+
+```bash
+sudo household-setup < house.json
+```
+
+It prints each adult's app login once (username and a generated password): put them in the password
+manager. Then fill in the credentials `.env` still lacks (`sudo nano /srv/household/.env`:
+`ANTHROPIC_API_KEY`, `TELEGRAM_BOT_TOKEN`, the Google settings; see `.env.example`). Redeploy what's running with
+`sudo household-deploy "$(sudo cut -d@ -f2 /srv/household/image)"`. Every later push to `main` deploys
+itself.
+
+**5. Check it's up.**
+
+```bash
+curl -fsS https://house.example.com/healthz          # ok
+sudo docker compose -p household ps                   # caddy, app, postgres, objects: healthy
+sudo docker stats --no-stream $(sudo docker ps -q --filter label=com.docker.compose.project=household)
+sudo docker logs household-app-1 2>&1 | grep -E '"event":"(listening|ports-missing-credentials)"'
+sudo docker ps --format '{{.Names}} {{.Status}}'      # hindsight and docker-ib-gateway-1 still up, unchanged
+free -m
+```
+
+Then log in at `https://house.example.com/` on the kitchen iPad.
+
+### Backups on the server
+
+`household-backup.timer` runs `household-backup` at about 03:17 every night. It runs the same backup as
+above (`pg_dumpall` plus the object store's volume, with SHA-256 sums; SeaweedFS stops for a few
+seconds) into `BACKUP_DEST`, and keeps the newest `BACKUP_KEEP`. When `BACKUP_REMOTE` is set, it copies
+them with rsync to an off-server target (e.g. a Hetzner Storage Box, using root's SSH key). All three
+are set in `/etc/household/household.conf`. Run it by hand with `sudo household-backup`, and check the
+timer with `systemctl list-timers household-backup.timer`.
+
+To restore (the procedure above, against the production project):
+
+```bash
+sudo household-restore /var/backups/household/<timestamp>
+```
+
+On a new server, run steps 2 to 4 first, put the old `.env` back into `/srv/household/.env` (from the
+password manager), then restore.
+
+### Tried on the build sandbox — 1 November 2026
+
+There is no access to the real server from the build sandbox, so `deploy/test-deploy.sh` drives the real
+`household-deploy`, `household-setup`, `household-backup` and `household-restore` against local Docker,
+with a local registry standing in for GHCR. It covers:
+
+- refusing anything but a digest;
+- the first deploy waiting for setup;
+- setup printing the logins;
+- the app healthy behind Caddy with no helper (`/healthz` ok, everything else asking for a login,
+  HTTP redirected to HTTPS);
+- a broken image rolled back;
+- a backup restored with the house healthy again.
+
+`install.sh` was run on the sandbox too. Its forced command then:
+
+- refused shells and injected commands;
+- did not give the `household` user Docker, any other sudo, or `.env`;
+- deployed by digest;
+- found a stand-in `hindsight` on its own network without changing it.
