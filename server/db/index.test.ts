@@ -21,7 +21,7 @@ describe("closing a domain's pool", () => {
         const db = connectDomain(url, prefix, Domain.household, {});
         const ran = await Promise.all([1, 2, 3, 4].map(() => db.$client.query<{ pid: number }>("select pg_backend_pid() as pid, pg_sleep(0.01)")));
         const pids = ran.map((r) => r.rows[0]?.pid ?? -1);
-        // Every connection the pool holds ran one of the queries, so the pids cover all of them.
+        // Each connection the pool holds should have run one of the queries; checked here, so the pids cover all of them.
         if (new Set(pids).size !== db.$client.totalCount) uncounted.push(round);
         await closePool(db.$client);
         // The pool's own backends, by pid: an autovacuum worker analysing the shared pg_database
