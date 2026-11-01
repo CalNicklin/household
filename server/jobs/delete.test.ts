@@ -119,4 +119,15 @@ describe("A person can delete, the house cannot", () => {
     expect(run?.screenshots.map((s) => s.name)).toEqual(["00-search.png"]);
     expect(run?.item).toBe("A deleted request");
   });
+
+  test("[PRV-7][AUT-6] deleting everything about a person removes their runs, even one whose request was already deleted", async () => {
+    const forTom = h.rt.as({ kind: ActorKind.agent, job: "j-tom", onBehalfOf: "tom", message: "m-tom" });
+    const request = await forTom.shopping.request({ item: "Sumac", sourceMessage: "m-tom-sumac" });
+    await system().shopping.update({ id: request.id, status: ShoppingStatus.failed, chosen: null, options: [] });
+    const runId = await system().shopping.addRun({ requestId: request.id, log: [{ at: "2026-11-02T07:01:00.000Z", line: "searched for sumac" }], screenshots: [] });
+    await priya().shopping.remove({ id: request.id });
+    expect(await system().shopping.run({ id: runId })).not.toBeNull();
+    await system().shopping.deletePerson({ person: "tom" });
+    expect(await system().shopping.run({ id: runId })).toBeNull();
+  });
 });

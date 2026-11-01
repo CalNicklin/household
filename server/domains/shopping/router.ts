@@ -72,7 +72,12 @@ export function shoppingRouter(db: ShoppingDb) {
       ctx.publish("shopping");
     }),
     addRun: systemProcedure.input(zShoppingRunInput).output(z.string()).mutation(async ({ ctx, input }) => {
-      const [row] = await db.insert(schema.runs).values({ ...input, createdAt: ctx.now }).returning();
+      // Whose request it ran for, kept on the run itself so PRV-7 finds it after the request is deleted (HOU-158).
+      const request = await db.query.requests.findFirst({ where: eq(schema.requests.id, input.requestId) });
+      const [row] = await db
+        .insert(schema.runs)
+        .values({ ...input, person: request?.person ?? null, createdAt: ctx.now })
+        .returning();
       if (row === undefined) throw new Error("insert failed");
       return row.id;
     }),
@@ -98,6 +103,8 @@ export function shoppingRouter(db: ShoppingDb) {
     }),
     exportPerson: systemProcedure.input(zPersonInput).query(async ({ input }) => ({ requests: await db.select().from(schema.requests).where(eq(schema.requests.person, input.person)) })),
     deletePerson: systemProcedure.input(zPersonInput).mutation(async ({ input }) => {
+      // Their runs too, including ones whose request a person already deleted (HOU-158).
+      await db.delete(schema.runs).where(eq(schema.runs.person, input.person));
       await db.delete(schema.requests).where(eq(schema.requests.person, input.person));
       await db.delete(schema.summaries).where(eq(schema.summaries.person, input.person));
     }),
