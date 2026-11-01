@@ -45,3 +45,27 @@ test("[HOME-7] an all-day item shows where it came from in the time column, not 
   await expect(row).toBeVisible();
   await expect(row.locator(".ds-list-row__time svg")).toBeVisible();
 });
+
+test.describe("on a phone", () => {
+  test.use({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+
+  test("[HOME-10] every card's buttons sit below its text or beside text at least as wide; nothing is cut off and every button is tappable (HOU-153)", async ({ page }) => {
+    await login(page);
+    await expect(page.getByText("Hang the washing out")).toBeVisible();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+    const cards = page.locator(".ds-card--fluid");
+    const count = await cards.count();
+    expect(count).toBeGreaterThan(0);
+    for (let i = 0; i < count; i++) {
+      const card = cards.nth(i);
+      const { text, actions, buttonsWidth } = await boxes(card);
+      if (text === null || actions === null) continue;
+      expect(actions.top >= text.bottom - 1 || text.width >= buttonsWidth, `card ${i}: text ${text.width}px beside buttons ${buttonsWidth}px`).toBe(true);
+      for (const b of await card.locator(".ds-card__actions button").all()) {
+        const box = await b.boundingBox();
+        expect(box !== null && box.width >= 44 && box.height >= 44).toBe(true);
+      }
+    }
+    await evidence(page, "HOU-153-phone-cards", { fullPage: false });
+  });
+});
