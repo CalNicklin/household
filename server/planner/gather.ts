@@ -101,7 +101,8 @@ export async function oneThingCandidates(rt: Runtime, facts: HouseFacts, date: L
     });
   }
   for (const b of plan?.blocks ?? []) {
-    if (closed.has(b.id) || b.id.startsWith(START_REF_PREFIX)) continue;
+    // HOU-157: a shop card is news about the shop, never the one thing to do now.
+    if (closed.has(b.id) || b.id.startsWith(START_REF_PREFIX) || b.id.startsWith("shopping:")) continue;
     if (b.type === BlockType.suggestion) out.push({ ref: b.ref, title: b.title, why: b.reason, actions: withHandOver(b.ref, b.actions) });
   }
   // HOU-149: a thin house still gets one answer — the oldest small job that needs nothing it can't check.

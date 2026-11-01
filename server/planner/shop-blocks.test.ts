@@ -4,6 +4,7 @@ import { NoShoppingHelper } from "../integrations/shopping-helper.ts";
 import { eventually, testHousehold, type TestHousehold } from "../testing/household.ts";
 import { localDate } from "../time.ts";
 import { shoppingForPlan } from "./compose.ts";
+import { gatherFacts, oneThingCandidates } from "./gather.ts";
 
 const shopBlocks = (blocks: readonly Block[]) => blocks.filter((b) => "ref" in b && b.ref.startsWith("shopping:"));
 const shopSuggestions = (blocks: readonly Block[]) => blocks.filter((b): b is SuggestionBlock => b.type === BlockType.suggestion && b.ref.startsWith("shopping:"));
@@ -54,6 +55,23 @@ describe("HOU-157: a shop block that does show (a helper is connected) has a one
     expect((await api.shopping.get({ id: ref.slice("shopping:".length) }))?.status).toBe(ShoppingStatus.dismissed);
     expect((await api.plans.responsesOn({ date })).some((r) => r.ref === ref && r.action === ActionKind.notToday)).toBe(true);
     await eventually(async () => !(await blocks()).some((b) => b.ref === ref));
+  });
+
+  test("[MOM-2][HOME-4] a shop card is never the one thing to do now, and dismissing 'Added to the shop' closes it with nothing learned or remembered", async () => {
+    const date = localDate(h.ports.clock.now(), h.rt.timeZone);
+    const api = h.rt.system("t");
+    const added = async () => shopSuggestions((await api.plans.latest({ date }))?.blocks ?? []).find((b) => b.title.startsWith("Added to the shop: Bananas"));
+    await eventually(async () => (await added()) !== undefined);
+    const facts = await gatherFacts(h.rt, date, 2);
+    const candidates = await oneThingCandidates(h.rt, facts, date, h.ports.clock.now(), new Set(), "priya");
+    expect(candidates.filter((c) => c.ref.startsWith("shopping:"))).toEqual([]);
+    const ref = (await added())?.ref ?? "";
+    const events = (await api.learning.events()).length;
+    const accepted = await h.tap(ref, ActionKind.notToday);
+    await h.wait(accepted);
+    expect((await api.learning.events()).length).toBe(events);
+    expect((await api.jobs.replies({ person: "priya" })).some((r) => r.text === "Okay, dismissed.")).toBe(true);
+    await eventually(async () => (await added()) === undefined || (await api.plans.responsesOn({ date })).some((r) => r.ref === ref));
   });
 
   test("[HOME-4] shoppingForPlan keeps every request with a helper and none without", () => {

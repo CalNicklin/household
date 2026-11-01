@@ -50,7 +50,8 @@ async function weeklyReport(jobId: string, today: LocalDate): Promise<void> {
       const suggested = new Set<string>();
       for (let d = 0; d < 7; d++) {
         const p = await api.plans.latest({ date: addLocalDays(from, d) });
-        for (const b of p?.blocks ?? []) if (b.type === BlockType.suggestion || b.type === BlockType.backlogPick || b.type === BlockType.alert) suggested.add(b.id);
+        // HOU-157: a shop card reports on the shop; it is not something the house suggested.
+        for (const b of p?.blocks ?? []) if ((b.type === BlockType.suggestion || b.type === BlockType.backlogPick || b.type === BlockType.alert) && !b.id.startsWith("shopping:")) suggested.add(b.id);
       }
       const responses = await api.plans.responsesBetween({ from, to: today });
       const accepted = responses.filter((r) => r.action === ActionKind.accept || r.action === ActionKind.done).length;

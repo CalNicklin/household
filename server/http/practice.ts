@@ -16,6 +16,7 @@ export function practiceRoutes(rt: Runtime) {
   return (app: Hono<HttpEnv>) => {
     /** HOU-157: run the practice household like the real house with no shopping helper, or back again. */
     app.post("/api/practice/shopping-helper", async (c) => {
+      if (!(rt.ports.clock instanceof PracticeClock)) return c.json({ error: "not the practice household" }, 400);
       const body = z.object({ connected: z.boolean() }).parse(await c.req.json());
       rt.ports.shopping = body.connected ? helper : new NoShoppingHelper();
       return c.json({ connected: rt.ports.shopping.connected });
