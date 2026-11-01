@@ -1,5 +1,6 @@
 import { type APIRequestContext, type APIResponse, test as base, expect, type Page } from "@playwright/test";
 import { z } from "zod";
+import { type Stack, stack } from "./stacks.ts";
 
 export async function json<T>(schema: z.ZodType<T>, response: APIResponse): Promise<T> {
   return schema.parse(await response.json());
@@ -57,7 +58,15 @@ export async function evidence(page: Page, name: string): Promise<void> {
   await base.info().attach(name, { path: `evidence/screenshots/${name}.png`, contentType: "image/png" });
 }
 
-export const test = base;
+/** FB-2: this worker's own stack (e2e/stacks.ts): its server, supermarket, helper and files. */
+export function ownStack(): Stack {
+  return stack(base.info().parallelIndex);
+}
+
+/** FB-2: `page`, `request` and new contexts resolve relative URLs against this worker's own server. */
+export const test = base.extend({
+  baseURL: async ({ baseURL: configured }, use, info) => use(configured === undefined ? undefined : `http://localhost:${stack(info.parallelIndex).server}`),
+});
 export { expect };
 
 /** Say something in the composer, as Priya would on the iPad. */
