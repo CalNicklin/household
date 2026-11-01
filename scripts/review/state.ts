@@ -133,15 +133,17 @@ export type Merged = {
 };
 
 /**
- * A new finding restates a remembered one of its stage when it is anchored on exactly the same code as
- * one still open (and is no more severe) or one accepted. Anything else is raised: a duplicate comment is
- * better than a hidden defect. A fixed finding, or one about the PR as a whole, is only restated by name
- * (`repeats`), so a new defect next to a fix, or a new one about the PR, is still raised.
+ * A new finding restates a remembered one of its stage, and is not raised, only when it is no more
+ * severe and either names it (`repeats`) or is anchored on exactly the same code as one open or
+ * accepted. Anything else is raised: a duplicate comment is better than a hidden defect. A fixed
+ * finding, or one about the PR as a whole, is only restated by name, so a new defect next to a fix, or
+ * a new one about the PR, is still raised.
  */
-function restates(f: ReviewFinding, window: string, k: StoredFinding): boolean {
+function restates(f: ReviewFinding, window: string, repeats: string | null, k: StoredFinding): boolean {
+  if (k.stage !== f.stage || severityRank[f.severity] < severityRank[k.severity]) return false;
+  if (repeats === k.id) return true;
   // A whole-PR anchor ("pr") is the same for every such finding, so it says nothing about which one this is.
-  if (k.status === ReviewStatus.fixed || k.stage !== f.stage || k.file !== f.file || k.file === "" || k.window !== window) return false;
-  return k.status === ReviewStatus.accepted || severityRank[f.severity] >= severityRank[k.severity];
+  return k.status !== ReviewStatus.fixed && k.file === f.file && k.file !== "" && k.window === window;
 }
 
 /**
@@ -172,11 +174,10 @@ export function merge(prior: ReviewState, answers: Answers, head: { sha: string;
   const raised: StoredFinding[] = [];
   for (const stage of Object.values(ReviewStage)) {
     const fresh = answers[stage].findings
-      .filter((f) => f.repeats === null || !findings.some((k) => k.id === f.repeats))
-      .map((f) => normalise(stage, f))
-      .filter((f): f is ReviewFinding => f !== null)
-      .map((f) => ({ f, window: windowOf(f, read) }))
-      .filter(({ f, window }) => !findings.some((k) => restates(f, window, k)))
+      .map((f) => ({ f: normalise(stage, f), repeats: f.repeats }))
+      .filter((x): x is { f: ReviewFinding; repeats: string | null } => x.f !== null)
+      .map(({ f, repeats }) => ({ f, repeats, window: windowOf(f, read) }))
+      .filter(({ f, window, repeats }) => !findings.some((k) => restates(f, window, repeats, k)))
       .sort((a, b) => severityRank[a.f.severity] - severityRank[b.f.severity])
       .slice(0, Limits.reviewMaxFindings.value);
     for (const { f, window } of fresh) raised.push({ ...f, id: `AR-${nextId++}`, status: ReviewStatus.open, sha, window, commentId: null, reason: null, settledOn: null });

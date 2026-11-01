@@ -127,6 +127,16 @@ describe("HOU-151 the blocking decision", () => {
     expect(merge(first.state, answers({ code: { findings: [finding({ severity: "low", line: 10 })], earlier: [] } }), head("bbbbbbb", a)).raised).toEqual([]);
   });
 
+  it("a more severe finding is raised even on the code of an accepted one, or when it names an earlier one", () => {
+    const first = merge(emptyState(), answers({ code: { findings: [finding({ severity: "low", line: 10 })], earlier: [] } }), head("aaaaaaa", a));
+    const accepted = merge(first.state, answers({ code: { findings: [], earlier: [{ id: "AR-1", outcome: "accepted", reason: "fine" }] } }), head("bbbbbbb", a));
+    expect(merge(accepted.state, answers({ code: { findings: [finding({ severity: "high", line: 10 })], earlier: [] } }), head("ccccccc", a)).raised).toMatchObject([{ id: "AR-2", severity: "high" }]);
+    // The stage re-grades open low AR-1 as high and says it repeats AR-1: raised, so it blocks.
+    const regraded = merge(first.state, answers({ code: { findings: [finding({ severity: "high", line: 10, repeats: "AR-1" })], earlier: [{ id: "AR-1", outcome: "still_open", reason: "worse than thought" }] } }), head("ccccccc", a));
+    expect(regraded.raised).toMatchObject([{ id: "AR-2", severity: "high" }]);
+    expect(regraded.blocking).toBe(true);
+  });
+
   it("a stage only judges its own earlier findings", () => {
     const first = merge(emptyState(), answers({ security: { findings: [finding()], earlier: [] } }), head("aaaaaaa", a));
     const second = merge(first.state, answers({ code: { findings: [], earlier: [{ id: "AR-1", outcome: "accepted", reason: "fine" }] }, security: { findings: [], earlier: [{ id: "AR-1", outcome: "still_open", reason: "no" }] } }), head("bbbbbbb", a));
