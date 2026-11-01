@@ -14,10 +14,13 @@ export const requests = pgTable("requests", {
   createdAt: createdAt(),
 });
 
-/** AUT-6: every run keeps a log and screenshots (object-storage keys, PLT-7). */
+/**
+ * AUT-6: every run keeps a log and screenshots (object-storage keys, PLT-7). A person deleting the
+ * request it ran for (HOU-158) keeps the run, with no request.
+ */
 export const runs = pgTable("runs", {
   id: id(),
-  requestId: text("request_id").notNull().references(() => requests.id, { onDelete: "cascade" }),
+  requestId: text("request_id").references(() => requests.id, { onDelete: "set null" }),
   log: jsonb("log").$type<{ at: string; line: string }[]>().notNull().default([]),
   screenshots: text("screenshots").array().notNull().default([]),
   createdAt: createdAt(),

@@ -137,3 +137,15 @@ test("[PRV-1][AUT-1] a person deletes a shop request that went nowhere, with Und
   await expect(phone.getByRole("heading", { name: "Asked for" })).toBeVisible();
   await expect(row(phone, "saffron")).toHaveCount(0);
 });
+
+test("[PRV-1] a delete that does not go through comes back, and the screen says so", async ({ page }) => {
+  await login(page);
+  await page.goto("/lists");
+  await page.route("**/api/trpc/removeListItem**", (route) => route.fulfill({ status: 500, body: "{}" }));
+  await list(page, "Shopping").getByRole("button", { name: "Delete kitchen roll" }).click();
+  await expect(item(page, "kitchen roll")).toHaveCount(0);
+  // limit: deletedEverywhereMs
+  await expect(toast(page)).toContainText("Couldn't delete that — it's back", { timeout: Limits.deletedEverywhereMs.value });
+  await expect(toast(page).getByRole("button", { name: "Undo" })).toHaveCount(0);
+  await expect(item(page, "kitchen roll")).toBeVisible();
+});

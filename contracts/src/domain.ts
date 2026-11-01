@@ -294,7 +294,8 @@ export type ShoppingRequest = z.infer<typeof zShoppingRequest>;
 
 export const zShoppingRun = z.object({
   id: z.string(),
-  requestId: z.string(),
+  /** Null once a person has deleted the request (HOU-158); the run's log and screenshots stay (AUT-6). */
+  requestId: z.string().nullable(),
   log: z.array(z.object({ at: zIsoDateTime, line: z.string() })),
   screenshots: z.array(z.string()),
   createdAt: zIsoDateTime,

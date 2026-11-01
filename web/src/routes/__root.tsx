@@ -40,7 +40,7 @@ function Live() {
 /** HOU-158: what was just deleted, with Undo, pinned to the bottom of whichever screen is open. */
 function Deleted() {
   const { pending, undo } = useUndo();
-  return pending === null ? null : <UndoToast message={pending.message} onUndo={undo} />;
+  return pending === null ? null : <UndoToast message={pending.message} onUndo={pending.undoable ? undo : null} />;
 }
 
 function Root() {

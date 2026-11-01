@@ -8,6 +8,7 @@ import { houseTools } from "../agent/tools.ts";
 import { acceptTimer } from "../coordinator/accept.ts";
 import { testHousehold, type TestHousehold } from "../testing/household.ts";
 import { atLocal } from "../time.ts";
+import { runView } from "../views/runs.ts";
 import { screenView } from "../views/screen.ts";
 import { waitForJob } from "./launch.ts";
 
@@ -107,5 +108,15 @@ describe("A person can delete, the house cannot", () => {
     expect(logged()).toEqual([{ event: "deleted-by-person", what: DeletedThing.shoppingRequest, id: failed.id, by: "tom", writtenBy: "priya" }]);
     // Deleting it again is a no-op, as when two phones delete it at once.
     await expect(tom().shopping.remove({ id: failed.id })).resolves.toBeUndefined();
+  });
+
+  test("[AUT-6][PRV-1] a run's log stays openable after a person deletes the request it ran for", async () => {
+    const request = await shoppingRequest("Star anise", ShoppingStatus.failed);
+    const runId = await system().shopping.addRun({ requestId: request.id, log: [{ at: "2026-11-02T07:01:00.000Z", line: "searched for star anise" }], screenshots: ["runs/x/00-search.png"] });
+    await priya().shopping.remove({ id: request.id });
+    const run = await runView(h.rt, runId);
+    expect(run?.log.map((l) => l.line)).toEqual(["searched for star anise"]);
+    expect(run?.screenshots.map((s) => s.name)).toEqual(["00-search.png"]);
+    expect(run?.item).toBe("A deleted request");
   });
 });
