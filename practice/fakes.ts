@@ -103,6 +103,7 @@ export class PracticeCalendar implements CalendarSource {
       upserts: changed.filter((e) => !e.deleted).map((e) => e.event),
       deletedExternalIds: changed.filter((e) => e.deleted).map((e) => e.event.externalId),
       nextSyncTokens: Object.fromEntries(this.calendars.map((c) => [c.calendarId, String(this.#version)])),
+      complete: true,
     };
   }
 }

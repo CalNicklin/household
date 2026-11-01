@@ -73,6 +73,8 @@ export const zCalendarSyncInput = z.object({
   deletedExternalIds: z.array(z.string()),
   syncTokens: z.record(z.string(), z.string()),
   calendarIds: z.array(z.string()).min(1),
+  /** Whether every calendar was read this time; copies from before calendars were recorded go only then. */
+  complete: z.boolean(),
 });
 /** CH-6: record a push channel the house just opened (it is in use until closed). */
 export const zRecordWatchInput = zCalendarWatch.omit({ closedAt: true });

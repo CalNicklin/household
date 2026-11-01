@@ -104,8 +104,10 @@ export function calendarRouter(db: CalendarDb, timeZone: string) {
         touch(prev.start, prev.end);
         await db.delete(schema.events).where(eq(schema.events.externalId, ext));
       }
-      // A calendar the house no longer reads (or a copy from before calendars were recorded) is dropped.
-      const stale = await db.delete(schema.events).where(notInArray(schema.events.calendarId, input.calendarIds)).returning();
+      // A calendar the house no longer reads is dropped. Copies from before calendars were recorded
+      // (calendar_id '') go only once every calendar has been read, so a failed read never empties the screen.
+      const gone = input.complete ? input.calendarIds : [...input.calendarIds, ""];
+      const stale = await db.delete(schema.events).where(notInArray(schema.events.calendarId, gone)).returning();
       for (const s of stale) touch(s.start, s.end);
       const changedDates = [...changed].sort();
       if (sync !== undefined) await db.update(schema.syncs).set({ changedDates }).where(eq(schema.syncs.id, sync.id));

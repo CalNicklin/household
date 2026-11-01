@@ -10,7 +10,13 @@ export interface Clock {
 
 export type ExternalEvent = CalendarCopy;
 
-export type CalendarChanges = { upserts: ExternalEvent[]; deletedExternalIds: string[]; nextSyncTokens: Record<string, string> };
+export type CalendarChanges = {
+  upserts: ExternalEvent[];
+  deletedExternalIds: string[];
+  nextSyncTokens: Record<string, string>;
+  /** Every calendar was read (none failed this time). */
+  complete: boolean;
+};
 
 /**
  * HOME-1: every calendar the house reads (Cal's, Chloe's, the shared one), each with its owner.
