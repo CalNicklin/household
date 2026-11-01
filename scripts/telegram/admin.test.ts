@@ -181,6 +181,9 @@ describe("finding and adding an adult's Telegram ID", () => {
     const senders = (await cli(["senders"])).stdout;
     expect(senders).not.toContain("555000111");
     expect(senders).toContain("555000222");
+    // A sitter's ID (Jess, 2001) can be messaged by the house but is dropped when it writes, so it is still listed.
+    await post(2001, "can I do friday?");
+    expect((await cli(["senders"])).stdout).toContain("2001");
     // The old ID is no longer hers: it is dropped like any stranger's.
     const old = await post(1001, "still me?");
     expect(await messageByKey(h.rt, `telegram:update:${old}`)).toBeNull();

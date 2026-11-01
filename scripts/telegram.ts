@@ -49,8 +49,10 @@ try {
   } else if (command.kind === "senders") {
     await withHouse(async (rt) => {
       const api = rt.system("household-telegram");
-      const known = new Set((await api.household.allowedRecipients()).filter((r) => r.channel === Channel.telegram).map((r) => r.address));
-      showSenders(await api.jobs.droppedSenders({ channel: Channel.telegram }), known, print);
+      const dropped = await api.jobs.droppedSenders({ channel: Channel.telegram });
+      // Known means what the webhook knows (CH-3): an ID that maps to an adult now. A sitter's ID is still dropped, so still listed.
+      const resolved = await Promise.all(dropped.map(async (d) => ((await api.household.resolveIdentity({ channel: Channel.telegram, address: d.address })) === null ? null : d.address)));
+      showSenders(dropped, new Set(resolved.filter((a): a is string => a !== null)), print);
     });
   } else {
     await withHouse(async (rt) => {
