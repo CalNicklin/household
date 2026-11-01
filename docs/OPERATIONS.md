@@ -289,7 +289,7 @@ preview.
   those two forms and nothing else. The deploy key still runs only `household-deploy`, and neither can
   run the other's command. The preview key on its own can only start and stop practice previews. But the
   workflow runs from the PR's own branch, so a PR can read any repository secret, the deploy key
-  included, until step 3 below moves that key into an environment only `main` may use.
+  included, until HOU-141 moves that key into an environment only `main` may use (see step 3).
   By hand on the server: `sudo household-preview "preview-stop 12"`; running ones are listed in
   `/srv/household-previews/live`.
 
@@ -324,10 +324,11 @@ gh secret set HOUSEHOLD_PREVIEW_SSH_KEY < household-preview
 
 Then delete the private key from the laptop. Until it exists, the preview workflow skips with a notice.
 
-Before adding it, keep the deploy key away from PR branches (a PR's workflow can read every repository
-secret): Settings → Environments → New environment `production`, Deployment branches: `main` only; add
-`HOUSEHOLD_SSH_KEY` there and delete the repository-level one. The deploy workflow's `deploy` job then
-needs `environment: production` (a follow-up change to `deploy.yml`, outside this issue).
+A PR's workflow can read every repository secret, the deploy key included. HOU-141 moves
+`HOUSEHOLD_SSH_KEY` into a `production` environment that only `main` may use. Turn previews on (add this
+secret) only after HOU-141 has merged and its steps are done. **Don't move or delete
+`HOUSEHOLD_SSH_KEY` before HOU-141's change to `deploy.yml` has merged:** until then the deploy workflow
+reads it only at repository level, and without it every deploy silently skips.
 
 **4. The cloud environment's network allowlist.** For the building agent to perform journeys on a preview
 with computer use (FB-4), add the preview domain (`*.preview.example.com`) to the claude.ai cloud
