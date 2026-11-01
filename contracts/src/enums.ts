@@ -104,6 +104,8 @@ export const Section = {
   now: "now",
   later: "later",
   tomorrow: "tomorrow",
+  /** A house with little in it yet: how to start (HOU-149). */
+  start: "start",
   arriving: "arriving",
   fits: "fits",
   focus: "focus",
@@ -117,6 +119,7 @@ export const SectionLabel: Record<Section, string> = {
   [Section.now]: "Now",
   [Section.later]: "Later today",
   [Section.tomorrow]: "Tomorrow",
+  [Section.start]: "Getting started",
   [Section.arriving]: "Arriving",
   [Section.fits]: "Could fit this week",
   [Section.focus]: "",
@@ -322,6 +325,8 @@ export const TimerKind = {
   retention: "retention-purge",
   deliveries: "delivery-morning",
   basketSummary: "basket-summary",
+  /** HOU-149: today has no plan when someone looks (a new house, a missed timer); plan it now. Not on a schedule. */
+  catchUpPlan: "catch-up-plan",
 } as const;
 export type TimerKind = ValueOf<typeof TimerKind>;
 export const zTimerKind = z.enum(TimerKind);

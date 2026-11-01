@@ -10,6 +10,8 @@ import { addLocalDays, clock, localDate, longDate, nextLocalMidnight } from "../
 import { respond, subjectFor } from "./respond.ts";
 import type { JobScope } from "./scope.ts";
 
+const NOTHING_PRESSING = { title: "Nothing pressing today", why: "Have a rest, or tell me a few jobs and I'll find gaps for them." } as const;
+
 /** The household's tools. Each runs as the agent actor for this job's person (PRV-1 is enforced by the routers). */
 export function houseTools(scope: JobScope) {
   const { rt, api } = scope;
@@ -96,7 +98,8 @@ export function houseTools(scope: JobScope) {
       const facts = await gatherFacts(rt, date, 2);
       const closed = new Set((await api.plans.responsesOn({ date })).map((r) => r.ref));
       const [best] = await oneThingCandidates(rt, facts, date, rt.ports.clock.now(), closed, scope.person);
-      if (best === undefined) return { ref: null, say: "Nothing needs doing. Have a rest." };
+      // HOU-149: a thin house still gets one plain answer, never an error or a list.
+      if (best === undefined) return { ref: null, title: NOTHING_PRESSING.title, why: NOTHING_PRESSING.why, say: `${NOTHING_PRESSING.title}. ${NOTHING_PRESSING.why}` };
       return { ref: best.ref, title: best.title, why: best.why, say: `${best.title}. ${best.why}` };
     }),
   });

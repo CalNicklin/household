@@ -32,6 +32,13 @@ export async function reset(request: APIRequestContext, at = "2026-11-02T07:00:0
   await waitForJob(request, jobId);
 }
 
+/** HOU-149: a brand-new house at a practice time — the people and logins only, and no plan yet. */
+export async function resetEmpty(request: APIRequestContext, at = "2026-11-02T07:00:00.000Z"): Promise<void> {
+  await api(request);
+  const r = await request.post("/api/practice/reset", { data: { at, empty: true } });
+  expect(r.ok()).toBe(true);
+}
+
 export async function waitForJob(request: APIRequestContext, jobId: string): Promise<void> {
   await expect
     .poll(async () => (await json(z.object({ status: z.string() }).nullable(), await request.get(`/api/practice/job/${jobId}`)))?.status, { intervals: [100, 200, 500] })
@@ -53,8 +60,9 @@ export async function timer(request: APIRequestContext, timerKind: string, at: s
 }
 
 /** FB-4: a screenshot attached to the test as evidence for the verification line. */
-export async function evidence(page: Page, name: string): Promise<void> {
-  await page.screenshot({ path: `evidence/screenshots/${name}.png`, fullPage: true });
+export async function evidence(page: Page, name: string, options: { fullPage?: boolean } = {}): Promise<void> {
+  // HOU-149: `fullPage: false` keeps only what is on screen, for "visible without scrolling".
+  await page.screenshot({ path: `evidence/screenshots/${name}.png`, fullPage: options.fullPage ?? true });
   await base.info().attach(name, { path: `evidence/screenshots/${name}.png`, contentType: "image/png" });
 }
 

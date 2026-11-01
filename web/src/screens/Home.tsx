@@ -26,7 +26,7 @@ export function HomeScreen() {
         blocks={blocks}
         handlers={handlers}
         nav={nav}
-        fallbackHeader={<Header title={today()} line={screen.isPending ? "" : "Today's plan is being put together."} nav={nav} />}
+        fallbackHeader={<Header title={today()} line={screen.isPending ? "" : "Putting today's plan together now. It appears here by itself in a moment."} nav={nav} />}
       />
       {screen.isError ? (
         <PageBody>

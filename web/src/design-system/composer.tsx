@@ -102,11 +102,24 @@ export function Composer({
   );
 }
 
-/** The house's one-line answer, shown under the composer for a minute (MOM-2). */
-export function Reply({ text }: { text: string }) {
+/**
+ * The house's answer, right above the composer where you are looking (MOM-2, HOU-149). A `what_now`
+ * answer is the one thing in big type and its reason under it; anything else is one plain line.
+ * Planner-made, so green, with a no-guilt dismiss. `onDismiss` null while the house is still thinking.
+ */
+export function Answer({ heading, title, detail, onDismiss }: { heading: string; title: string | null; detail: string; onDismiss: (() => void) | null }) {
   return (
-    <p className="ds-reply" role="status" aria-live="polite">
-      {text}
-    </p>
+    <section className="ds-answer" role="status" aria-live="polite" aria-label="The house's answer">
+      <div className="ds-answer__head">
+        <span className="ds-answer__eyebrow">{heading}</span>
+        {onDismiss === null ? null : (
+          <Button variant="link" label="Hide this answer" onClick={onDismiss}>
+            <CloseIcon size={18} tone="suggestion" />
+          </Button>
+        )}
+      </div>
+      {title === null ? null : <p className="ds-answer__title">{title}</p>}
+      {detail === "" ? null : <p className={title === null ? "ds-answer__text" : "ds-answer__why"}>{detail}</p>}
+    </section>
   );
 }

@@ -19,7 +19,7 @@ export async function weekView(rt: Runtime, _person: string): Promise<WeekView> 
     const closed = new Set((await api.plans.responsesOn({ date })).map((r) => r.ref));
     const blocks =
       saved?.blocks ??
-      compose({ date, now, facts, rules: allRules(facts, date, now).items, closed, pick: null, oneThing: null, question: null, screenNotes: [], shopping: [], avoid: new Set(), otherAdult: otherAdultOf(facts) });
+      compose({ date, now, facts, rules: allRules(facts, date, now).items, closed, pick: null, oneThing: null, question: null, screenNotes: [], shopping: [], avoid: new Set(), otherAdult: otherAdultOf(facts), fill: null });
     days.push({ date, label: longDate(date), blocks: applyResponses(blocks, closed).filter((b) => b.type !== "composer" && b.type !== "context") });
   }
   return { days };

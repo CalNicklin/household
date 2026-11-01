@@ -1,13 +1,16 @@
-import { ActorKind, zLoginInput } from "@household/contracts";
+import { ActorKind, TimerKind, zLoginInput } from "@household/contracts";
 import { fetchRequestHandler } from "@trpc/server/adapters/fetch";
 import { Hono } from "hono";
 import { streamSSE } from "hono/streaming";
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { type Adapter, type HttpEnv } from "../adapters/registry.ts";
+import { acceptTimer } from "../coordinator/accept.ts";
 import type { Runtime } from "../runtime.ts";
 import { viewsRouter } from "../views/router.ts";
 import { clearCookie, personFromCookie, sessionCookie } from "./session.ts";
+
+const startOfHour = (d: Date): Date => new Date(Math.floor(d.getTime() / 3_600_000) * 3_600_000);
 
 const PUBLIC_FILES = /^\/(assets\/|manifest\.webmanifest|sw\.js|icon|favicon|robots\.txt)/;
 
@@ -18,7 +21,8 @@ const PUBLIC_FILES = /^\/(assets\/|manifest\.webmanifest|sw\.js|icon|favicon|rob
 export function createApp(rt: Runtime, adapters: Adapter[], extra?: (app: Hono<HttpEnv>) => void): Hono<HttpEnv> {
   const app = new Hono<HttpEnv>();
   const secure = rt.env.PUBLIC_URL.startsWith("https://");
-  const views = viewsRouter(rt);
+  // HOU-149: a screen asked for with no plan for today starts one, through the coordinator, at most once an hour.
+  const views = viewsRouter(rt, { planToday: () => acceptTimer(rt, TimerKind.catchUpPlan, startOfHour(rt.ports.clock.now())) });
 
   app.get("/healthz", (c) => c.text("ok"));
 
