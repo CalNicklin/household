@@ -25,7 +25,8 @@ import type { RuleItem } from "../rules/nudges.ts";
 import { firstDayBlocks, type HouseFill } from "./first-day.ts";
 
 export type BacklogPick = { itemId: string; title: string; why: string; person: string | null };
-export type OneThing = { ref: string; title: string; why: string; actions: NotifyAction[] };
+/** `fallback`: the thin-house answer (HOU-149), offered only when nothing else is, and not in quiet hours. */
+export type OneThing = { ref: string; title: string; why: string; actions: NotifyAction[]; fallback?: true };
 
 export type ComposeInput = {
   date: LocalDate;
