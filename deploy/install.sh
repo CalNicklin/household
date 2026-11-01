@@ -60,7 +60,15 @@ fi
 added="$(docker run --rm --network none --memory 128m -v "$repo/scripts/env-init.ts:/env-init.ts:ro" -v "$dir:/work" -w /work node:22-bookworm-slim node /env-init.ts --real | sed -n 's/^added to .env: //p')"
 [ "$added" = nothing ] || echo "added to $dir/.env: $added"
 chmod 600 "$dir/.env"
-grep -qE '^ANTHROPIC_API_KEY=.+' "$dir/.env" || echo "set ANTHROPIC_API_KEY in $dir/.env (sudo nano $dir/.env): until then household-deploy refuses to start the house" >&2
+# The key the chosen provider reads (server/env.ts, PROVIDER_KEY): without it the app refuses to start.
+case "$(sed -n 's/^MODEL_PROVIDER=//p' "$dir/.env" | tail -n1)" in
+  anthropic) model_key=ANTHROPIC_API_KEY ;;
+  openai) model_key=OPENAI_API_KEY ;;
+  *) model_key="" ;;
+esac
+if [ -n "$model_key" ] && ! grep -qE "^$model_key=.+" "$dir/.env"; then
+  echo "set $model_key in $dir/.env (sudo nano $dir/.env): until then household-deploy refuses to start the house" >&2
+fi
 if [ -n "$domain" ]; then
   sed -i '/^HOUSEHOLD_DOMAIN=/d' "$dir/.env"
   echo "HOUSEHOLD_DOMAIN=$domain" >> "$dir/.env"
