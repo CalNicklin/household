@@ -54,5 +54,15 @@ export const Limits = {
   inboundEmailCheckMs: { value: 30_000, reason: "OWASP_API4", note: "HOU-150: one message's SPF, DKIM and ARC checks and parse; past this the receiver answers 451 and moves on, so a slow DNS server can't stall the queue." },
   inboundEmailSocketMs: { value: 60_000, reason: "OWASP_API4", note: "HOU-150: an idle SMTP session is closed after a minute (RFC 5321 4.5.3.2 asks a sender to wait minutes, a receiver need not), so slow clients cannot hold the four seats." },
   inboundEmailWebhookMs: { value: 10_000, reason: "OWASP_API4", note: "HOU-150: the receiver waits this long for the app to take an email, then answers 451 so the sending server tries again later." },
+  reviewMaxSteps: { value: 30, reason: "OWASP_LLM06", note: "HOU-151: model calls (read-only tool rounds) one review stage may make; the last one has no tools and must answer." },
+  reviewMaxOutputTokens: { value: 32_000, reason: "OWASP_LLM10", note: "HOU-151: output (thinking included) per model call in a review stage." },
+  reviewMaxStageTokens: { value: 1_000_000, reason: "OWASP_LLM10", note: "HOU-151: tokens (input, cached or not, plus output) one review stage may spend before it must answer; about $4 at Opus 5.5's uncached rate, far less cached." },
+  reviewMaxDiffChars: { value: 400_000, reason: "OWASP_LLM10", note: "HOU-151: the reviewed diff (lockfile, evidence and design excluded); a bigger PR fails the review and should be split." },
+  reviewMaxReadChars: { value: 40_000, reason: "OWASP_LLM10", note: "HOU-151: what one read-only tool call returns to the reviewer." },
+  reviewMaxTextChars: { value: 4000, reason: "OWASP_LLM10", note: "HOU-151: one field of a finding (summary, failure scenario, reason), and so one comment's size." },
+  reviewMaxFindings: { value: 10, reason: "OWASP_LLM10", note: "HOU-151: findings one stage may raise per run, which bounds the comments one push can post." },
+  reviewStateTextChars: { value: 500, reason: "PROVIDER_HARD_LIMIT", note: "HOU-151: a finding's text as the summary comment's state keeps it (the full text is on its own comment), so the state of every open finding fits GitHub's 65,536-character comment." },
+  reviewJobMinutes: { value: 20, reason: "OWASP_LLM10", note: "HOU-151: the review job's timeout-minutes in .github/workflows/agent-review.yml." },
+  reviewMaxCommentChars: { value: 65_000, reason: "PROVIDER_HARD_LIMIT", note: "GitHub rejects a comment body over 65,536 characters (https://docs.github.com/en/rest/issues/comments); the summary drops its oldest settled findings to fit." },
 } as const satisfies Record<string, Limit>;
 export type LimitName = keyof typeof Limits;
