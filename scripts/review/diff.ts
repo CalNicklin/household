@@ -31,30 +31,41 @@ export function prDiff(checkout: string, base: string, head: string): string {
   return diff;
 }
 
-/** The lines of each file that a review comment can point at: the new side of each hunk. */
+/**
+ * The lines of each file that a review comment can point at: the new side of each hunk. A hunk's
+ * length comes from its header, so a line inside it that looks like a header (an added "++ x" is
+ * "+++ x") is still content.
+ */
 export function commentableLines(diff: string): Map<string, Set<number>> {
   const out = new Map<string, Set<number>>();
   let file: string | null = null;
   let line = 0;
+  let oldLeft = 0;
+  let newLeft = 0;
   for (const raw of diff.split("\n")) {
-    if (raw.startsWith("diff --git ")) {
-      file = null;
-      line = 0;
+    if (oldLeft > 0 || newLeft > 0) {
+      if (raw.startsWith("\\")) continue;
+      if (raw.startsWith("-")) oldLeft--;
+      else {
+        if (raw.startsWith(" ")) oldLeft--;
+        newLeft--;
+        if (file !== null) out.get(file)?.add(line);
+        line++;
+      }
       continue;
     }
-    if (raw.startsWith("+++ ")) {
+    if (raw.startsWith("diff --git ")) file = null;
+    else if (raw.startsWith("+++ ")) {
       file = raw === "+++ /dev/null" ? null : raw.slice(4).replace(/^b\//, "");
       if (file !== null && !out.has(file)) out.set(file, new Set());
-      continue;
+    } else {
+      const hunk = /^@@ -\d+(?:,(\d+))? \+(\d+)(?:,(\d+))? @@/.exec(raw);
+      if (hunk?.[2] !== undefined) {
+        oldLeft = Number(hunk[1] ?? "1");
+        line = Number(hunk[2]);
+        newLeft = Number(hunk[3] ?? "1");
+      }
     }
-    const hunk = /^@@ -\d+(?:,\d+)? \+(\d+)(?:,\d+)? @@/.exec(raw);
-    if (hunk?.[1] !== undefined) {
-      line = Number(hunk[1]);
-      continue;
-    }
-    if (file === null || line === 0) continue;
-    if (raw.startsWith("+") || raw.startsWith(" ")) out.get(file)?.add(line++);
-    // "-" lines and "\ No newline" don't advance the new side.
   }
   return out;
 }

@@ -84,6 +84,11 @@ describe("HOU-151 a review stage's tools", () => {
       ["src/leak", new Set([1])],
     ]);
   });
+
+  it("a hunk's lines are content even when one looks like a file header", () => {
+    const diff = ["diff --git a/x.md b/x.md", "--- a/x.md", "+++ b/x.md", "@@ -1,3 +1,4 @@", " one", "+++ added", "+-- also added", "-two", " three", "\\ No newline at end of file"].join("\n");
+    expect([...commentableLines(diff)]).toEqual([["x.md", new Set([1, 2, 3, 4])]]);
+  });
 });
 
 /** A scripted model: calls read_file until told it has no tools, then answers. */
