@@ -71,7 +71,7 @@ describe("a new or quiet house", () => {
     const reply = (await h.rt.system("t").jobs.replyFor({ id: a.messageId }))?.text ?? "";
     expect(reply).not.toContain("?");
     expect(reply.split(/(?<=[.!])\s+/).length).toBeLessThanOrEqual(3);
-    const [latest] = await conversationView(h.rt, "priya");
+    const latest = (await conversationView(h.rt, "priya")).at(-1)?.reply;
     // Monday morning is dry and nobody is known to be out, so the washing rule is the one thing.
     expect(latest?.pick).toEqual({ title: "Hang the washing out", why: expect.stringMatching(/dry/i) });
   });
@@ -84,7 +84,7 @@ describe("a new or quiet house", () => {
     tick();
     const a = await h.sayAndWait("what should I prioritise today?");
     expect((await h.rt.system("t").jobs.replyFor({ id: a.messageId }))?.text).toBe("Nothing pressing today. No rule, calendar entry or quick backlog job needs doing now.");
-    const [latest] = await conversationView(h.rt, "priya");
+    const latest = (await conversationView(h.rt, "priya")).at(-1)?.reply;
     expect(latest?.pick).toEqual({ title: "Nothing pressing today", why: "No rule, calendar entry or quick backlog job needs doing now." });
   });
 
@@ -97,7 +97,7 @@ describe("a new or quiet house", () => {
     const a = await h.sayAndWait("if I do one thing, what should it be?");
     const reply = (await h.rt.system("t").jobs.replyFor({ id: a.messageId }))?.text ?? "";
     expect(reply).toMatch(/^Ring the dentist\. /);
-    const [latest] = await conversationView(h.rt, "priya");
+    const latest = (await conversationView(h.rt, "priya")).at(-1)?.reply;
     expect(latest?.pick?.title).toBe("Ring the dentist");
     expect(latest?.pick?.why).toMatch(/oldest|fifteen minutes/);
   });

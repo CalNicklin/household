@@ -1,4 +1,5 @@
 import {
+  AttachmentKind,
   Channel,
   type Job,
   type Notification,
@@ -9,6 +10,8 @@ import {
   zDroppedSender,
   zDroppedSendersInput,
   zEnqueueNotificationInput,
+  zExchange,
+  zExchangesForInput,
   zIdInput,
   zInboundMessage,
   zJob,
@@ -251,6 +254,28 @@ export function jobsRouter(db: JobsDb) {
     replies: readProcedure.input(zRepliesForInput).output(z.array(zReply)).query(async ({ input }) => {
       const where = input.since === undefined ? eq(schema.replies.person, input.person) : and(eq(schema.replies.person, input.person), gte(schema.replies.createdAt, new Date(input.since)));
       return (await db.select().from(schema.replies).where(where).orderBy(desc(schema.replies.createdAt)).limit(20)).map((r) => ({ ...r, createdAt: iso(r.createdAt) }));
+    }),
+    /**
+     * HOU-159: what a person said in the app since a time, oldest first, each with the house's reply.
+     * Person-scoped: only their own messages and the replies to them.
+     */
+    exchanges: readProcedure.input(zExchangesForInput).output(z.array(zExchange)).query(async ({ input }) => {
+      const rows = await db.query.messages.findMany({
+        where: and(eq(schema.messages.person, input.person), eq(schema.messages.channel, Channel.app), gte(schema.messages.receivedAt, new Date(input.since))),
+        with: { replies: { where: eq(schema.replies.person, input.person), orderBy: desc(schema.replies.createdAt) } },
+        orderBy: schema.messages.receivedAt,
+      });
+      return rows.map((m) => {
+        const r = m.replies[0];
+        return {
+          id: m.id,
+          text: m.text,
+          redacted: m.redacted,
+          receivedAt: iso(m.receivedAt),
+          tap: m.attachments.some((a) => a.kind === AttachmentKind.ref && a.action !== undefined),
+          reply: r === undefined ? null : { id: r.id, text: r.text, createdAt: iso(r.createdAt) },
+        };
+      });
     }),
     replyFor: readProcedure.input(zIdInput).output(zReply.nullable()).query(async ({ input }) => {
       const row = await db.query.replies.findFirst({ where: eq(schema.replies.inReplyTo, input.id) });

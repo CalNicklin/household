@@ -58,6 +58,17 @@ export const zMarkNotificationInput = z.object({ id: z.string(), status: zNotifi
 export const zNotificationsForInput = z.object({ person: z.string().optional(), statuses: z.array(zNotificationStatus) });
 export const zReplyInput = z.object({ person: z.string().nullable(), channel: zChannel, text: z.string(), inReplyTo: z.string() });
 export const zRepliesForInput = z.object({ person: z.string(), since: z.iso.datetime({ offset: true }).optional() });
+/** HOU-159: a person's own app messages since a time (the start of today), each with the house's reply. */
+export const zExchangesForInput = z.object({ person: z.string(), since: z.iso.datetime({ offset: true }) });
+export const zExchange = z.object({
+  id: z.string(),
+  text: z.string(),
+  redacted: z.boolean(),
+  receivedAt: z.iso.datetime({ offset: true }),
+  /** True for a one-tap button press (CH-8): a tap, not something said. */
+  tap: z.boolean(),
+  reply: z.object({ id: z.string(), text: z.string(), createdAt: z.iso.datetime({ offset: true }) }).nullable(),
+});
 export const zTimerRunInput = z.object({ timer: zTimerKind, scheduledFor: z.iso.datetime({ offset: true }), missed: z.boolean() });
 
 export const zDateInput = z.object({ date: z.iso.date() });

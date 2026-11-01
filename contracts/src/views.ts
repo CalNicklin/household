@@ -22,6 +22,7 @@ import {
   zWellbeingIdea,
   zWellbeingScore,
 } from "./domain.ts";
+import { zExchangeState } from "./enums.ts";
 import { zIsoDateTime, zLocalDate } from "./message.ts";
 
 export const zMe = z.object({ person: z.string(), name: z.string(), healthOwner: z.boolean() });
@@ -94,7 +95,20 @@ export const zArrivalsView = z.array(zArrival);
 export const zAnswerPick = z.object({ title: z.string(), why: z.string() });
 export type AnswerPick = z.infer<typeof zAnswerPick>;
 
-export const zConversationView = z.array(z.object({ id: z.string(), text: z.string(), createdAt: zIsoDateTime, pick: zAnswerPick.nullable() }));
+/**
+ * HOU-159: today's conversation with the house, oldest first: what this person said in the app, then
+ * what the house said back. Only today's, so yesterday's is gone. `said` is null when message
+ * retention is off (PRV-5) and the words were never kept.
+ */
+export const zConversationView = z.array(
+  z.object({
+    id: z.string(),
+    said: z.string().nullable(),
+    saidAt: zIsoDateTime,
+    state: zExchangeState,
+    reply: z.object({ id: z.string(), text: z.string(), createdAt: zIsoDateTime, pick: zAnswerPick.nullable() }).nullable(),
+  }),
+);
 export type ConversationView = z.infer<typeof zConversationView>;
 
 /** What the app posts to say something to the house (same ingress as WhatsApp, CH-1). */

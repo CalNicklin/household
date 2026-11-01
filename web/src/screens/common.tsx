@@ -1,11 +1,10 @@
-import type { Block, NotifyAction } from "@household/contracts";
+import { type Block, type ConversationView, ExchangeState, type NotifyAction } from "@household/contracts";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useState } from "react";
 import type { BlockHandlers } from "../blocks/BlockRenderer.tsx";
 import { say } from "../data/send.ts";
 import { useTRPC } from "../data/trpc.ts";
 import { useUiState } from "../data/ui-state.tsx";
-import { Answer, Composer, Footer, type NavLink } from "../design-system/index.ts";
+import { Composer, Conversation, type ExchangeLine, Footer, type NavLink } from "../design-system/index.ts";
 
 const ALL: readonly NavLink[] = [
   { to: "/", label: "Today" },
@@ -21,13 +20,13 @@ export function navFor(current: string): NavLink[] {
   return ALL.filter((n) => n.to !== current);
 }
 
-/** The newest reply this screen has, so the answer to what is said next can be told apart from it. */
-function useNewestReply(): () => string | null | undefined {
+/** The newest of today's exchanges this screen has, so what is said next can be told apart from it. */
+function useNewestExchange(): () => string | null | undefined {
   const trpc = useTRPC();
   const queryClient = useQueryClient();
   return () => {
-    const replies = queryClient.getQueryData(trpc.conversation.queryKey());
-    return replies === undefined ? undefined : (replies[0]?.id ?? null);
+    const exchanges = queryClient.getQueryData(trpc.conversation.queryKey());
+    return exchanges === undefined ? undefined : (exchanges.at(-1)?.id ?? null);
   };
 }
 
@@ -35,9 +34,9 @@ function useNewestReply(): () => string | null | undefined {
 function useSay() {
   const { about, setAbout, markSaid } = useUiState();
   const queryClient = useQueryClient();
-  const newestReply = useNewestReply();
+  const newestExchange = useNewestExchange();
   return (text: string, spoken: boolean) => {
-    markSaid(newestReply());
+    markSaid(newestExchange(), text);
     const ref = about?.ref;
     setAbout(null);
     void say({ text, ...(ref === undefined ? {} : { ref }), ...(spoken ? { spoken } : {}) }).then(() => queryClient.invalidateQueries());
@@ -46,49 +45,53 @@ function useSay() {
 
 /** One-tap buttons: hide the block straight away (HOME-5), then send the tap as a message. */
 export function useBlockHandlers(version: number): BlockHandlers & { isHidden: (block: Block) => boolean } {
-  const { hidden, hide, markSaid } = useUiState();
+  const { hidden, hide } = useUiState();
   const queryClient = useQueryClient();
-  const newestReply = useNewestReply();
   return {
     isHidden: (block) => hidden.has(`${version}:${block.id}`),
     onAction: (block: Block, action: NotifyAction) => {
       hide(`${version}:${block.id}`);
-      markSaid(newestReply());
       void say({ text: action.label, ref: action.ref, action: action.kind, ...(action.value === undefined ? {} : { value: action.value }) }).then(() => queryClient.invalidateQueries());
     },
   };
 }
 
-const REPLY_SHOWN_MS = 60_000;
+/** HOU-159: how many of today's exchanges show when the conversation is open ("the last few"). */
+const SHOWN_EXCHANGES = 3;
 
-type ReplyId = string | null;
+const WAITING = { heading: "Asking the house", title: null, detail: "One moment…" };
+
+/** The house's side of one exchange, as the conversation shows it. */
+function houseLine(e: ConversationView[number]): ExchangeLine["house"] {
+  switch (e.state) {
+    case ExchangeState.waiting:
+      return WAITING;
+    case ExchangeState.failed:
+      return { heading: "From the house", title: null, detail: "That didn't go through. Try saying it again in a moment." };
+    case ExchangeState.quiet:
+      return null;
+    case ExchangeState.answered: {
+      if (e.reply === null) return null;
+      if (e.reply.pick !== null) return { heading: "The one thing", title: e.reply.pick.title, detail: e.reply.pick.why };
+      return { heading: "From the house", title: null, detail: e.reply.text };
+    }
+  }
+}
 
 /**
- * The latest answer from the house, for a minute after you last said something (MOM-2), shown
- * right above the composer (HOU-149). Until it arrives, a calm line says the house is on it.
+ * HOU-159: today's conversation with the house, above the composer on every screen that has one.
+ * What you just said shows at once, waiting for its answer, until the server has it; the answer
+ * lands in the same place (MOM-2, HOU-149). Hiding it leaves one quiet link to open it again.
  */
-function LatestAnswer() {
+function TodaysConversation() {
   const trpc = useTRPC();
-  const { said } = useUiState();
-  const [now, setNow] = useState(() => Date.now());
-  const [dismissed, setDismissed] = useState<ReplyId>(null);
+  const { said, conversationOpen, setConversationOpen } = useUiState();
   const conversation = useQuery(trpc.conversation.queryOptions());
-  useEffect(() => {
-    if (said === null) return;
-    const timer = window.setInterval(() => setNow(Date.now()), 5_000);
-    return () => window.clearInterval(timer);
-  }, [said]);
-  if (said === null || Math.max(now, said.at) - said.at > REPLY_SHOWN_MS) return null;
-  const latest = conversation.data?.[0];
-  // Ids, not times, tell the answer apart: the server's clock (the practice clock) can differ from this device's.
-  const fresh = latest !== undefined && (said.before === undefined ? new Date(latest.createdAt).getTime() >= said.at - 5_000 : latest.id !== said.before);
-  // Still waiting. A job that fails writes no reply, so this can be put away too.
-  const waiting = `waiting:${said.at}`;
-  if (latest === undefined || !fresh) return dismissed === waiting ? null : <Answer heading="Asking the house" title={null} detail="One moment…" onDismiss={() => setDismissed(waiting)} />;
-  if (latest.id === dismissed) return null;
-  const hide = () => setDismissed(latest.id);
-  if (latest.pick !== null) return <Answer heading="The one thing" title={latest.pick.title} detail={latest.pick.why} onDismiss={hide} />;
-  return <Answer heading="From the house" title={null} detail={latest.text} onDismiss={hide} />;
+  const exchanges: ExchangeLine[] = (conversation.data ?? []).map((e) => ({ id: e.id, said: e.said, house: houseLine(e) }));
+  // Ids, not times, tell what is new: the server's clock (the practice clock) can differ from this device's.
+  const newest = conversation.data === undefined ? undefined : (conversation.data.at(-1)?.id ?? null);
+  if (said !== null && (newest === undefined || newest === said.before)) exchanges.push({ id: "pending", said: said.text, house: WAITING });
+  return <Conversation exchanges={exchanges.slice(-SHOWN_EXCHANGES)} total={exchanges.length} open={conversationOpen} onOpen={() => setConversationOpen(true)} onClose={() => setConversationOpen(false)} />;
 }
 
 export function FooterComposer({ placeholder, label }: { placeholder: string; label?: string }) {
@@ -96,7 +99,7 @@ export function FooterComposer({ placeholder, label }: { placeholder: string; la
   const onSend = useSay();
   return (
     <Footer>
-      <LatestAnswer />
+      <TodaysConversation />
       <Composer placeholder={placeholder} {...(label === undefined ? {} : { label })} about={about?.title ?? null} onClearAbout={() => setAbout(null)} onSend={onSend} />
     </Footer>
   );

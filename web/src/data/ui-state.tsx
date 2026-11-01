@@ -1,7 +1,7 @@
 import { createContext, type ReactNode, useCallback, useContext, useMemo, useState } from "react";
 
 export type About = { ref: string; title: string };
-type Said = { at: number; before: string | null | undefined };
+type Said = { before: string | null | undefined; text: string };
 
 type UiState = {
   /** Blocks the person just acted on: hidden at once, before the server confirms (HOME-5). */
@@ -11,11 +11,15 @@ type UiState = {
   about: About | null;
   setAbout: (about: About | null) => void;
   /**
-   * When the person last said something, and the newest reply they had then (`undefined` if the
-   * replies weren't loaded yet). The answer above the composer is the first reply after it.
+   * What the person last said, and the newest of today's
+   * exchanges they had then (`undefined` if the conversation wasn't loaded yet). Until the server has
+   * a newer one, what they said is shown as waiting for an answer (HOU-159).
    */
   said: Said | null;
-  markSaid: (before: string | null | undefined) => void;
+  markSaid: (before: string | null | undefined, text: string) => void;
+  /** HOU-159: whether today's conversation is open above the composer. Saying something opens it. */
+  conversationOpen: boolean;
+  setConversationOpen: (open: boolean) => void;
 };
 
 const Ctx = createContext<UiState | null>(null);
@@ -25,8 +29,12 @@ export function UiStateProvider({ children }: { children: ReactNode }) {
   const [about, setAbout] = useState<About | null>(null);
   const [said, setSaid] = useState<Said | null>(null);
   const hide = useCallback((id: string) => setHidden((prev) => new Set([...prev, id])), []);
-  const markSaid = useCallback((before: string | null | undefined) => setSaid({ at: Date.now(), before }), []);
-  const value = useMemo(() => ({ hidden, hide, about, setAbout, said, markSaid }), [hidden, hide, about, said, markSaid]);
+  const [conversationOpen, setConversationOpen] = useState(false);
+  const markSaid = useCallback((before: string | null | undefined, text: string) => {
+    setSaid({ before, text });
+    setConversationOpen(true);
+  }, []);
+  const value = useMemo(() => ({ hidden, hide, about, setAbout, said, markSaid, conversationOpen, setConversationOpen }), [hidden, hide, about, said, markSaid, conversationOpen]);
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
 
