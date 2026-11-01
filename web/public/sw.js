@@ -46,7 +46,8 @@ async function cacheFirst(request) {
   const cached = await cache.match(request);
   if (cached !== undefined) return cached;
   const response = await fetch(request);
-  if (response.ok) await cache.put(request, response.clone());
+  const html = (response.headers.get("content-type") ?? "").startsWith("text/html");
+  if (response.ok && !html) await cache.put(request, response.clone());
   return response;
 }
 

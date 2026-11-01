@@ -81,5 +81,7 @@ describe("a deploy shows on the next reload (HOU-154)", () => {
     const page = await served.request("/", { headers: { cookie } });
     expect(page.headers.get("cache-control")).toBe("no-cache");
     expect(await page.text()).toContain(`<meta name="household-build" content="${build()}">`);
+    // An older build's chunk that is gone is not found, never the page under the chunk's name.
+    expect((await served.request("/assets/gone-0123abcd.js", { headers: { cookie } })).status).toBe(404);
   });
 });

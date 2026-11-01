@@ -128,6 +128,9 @@ export function createApp(rt: Runtime, adapters: Adapter[], extra?: (app: Hono<H
       const type = contentType(file);
       return new Response(readFileSync(file), { headers: { "content-type": type } });
     }
+    // HOU-154: a missing hashed asset (an older build's chunk) is not found, never the page, which a
+    // service worker would otherwise keep under the asset's name.
+    if (c.req.path.startsWith("/assets/")) return c.notFound();
     const shell = path.join(dist, "_shell.html");
     const index = existsSync(shell) ? shell : path.join(dist, "index.html");
     if (!existsSync(index)) return c.text("web app not built: run pnpm --dir web build", 503);
