@@ -1,11 +1,14 @@
 import { randomUUID } from "node:crypto";
 import { DBOS } from "@dbos-inc/dbos-sdk";
-import { AttachmentKind, Channel } from "@household/contracts";
+import { AttachmentKind, type CalendarWatch, Channel } from "@household/contracts";
 import { z } from "zod";
+import { calendars as practiceCalendars } from "../../../practice/data.ts";
 import { PracticeCalendar } from "../../../practice/fakes.ts";
 import { accept, type Accepted } from "../../coordinator/accept.ts";
 import { type CalendarNotification, parseCalendarNotification } from "../../integrations/google-calendar.ts";
+import type { CalendarPush } from "../../ports.ts";
 import type { Runtime } from "../../runtime.ts";
+import { localDate } from "../../time.ts";
 import type { Adapter } from "../registry.ts";
 
 /**
@@ -34,51 +37,111 @@ export const WATCH_RENEW_BEFORE_MS = 24 * 3_600_000;
 /** CH-6: the hourly check that the channel is open, at a minute none of the house's timers use. */
 export const WATCH_CHECK_CRON = "17 * * * *";
 
-export type WatchOutcome = { action: "no-push" } | { action: "kept"; expiresAt: string } | { action: "opened"; expiresAt: string; replaced: string | null; syncJobId: string | null };
+export type WatchOutcome =
+  | { calendarId: string; action: "kept"; expiresAt: string }
+  | { calendarId: string; action: "opened"; expiresAt: string; replaced: string | null }
+  | { calendarId: string; action: "failed"; error: string };
+
+export type WatchCheck = { action: "no-push" } | { action: "checked"; calendars: WatchOutcome[]; closed: string[]; syncJobId: string | null };
+
+const errorText = (error: unknown) => (error instanceof Error ? error.message : String(error));
 
 /**
- * CH-6 / HOME-1: keep one Google push channel open on the calendar. With none, or one that ends within
- * WATCH_RENEW_BEFORE_MS, or one on another calendar or pointing at another address, open a new one, record it, close the old
- * one, and sync once at once (the calendar may have changed while no channel was open). Opening a channel
- * is a subscription, never a change to the calendar (PRV-1).
+ * CH-6: keep one channel open on one calendar. With none, or one that ends within WATCH_RENEW_BEFORE_MS,
+ * or one pointing at another address, open a new one, record it, and close the old one.
  */
-export async function ensureWatch(rt: Runtime): Promise<WatchOutcome> {
-  const push = rt.ports.calendarPush;
-  if (push === undefined) return { action: "no-push" };
+async function ensureWatch(rt: Runtime, push: CalendarPush, calendarId: string, current: CalendarWatch | undefined, address: string): Promise<WatchOutcome> {
   const api = rt.system("calendar-watch");
   const now = rt.ports.clock.now();
-  const address = `${rt.env.PUBLIC_URL.replace(/\/+$/, "")}/webhooks/calendar`;
-  const current = await api.calendar.watch();
-  if (current !== null && current.calendarId === push.calendarId && current.address === address && new Date(current.expiresAt).getTime() - now.getTime() > WATCH_RENEW_BEFORE_MS) return { action: "kept", expiresAt: current.expiresAt };
+  if (current !== undefined && current.address === address && new Date(current.expiresAt).getTime() - now.getTime() > WATCH_RENEW_BEFORE_MS) return { calendarId, action: "kept", expiresAt: current.expiresAt };
   const id = randomUUID();
-  const opened = await push.open({ id, address, token: rt.env.CALENDAR_WEBHOOK_TOKEN });
+  const opened = await push.open(calendarId, { id, address, token: rt.env.CALENDAR_WEBHOOK_TOKEN });
   try {
-    await api.calendar.recordWatch({ channelId: id, calendarId: push.calendarId, resourceId: opened.resourceId, address, expiresAt: opened.expiresAt, openedAt: now.toISOString() });
+    await api.calendar.recordWatch({ channelId: id, calendarId, resourceId: opened.resourceId, address, expiresAt: opened.expiresAt, openedAt: now.toISOString() });
   } catch (error) {
     // A channel the house has no record of would never be renewed or closed: close it now (best effort).
     await push.close({ id, resourceId: opened.resourceId }).catch(() => undefined);
     throw error;
   }
-  if (current !== null) {
-    // Best effort: an old channel that can't be closed ends by itself at its expiry, and its
-    // notifications only cause a sync that finds nothing new.
+  if (current !== undefined) await closeWatch(rt, push, current);
+  return { calendarId, action: "opened", expiresAt: opened.expiresAt, replaced: current?.channelId ?? null };
+}
+
+/**
+ * Best effort: an old channel that can't be closed ends by itself at its expiry, and its notifications
+ * only cause a sync that finds nothing new. Either way the house no longer counts it as in use.
+ */
+async function closeWatch(rt: Runtime, push: CalendarPush, w: CalendarWatch): Promise<void> {
+  try {
+    await push.close({ id: w.channelId, resourceId: w.resourceId });
+  } catch (error) {
+    console.warn(JSON.stringify({ event: "calendar-watch-close-failed", channelId: w.channelId, error: errorText(error) }));
+  }
+  await rt.system("calendar-watch").calendar.closeWatch({ channelId: w.channelId });
+}
+
+/**
+ * CH-6 / HOME-1: keep one Google push channel open on each calendar the house reads (opened, renewed
+ * and replaced as above), and close any channel on a calendar it no longer reads. One calendar that
+ * fails (not shared with this account yet, say) doesn't stop the others; it is tried again next hour.
+ * Then sync once if a channel was opened or a calendar has never been read: it may have changed while
+ * no channel was open. Opening a channel is a subscription, never a change to a calendar (PRV-1).
+ */
+export async function ensureWatches(rt: Runtime): Promise<WatchCheck> {
+  const push = rt.ports.calendarPush;
+  if (push === undefined) return { action: "no-push" };
+  const api = rt.system("calendar-watch");
+  const address = `${rt.env.PUBLIC_URL.replace(/\/+$/, "")}/webhooks/calendar`;
+  const inUse = await api.calendar.watches();
+  const outcomes: WatchOutcome[] = [];
+  const closed: string[] = [];
+  for (const calendarId of push.calendarIds) {
+    // Newest first: the first is current; any older one still open is closed.
+    const [current, ...older] = inUse.filter((w) => w.calendarId === calendarId);
+    for (const w of older) {
+      await closeWatch(rt, push, w);
+      closed.push(w.channelId);
+    }
     try {
-      await push.close({ id: current.channelId, resourceId: current.resourceId });
+      outcomes.push(await ensureWatch(rt, push, calendarId, current, address));
     } catch (error) {
-      console.warn(JSON.stringify({ event: "calendar-watch-close-failed", channelId: current.channelId, error: error instanceof Error ? error.message : String(error) }));
+      outcomes.push({ calendarId, action: "failed", error: errorText(error) });
     }
   }
-  const sync = await calendarChanged(rt, { channelId: id, token: rt.env.CALENDAR_WEBHOOK_TOKEN, state: "exists", messageNumber: "opened" });
-  return { action: "opened", expiresAt: opened.expiresAt, replaced: current?.channelId ?? null, syncJobId: sync?.jobId ?? null };
+  for (const w of inUse.filter((x) => !push.calendarIds.includes(x.calendarId))) {
+    await closeWatch(rt, push, w);
+    closed.push(w.channelId);
+  }
+  const opened = outcomes.find((o) => o.action === "opened");
+  const synced = await api.calendar.syncTokens();
+  const neverRead = push.calendarIds.filter((id) => synced[id] === undefined);
+  const now = rt.ports.clock.now();
+  let syncJobId: string | null = null;
+  if (opened !== undefined) {
+    // Dedupe key `calendar:opened:<time>`: one sync per check that opened a channel.
+    syncJobId = (await calendarChanged(rt, { channelId: "opened", messageNumber: now.toISOString(), token: rt.env.CALENDAR_WEBHOOK_TOKEN, state: "exists" }))?.jobId ?? null;
+  } else if (neverRead.length > 0) {
+    // A calendar never read (not shared yet, say) is tried once a day, not every hour:
+    // dedupe key `calendar:never-read:<calendars>:<local date>`.
+    const day = localDate(now, rt.timeZone);
+    const accepted = await calendarChanged(rt, { channelId: "never-read", messageNumber: `${neverRead.join(",")}:${day}`, token: rt.env.CALENDAR_WEBHOOK_TOKEN, state: "exists" });
+    syncJobId = accepted === null || accepted.duplicate ? null : accepted.jobId;
+  }
+  return { action: "checked", calendars: outcomes, closed, syncJobId };
 }
 
 async function checkWatch(rt: Runtime): Promise<void> {
   try {
-    const outcome = await ensureWatch(rt);
-    if (outcome.action !== "no-push") console.log(JSON.stringify({ event: "calendar-watch", ...outcome }));
+    const check = await ensureWatches(rt);
+    if (check.action === "no-push") return;
+    for (const o of check.calendars) {
+      if (o.action === "failed") console.error(JSON.stringify({ event: "calendar-watch-failed", ...o }));
+      else console.log(JSON.stringify({ event: "calendar-watch", ...o }));
+    }
+    if (check.closed.length > 0 || check.syncJobId !== null) console.log(JSON.stringify({ event: "calendar-watch", closed: check.closed, syncJobId: check.syncJobId }));
   } catch (error) {
     // Logged, not thrown: the next hourly check tries again, and nothing else in the house waits on it.
-    console.error(JSON.stringify({ event: "calendar-watch-failed", error: error instanceof Error ? error.message : String(error) }));
+    console.error(JSON.stringify({ event: "calendar-watch-failed", error: errorText(error) }));
   }
 }
 
@@ -95,6 +158,12 @@ const watchCheck = DBOS.registerWorkflow(
 
 const zPracticeEvent = z.object({
   externalId: z.string(),
+  /** Whose practice calendar the copy is on (practice/data.ts `calendars`); the shared one by default. */
+  calendar: z
+    .string()
+    .refine((owner) => practiceCalendars.some((c) => c.owner === owner), "not a practice calendar")
+    .optional(),
+  uid: z.string().optional(),
   title: z.string(),
   start: z.iso.datetime({ offset: true }),
   end: z.iso.datetime({ offset: true }),

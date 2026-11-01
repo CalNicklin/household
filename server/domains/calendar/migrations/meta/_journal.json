@@ -15,6 +15,13 @@
       "when": 1793565685843,
       "tag": "0001_calendar-watches",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1793567610760,
+      "tag": "0002_calendars-per-person",
+      "breakpoints": true
     }
   ]
 }

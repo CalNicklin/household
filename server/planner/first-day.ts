@@ -2,7 +2,7 @@ import { ActionKind, type Block, BlockType, Placement, Provenance, Section } fro
 
 /** What the planner knows about how much the house has in it yet (HOU-149). */
 export type HouseFill = {
-  /** Whether the shared calendar has ever been read (a first sync exists). */
+  /** Whether any of the house's calendars has ever been read (a first sync exists). */
   calendarConnected: boolean;
   /** Active backlog jobs. */
   backlogItems: number;
@@ -35,7 +35,7 @@ export function firstDayBlocks(fill: HouseFill): Block[] {
   const out: Block[] = [];
   if (fill.backlogItems === 0)
     out.push(startBlock("backlog", "Say a few jobs into the box below", "The backlog is empty, so there is nothing to fit into today's gaps yet. Type or talk: “fix the gate”, “book the boiler service”."));
-  if (!fill.calendarConnected) out.push(startBlock("calendar", "Connect the shared calendar in Settings", "No calendar is connected yet, so Now, Later today and Tomorrow have nothing from it."));
+  if (!fill.calendarConnected) out.push(startBlock("calendar", "Calendars aren't connected yet", "None of your calendars has been read yet, so Now, Later today and Tomorrow have nothing from them."));
   if (out.length > 0) out.push(startBlock("ask", "Ask “if I do one thing, what should it be?”", "The house has little in it yet, so this screen shows little on its own; asking gets one answer with its reason."));
   return out;
 }

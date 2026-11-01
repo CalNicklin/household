@@ -10,7 +10,7 @@ import {
   PracticeShoppingHelper,
   PracticeTranscriber,
 } from "../../practice/fakes.ts";
-import type { Env } from "../env.ts";
+import { type Env, houseCalendars } from "../env.ts";
 import type { CalendarPush, CalendarSource, Clock, ObjectStore, Ports, ShoppingHelper } from "../ports.ts";
 import { GoogleCalendarPush, GoogleCalendarSource, refreshingTokenProvider } from "./google-calendar.ts";
 import { HindsightMemory } from "./hindsight-memory.ts";
@@ -96,10 +96,11 @@ export function realPorts(env: Env, clock: Clock, options: RealPortsOptions): { 
 
   let calendar: CalendarSource;
   let calendarPush: CalendarPush | undefined;
-  if (env.GOOGLE_CALENDAR_ID !== undefined && env.GOOGLE_ACCESS_TOKEN_FILE !== undefined) {
+  const calendars = houseCalendars(env);
+  if (calendars.length > 0 && env.GOOGLE_ACCESS_TOKEN_FILE !== undefined) {
     const getAccessToken = googleTokenFromFile(env.GOOGLE_ACCESS_TOKEN_FILE, clock);
     calendar = new GoogleCalendarSource({
-      calendarId: env.GOOGLE_CALENDAR_ID,
+      calendars,
       getAccessToken,
       personForEmail: options.personForEmail,
       timeZone: options.timeZone,
@@ -107,7 +108,7 @@ export function realPorts(env: Env, clock: Clock, options: RealPortsOptions): { 
       baseUrl: env.GOOGLE_CALENDAR_API,
       ...(options.workCalendarIds === undefined ? {} : { workCalendarIds: options.workCalendarIds }),
     });
-    calendarPush = new GoogleCalendarPush({ calendarId: env.GOOGLE_CALENDAR_ID, getAccessToken, baseUrl: env.GOOGLE_CALENDAR_API });
+    calendarPush = new GoogleCalendarPush({ calendarIds: calendars.map((c) => c.calendarId), getAccessToken, baseUrl: env.GOOGLE_CALENDAR_API });
   } else {
     missing.push("calendar");
     calendar = new PracticeCalendar();
