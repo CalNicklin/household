@@ -71,9 +71,13 @@ export interface EpisodicMemory {
 export type HelperResult =
   | { kind: "added"; product: ProductOption; log: string[]; screenshots: { name: string; png: Uint8Array }[] }
   | { kind: "needs-choice"; options: ProductOption[]; log: string[]; screenshots: { name: string; png: Uint8Array }[] }
-  | { kind: "failed"; reason: string; log: string[]; screenshots: { name: string; png: Uint8Array }[] };
+  | { kind: "failed"; reason: string; log: string[]; screenshots: { name: string; png: Uint8Array }[] }
+  /** No helper is running, so nothing was looked for: the request is kept for when one is. */
+  | { kind: "not-connected"; reason: string; log: string[]; screenshots: { name: string; png: Uint8Array }[] };
 
 export interface ShoppingHelper {
+  /** False when no helper is running and nothing can be looked for yet. */
+  readonly connected: boolean;
   addItem(item: string): Promise<HelperResult>;
   addProduct(sku: string): Promise<HelperResult>;
   basket(): Promise<{ items: { sku: string; name: string; quantity: number }[]; deliveryDate: LocalDate | null; changeUrl: string }>;

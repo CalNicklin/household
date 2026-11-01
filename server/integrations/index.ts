@@ -1,5 +1,6 @@
 import { readFile } from "node:fs/promises";
 import type { TranscriptionModel } from "ai";
+import { ModelProvider } from "@household/contracts";
 import { z } from "zod";
 import {
   InMemoryEpisodicMemory,
@@ -73,8 +74,8 @@ export type RealPortsOptions = {
 
 /**
  * The real house runs without the helper until it has a home machine (Waitrose blocks data-centre
- * addresses): each shopping request is recorded and fails at once with that reason ("nothing was added"),
- * never added to a practice basket; nothing retries it.
+ * addresses): each shopping request is recorded and saved at once with that reason (nothing was looked
+ * for), never added to a practice basket; nothing retries it yet.
  */
 function shoppingPort(env: Env, helper: ShoppingHelper | undefined, missing: string[]): ShoppingHelper {
   if (helper !== undefined) return helper;
@@ -141,6 +142,8 @@ export function realPorts(env: Env, clock: Clock, options: RealPortsOptions): { 
   }
 
   const shopping = shoppingPort(env, options.shopping, missing);
+  // HOU-148: MODEL_PROVIDER defaults to practice, and the practice model reads messages with patterns.
+  if (env.MODEL_PROVIDER === ModelProvider.practice) missing.push("model (MODEL_PROVIDER is practice: messages are read by the practice model's patterns)");
 
   let transcriber: Ports["transcriber"];
   if (options.transcriptionModel === undefined) {

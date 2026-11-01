@@ -5,6 +5,7 @@ import { eventually, testHousehold, type TestHousehold } from "../testing/househ
 
 /** The practice helper, held at the start of each add until the test lets it go. */
 class HeldShoppingHelper implements ShoppingHelper {
+  readonly connected = true;
   readonly #inner = new PracticeShoppingHelper();
   #release: (() => void) | null = null;
   #held = new Promise<void>((resolve) => {
