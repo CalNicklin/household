@@ -505,8 +505,10 @@ left out) fails the review: split it.
   always ends with an answer. The tools, the instructions and the review context are one prefix that
   every stage and step reads from the prompt cache. The job summary and the PR's summary comment show
   each run's cost.
-- **What runs:** the scripts and prompts come from a checkout of the PR's *base* commit, so a PR can't
-  change the review it gets (that change takes effect once it is on `main`). The PR's head is a second
+- **What runs:** the scripts and prompts come from a checkout of the PR's *base* commit, so a PR that
+  changes them is still reviewed with `main`'s (the change takes effect once it is on `main`). The
+  workflow file itself is the PR's own, though (GitHub runs a `pull_request` workflow from the PR), so a
+  PR that edits it can change its own review: see "Secret exposure" below. The PR's head is a second
   checkout that is only read, through git (`git show`, `git grep`, `git diff`, `git log`): nothing in it
   is installed, built or run, and no symlink is followed. Neither checkout keeps a token in `.git`.
 - **Prompt injection:** the diff, the PR's title and description, and replies are untrusted data in user
