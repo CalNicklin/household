@@ -1,4 +1,5 @@
 import { readdirSync, readFileSync } from "node:fs";
+import { Limits } from "@household/contracts";
 import { describe, expect, it } from "vitest";
 import { parse } from "yaml";
 import { z } from "zod";
@@ -42,10 +43,69 @@ describe("the deploy key", () => {
 
   it("[PLT-8] is out of reach of every workflow a pull request runs", () => {
     const onPullRequest = workflows.filter(({ workflow }) => triggers(workflow.on).some((t) => t.startsWith("pull_request")));
-    expect(onPullRequest.map((w) => w.file).sort()).toEqual(["ci.yml", "preview.yml"]);
+    expect(onPullRequest.map((w) => w.file).sort()).toEqual(["agent-review.yml", "ci.yml", "preview.yml"]);
     for (const { file, text, workflow } of onPullRequest) {
       expect(text, file).not.toMatch(READS_KEY);
       expect(Object.values(workflow.jobs).map((j) => environmentName(j.environment)), file).not.toContain("production");
     }
+  });
+});
+
+/**
+ * HOU-151: the agent review. The model's job can read and can't write; only the model's own step holds
+ * the Anthropic key, and it has no GitHub token; the job that writes comments holds no secret; nothing
+ * from the PR's checkout runs, and the scripts and prompts come from the base.
+ */
+const zStep = z.looseObject({ name: z.string().optional(), uses: z.string().optional(), run: z.string().optional(), with: z.record(z.string(), z.unknown()).optional(), env: z.record(z.string(), z.unknown()).optional(), "working-directory": z.string().optional() });
+const zJob = z.looseObject({ if: z.string(), permissions: z.record(z.string(), z.string()), "timeout-minutes": z.number(), steps: z.array(zStep) });
+const review = (() => {
+  const w = workflows.find((x) => x.file === "agent-review.yml");
+  if (w === undefined) throw new Error("no agent-review.yml");
+  const doc = z.looseObject({ permissions: z.record(z.string(), z.string()), jobs: z.object({ review: zJob, "agent-review": zJob }) }).parse(parse(w.text));
+  return { text: w.text, ...doc };
+})();
+
+describe("HOU-151 the agent review workflow", () => {
+  it("runs for this repository's PRs only, with no permission unless a job asks for it", () => {
+    expect(review.permissions).toEqual({});
+    for (const job of Object.values(review.jobs)) expect(job.if).toContain("github.event.pull_request.head.repo.full_name == github.repository");
+  });
+
+  it("the model's job can read and can't write; only the posting job can write, and only PR comments", () => {
+    expect(review.jobs.review.permissions).toEqual({ contents: "read", "pull-requests": "read" });
+    expect(review.jobs["agent-review"].permissions).toEqual({ contents: "read", "pull-requests": "write" });
+  });
+
+  it("the Anthropic key is only in the model's step, which has no GitHub token; the posting job has no secret", () => {
+    const steps = Object.entries(review.jobs).flatMap(([job, j]) => j.steps.map((s) => ({ job, ...s })));
+    const withKey = steps.filter((s) => JSON.stringify(s.env ?? {}).includes("secrets.REVIEW_ANTHROPIC_API_KEY }}"));
+    expect(withKey.map((s) => [s.job, s.name])).toEqual([["review", "Review (the model; this step has the Anthropic key and no GitHub token)"]]);
+    expect(Object.keys(withKey[0]?.env ?? {}).sort()).toEqual(["ANTHROPIC_API_KEY", "BASE", "HEAD", "REVIEW_MODEL"]);
+    expect(JSON.stringify(withKey[0])).not.toMatch(/github\.token|GITHUB_TOKEN|GH_TOKEN/);
+    expect(JSON.stringify(review.jobs["agent-review"])).not.toMatch(/secrets\./);
+    // Elsewhere the key is only tested for being set.
+    expect(review.text.match(/secrets\.\w+/g)?.sort()).toEqual(["secrets.REVIEW_ANTHROPIC_API_KEY", "secrets.REVIEW_ANTHROPIC_API_KEY"]);
+  });
+
+  it("checks out the base's scripts at the root and the PR's head only into pr/, with no token left in either", () => {
+    for (const job of Object.values(review.jobs)) {
+      const checkouts = job.steps.filter((s) => s.uses?.startsWith("actions/checkout@") === true);
+      expect(checkouts.map((s) => [s.with?.["ref"], s.with?.["path"] ?? "."])).toEqual([
+        ["${{ github.event.pull_request.base.sha }}", "."],
+        ["${{ github.event.pull_request.head.sha }}", "pr"],
+      ]);
+      for (const c of checkouts) expect(c.with?.["persist-credentials"]).toBe(false);
+      for (const s of job.steps) {
+        expect(s["working-directory"]).toBeUndefined();
+        // pr/ is only ever passed to the scripts as the repository git reads.
+        expect((s.run ?? "").replaceAll("--checkout pr ", "")).not.toMatch(/\bpr\//);
+      }
+      const installs = job.steps.filter((s) => s.run?.includes("pnpm install") === true);
+      expect(installs.map((s) => s.run)).toEqual(["pnpm install --frozen-lockfile --ignore-scripts"]);
+    }
+  });
+
+  it("[CODE-13] the review job's timeout is the cited limit", () => {
+    expect(review.jobs.review["timeout-minutes"]).toBe(Limits.reviewJobMinutes.value);
   });
 });

@@ -1,0 +1,150 @@
+# HOU-151: an agent review on every push to a PR from this repository (never a fork's): Entire's code,
+# security and slop reviews (.github/review/*.md) as three stages, with findings graded high, medium or
+# low. The `agent-review` job is the check: it fails while any medium or high finding on the latest push
+# is open. Not part of `pnpm check` (CODE-11).
+#
+# Prompt injection: the PR's diff, title, description and replies are data. The model runs in `review`,
+# whose token reads and can't write, with only the Anthropic key in its step's environment, and tools
+# that read git objects and nothing else. The scripts and prompts always come from the PR's *base*
+# checkout, so a PR's code never runs here and can't rewrite its own review (a PR can still edit this
+# file, which is why docs/OPERATIONS.md says what the key can reach). `agent-review` alone can write PR
+# comments; it validates the findings and posts them, and never calls the model.
+#
+# Until the REVIEW_ANTHROPIC_API_KEY secret exists it skips with a notice and passes. The model is the
+# REVIEW_MODEL repository variable, defaulting to the latest Claude model (scripts/review/model.ts).
+name: agent-review
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+
+# The latest push is the one that counts: a newer one cancels a review still running.
+concurrency:
+  group: agent-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions: {}
+
+jobs:
+  review:
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    # limit: reviewJobMinutes
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      ran: ${{ steps.base.outputs.ok == 'true' && 'true' || 'false' }}
+    steps:
+      - name: Check the key and the base's scripts
+        id: ready
+        env:
+          HAS_KEY: ${{ secrets.REVIEW_ANTHROPIC_API_KEY != '' }}
+        run: |
+          if [ "$HAS_KEY" = true ]; then echo "ran=true" >> "$GITHUB_OUTPUT"; else
+            echo "ran=false" >> "$GITHUB_OUTPUT"
+            echo "::notice title=Agent review skipped::Add the REVIEW_ANTHROPIC_API_KEY secret (docs/OPERATIONS.md, Agent review) to review every PR."
+          fi
+      # The base's scripts and prompts (trusted: already on the base branch).
+      - if: steps.ready.outputs.ran == 'true'
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          persist-credentials: false
+      - name: Is the review on the base branch yet?
+        id: base
+        if: steps.ready.outputs.ran == 'true'
+        run: |
+          if [ -f scripts/agent-review.ts ] && [ -f .github/review/code.md ]; then echo "ok=true" >> "$GITHUB_OUTPUT"; else
+            echo "ok=false" >> "$GITHUB_OUTPUT"
+            echo "::notice title=Agent review skipped::The base branch has no agent review yet; it reviews PRs once it is merged."
+          fi
+      # The PR's head, only ever read through git; nothing from it runs.
+      - if: steps.base.outputs.ok == 'true'
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          path: pr
+          fetch-depth: 0
+          persist-credentials: false
+      - if: steps.base.outputs.ok == 'true'
+        uses: pnpm/action-setup@v4
+      - if: steps.base.outputs.ok == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - if: steps.base.outputs.ok == 'true'
+        run: pnpm install --frozen-lockfile --ignore-scripts
+      - name: Read the last run's findings and the replies to them
+        if: steps.base.outputs.ok == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+        run: node scripts/agent-review.ts prior --pr "$PR" --out "$RUNNER_TEMP/prior.json"
+      - name: Review (the model; this step has the Anthropic key and no GitHub token)
+        if: steps.base.outputs.ok == 'true'
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.REVIEW_ANTHROPIC_API_KEY }}
+          REVIEW_MODEL: ${{ vars.REVIEW_MODEL }}
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+        run: node scripts/agent-review.ts review --checkout pr --base "$BASE" --head "$HEAD" --prior "$RUNNER_TEMP/prior.json" --out "$RUNNER_TEMP/answers.json"
+      - if: steps.base.outputs.ok == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: agent-review-answers
+          path: ${{ runner.temp }}/answers.json
+          retention-days: 7
+
+  agent-review:
+    needs: review
+    if: ${{ !cancelled() && github.event.pull_request.head.repo.full_name == github.repository }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - name: The review must have run
+        id: ran
+        env:
+          RESULT: ${{ needs.review.result }}
+          RAN: ${{ needs.review.outputs.ran }}
+        run: |
+          if [ "$RESULT" != success ]; then echo "::error title=Agent review::The review job ended with \"$RESULT\"; see its log."; exit 1; fi
+          if [ "$RAN" != true ]; then echo "skipped=true" >> "$GITHUB_OUTPUT"; echo "Agent review skipped (see the review job's notice)."; fi
+      - if: steps.ran.outputs.skipped != 'true'
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          persist-credentials: false
+      - if: steps.ran.outputs.skipped != 'true'
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          path: pr
+          fetch-depth: 0
+          persist-credentials: false
+      - if: steps.ran.outputs.skipped != 'true'
+        uses: pnpm/action-setup@v4
+      - if: steps.ran.outputs.skipped != 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - if: steps.ran.outputs.skipped != 'true'
+        run: pnpm install --frozen-lockfile --ignore-scripts
+      - if: steps.ran.outputs.skipped != 'true'
+        uses: actions/download-artifact@v4
+        with:
+          name: agent-review-answers
+          path: ${{ runner.temp }}/answers
+      - name: Post the findings and decide the check
+        if: steps.ran.outputs.skipped != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+        run: node scripts/agent-review.ts post --checkout pr --base "$BASE" --head "$HEAD" --pr "$PR" --answers "$RUNNER_TEMP/answers/answers.json"
