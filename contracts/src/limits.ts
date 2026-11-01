@@ -45,5 +45,9 @@ export const Limits = {
   captureBudgetMs: { value: 5000, reason: "VERIFICATION", note: "CAP-1: appears for both of us within five seconds." },
   shoppingBudgetMs: { value: 600_000, reason: "VERIFICATION", note: "AUT-1: within ten minutes it is in our supermarket basket." },
   calendarRefreshMs: { value: 60_000, reason: "VERIFICATION", note: "HOME-1: updates within a minute of a calendar change." },
+  inboundEmailMaxBytes: { value: 5 * 1024 * 1024, reason: "OWASP_API4", note: "HOU-150: the mail receiver holds a whole message in memory to check and parse it; order confirmations are well under 1 MB, and four at 5 MB fit its 128 MB cap." },
+  inboundEmailMaxClients: { value: 4, reason: "OWASP_API4", note: "HOU-150: SMTP sessions at once. Two people forward a few orders a week; more than four at once is a flood, refused before it can fill the receiver's memory." },
+  inboundEmailSocketMs: { value: 60_000, reason: "OWASP_API4", note: "HOU-150: an idle SMTP session is closed after a minute (RFC 5321 4.5.3.2 asks a sender to wait minutes, a receiver need not), so slow clients cannot hold the four seats." },
+  inboundEmailWebhookMs: { value: 10_000, reason: "OWASP_API4", note: "HOU-150: the receiver waits this long for the app to take an email, then answers 451 so the sending server tries again later." },
 } as const satisfies Record<string, Limit>;
 export type LimitName = keyof typeof Limits;

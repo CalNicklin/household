@@ -459,3 +459,12 @@ export const ListWriteOutcome = {
 } as const;
 export type ListWriteOutcome = ValueOf<typeof ListWriteOutcome>;
 export const zListWriteOutcome = z.enum(ListWriteOutcome);
+
+/** HOU-150: how the mail receiver proved who sent an email on to orders@ (CH-3). */
+export const SenderProof = {
+  /** The envelope sender (Gmail's auto-forward: `cal+caf_=…@gmail.com`) passed SPF for its own domain. */
+  envelopeSpf: "envelope-spf",
+  /** The From header's domain is the domain of a passing DKIM signature (a forward by hand). */
+  authorDkim: "author-dkim",
+} as const;
+export type SenderProof = ValueOf<typeof SenderProof>;

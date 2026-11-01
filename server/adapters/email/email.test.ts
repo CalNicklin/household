@@ -64,6 +64,19 @@ describe("email adapter", () => {
     expect(jobs).toHaveLength(1);
   });
 
+  test("[CH-3] from the house's mail receiver, only the proven forwarder counts, never what To claims", async () => {
+    // A forwarded order's From is the shop, and its To is whatever the email says.
+    const forwarded = { ...screwfix, to: "orders@orders.practice.home", messageId: "<sf-fwd@screwfix.com>", provenSenders: ["priya@practice.home", "orders@screwfix.com"] };
+    expect(await (await post(forwarded)).json()).toEqual({ outcome: "accepted" });
+    const { job } = await jobForKey(h.rt, "email:<sf-fwd@screwfix.com>");
+    expect(job.person).toBe("priya");
+
+    const claimsPriya = { ...screwfix, to: "priya@practice.home", messageId: "<sf-spoof@screwfix.com>", provenSenders: ["mallory@evil.test"] };
+    expect(await (await post(claimsPriya)).json()).toEqual({ outcome: "dropped" });
+    expect(await messageByKey(h.rt, "email:<sf-spoof@screwfix.com>")).toBeNull();
+    expect(await h.rt.system("test").jobs.dropped()).toContainEqual({ channel: "email", address: "mallory@evil.test", reason: "unknown sender" });
+  });
+
   test("[PRV-6] the email webhook rejects a missing or wrong secret", async () => {
     expect((await post(screwfix, "nope")).status).toBe(401);
     expect((await app.request("/webhooks/email", { method: "POST", body: "{}" })).status).toBe(401);
