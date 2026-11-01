@@ -106,6 +106,16 @@ describe("The house only ever adds to a list (PRV-1)", () => {
     expect(presents.items.map((i) => i.text).slice(0, 2)).toEqual(["Lego for Noah", "Book for Ivy"]);
   });
 
+  test("[CAP-6][AUT-1] 'add … to the shopping list' goes on the Shopping list; 'we're out of …' still goes to the supermarket", async () => {
+    await h.sayAndWait("add batteries to the shopping list", { person: "tom" });
+    expect((await listNamed("Shopping")).items.map((i) => i.text)).toContain("batteries");
+    const requests = await h.rt.system("test").shopping.recent();
+    expect(requests.map((r) => r.item)).not.toContain("batteries");
+    await h.sayAndWait("we're out of oat milk", { person: "tom" });
+    expect((await h.rt.system("test").shopping.recent()).map((r) => r.item)).toContain("oat milk");
+    expect((await listNamed("Shopping")).items.map((i) => i.text)).not.toContain("oat milk");
+  });
+
   test("[PRV-1] a job can add an item, but never delete, rename, tick or untick one a person wrote, or change a list", async () => {
     const list = await freshList("Guarded", ["Batteries", "Tape"]);
     const [batteries, tape] = list.items;

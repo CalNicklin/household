@@ -58,7 +58,7 @@ export function houseTools(scope: JobScope) {
    */
   const addToList = createTool({
     id: "add_to_list",
-    description: "Add one item to one of the household's shared lists (presents, packing, a shared shopping list). Not groceries for the supermarket.",
+    description: "Add one item to one of the household's shared lists, named by the person: 'add batteries to the shopping list', 'add wrapping paper to the presents list'. Groceries with no list named ('we're out of oat milk', 'add it to the shop') go to shop instead.",
     inputSchema: z.object({ list: z.string(), item: z.string().min(1) }),
     execute: record("add_to_list", async (input: { list: string; item: string }) => {
       const wanted = input.list.trim().toLowerCase().replace(/\s+list$/, "");

@@ -8,12 +8,16 @@ import { FAMILY_LISTS_ENV, readFamilyLists, redacted } from "./family-lists/read
 /**
  * CAP-6: copy Family Lists' lists and items into the lists domain, once (order, ticks and emoji kept).
  *
- *   FAMILY_LISTS_DATABASE_URL='postgresql://…' pnpm lists:import            # copy into this house
- *   FAMILY_LISTS_DATABASE_URL='postgresql://…' pnpm lists:import --dry-run  # only count what is there
+ * Run it where the app runs, so it reads the house's own settings (docs/OPERATIONS.md):
  *
- * It reads Family Lists in a read-only transaction and never writes to it. It writes to this house's
- * lists domain (DATABASE_URL, DB_PREFIX and the rest of .env, as `pnpm start` does) and refuses if any
- * list is already there. The connection string is read from the environment only; it is never printed.
+ *   FAMILY_LISTS_DATABASE_URL='postgresql://…' docker compose run --rm -e FAMILY_LISTS_DATABASE_URL app node scripts/import-family-lists.ts --dry-run
+ *   FAMILY_LISTS_DATABASE_URL='postgresql://…' docker compose run --rm -e FAMILY_LISTS_DATABASE_URL app node scripts/import-family-lists.ts
+ *
+ * It reads Family Lists in a read-only transaction and never writes to it. It writes to the lists
+ * domain of the house its environment names (DATABASE_URL, DB_PREFIX, PRACTICE, as `pnpm start` reads
+ * them), says which, and refuses if any list is already there. Without `--practice` it refuses to write
+ * into the practice household, so a run that missed the house's settings cannot land there by default.
+ * The connection string is read from the environment only; it is never printed.
  */
 const source = process.env[FAMILY_LISTS_ENV];
 if (source === undefined || source === "") {
@@ -21,6 +25,7 @@ if (source === undefined || source === "") {
   process.exit(2);
 }
 const dryRun = process.argv.includes("--dry-run");
+const intoPractice = process.argv.includes("--practice");
 
 try {
   const snapshot = await readFamilyLists(source);
@@ -30,6 +35,10 @@ try {
     process.exit(0);
   }
   const env = loadEnv();
+  if (env.PRACTICE && !intoPractice) {
+    console.error(JSON.stringify({ event: "family-lists-import-refused", reason: "these settings are the practice household (PRACTICE is not false); run it where the app runs (docs/OPERATIONS.md), or pass --practice to copy into the practice household on purpose" }));
+    process.exit(2);
+  }
   await migrateAll(env);
   const ports = env.PRACTICE ? practicePorts() : realPorts(env, { now: () => new Date() }, { timeZone: "Europe/London", personForEmail: () => null }).ports;
   const rt = await createRuntime(env, ports);

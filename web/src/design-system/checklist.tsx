@@ -199,7 +199,8 @@ export function AddItemField({ label, onAdd }: { label: string; onAdd: (text: st
         if (text === "") return;
         void (async () => {
           const refused = await onAdd(text);
-          if (refused === null) setDraft("");
+          // Only clear what was sent: anything typed while it was saving stays.
+          if (refused === null) setDraft((current) => (current.trim() === text ? "" : current));
           setError(refused);
         })();
       }}

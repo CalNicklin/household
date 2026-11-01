@@ -26,18 +26,24 @@ and `HINDSIGHT_URL=http://hindsight:8888`. Without it the app keeps episodic mem
 ## Bring Family Lists over (once)
 
 Shopping and simple lists live in the app (CAP-6). To copy the lists from Family Lists' Supabase
-(lists and items, keeping their order, ticks and emoji), run once on the server, after the app has
-started at least once:
+(lists and items, keeping their order, ticks and emoji), run it once on the server, inside the app's
+container so it reads the house's own settings, after the app has started at least once:
 
 ```bash
-FAMILY_LISTS_DATABASE_URL='postgresql://…' pnpm lists:import --dry-run   # only counts what is there
-FAMILY_LISTS_DATABASE_URL='postgresql://…' pnpm lists:import             # copies it
+export FAMILY_LISTS_DATABASE_URL='postgresql://…'   # in this shell only
+docker compose run --rm -e FAMILY_LISTS_DATABASE_URL app node scripts/import-family-lists.ts --dry-run   # only counts
+docker compose run --rm -e FAMILY_LISTS_DATABASE_URL app node scripts/import-family-lists.ts             # copies it
+unset FAMILY_LISTS_DATABASE_URL
 ```
+
+It prints the database prefix it copied into. Run anywhere without the house's settings it would
+aim at the practice household, so it refuses; `--practice` copies into the practice household on
+purpose.
 
 | Variable | What it is |
 | --- | --- |
 | `FAMILY_LISTS_DATABASE_URL` | Family Lists' Postgres connection string (Supabase dashboard → Connect; add `?sslmode=require`). A role that can only `SELECT` on `lists` and `items` is enough. |
-| `DATABASE_URL`, `DB_PREFIX` and the rest of `.env` | Where to copy to: this house, exactly as `pnpm start` reads them. |
+| `DATABASE_URL`, `DB_PREFIX`, `PRACTICE` and the rest of `.env` | Where to copy to: the app container already has them, exactly as the server reads them. |
 
 Set the connection string in the shell for that one command; never put it in `.env`, the repo or a
 chat. The script reads Family Lists in a read-only transaction and never writes to it, prints only

@@ -7,20 +7,34 @@ import { FooterComposer, navFor } from "./common.tsx";
 
 const NEW_LIST = { name: "New list", emoji: "📝" } as const;
 const alreadyThere = (text: string) => `"${text}" is already on this list — try a different name.`;
+const NOT_SAVED = "That didn't save — check the connection and try again.";
 
-/** The lists query, and a way to change it in place before the server answers (the change then arrives over /api/live). */
-function useListsData() {
+/**
+ * A write that resolves to a message to show (or null when it saved). A failed request shows a
+ * message instead of being lost; the list is refetched either way.
+ */
+type Refusal = string | null;
+async function saved(write: () => Promise<{ outcome: ListWriteOutcome }>, text: string): Promise<Refusal> {
+  try {
+    return (await write()).outcome === ListWriteOutcome.duplicate ? alreadyThere(text) : null;
+  } catch {
+    return NOT_SAVED;
+  }
+}
+
+/** Change the lists in place before the server answers (the server's answer then arrives over /api/live). */
+function useListsCache() {
   const trpc = useTRPC();
   const queryClient = useQueryClient();
   const key = trpc.lists.queryKey();
   const patchItem = (id: string, change: (item: ListItem) => ListItem | null) =>
     queryClient.setQueryData<ListsView>(key, (old) => old?.map((l) => ({ ...l, items: l.items.flatMap((i) => (i.id === id ? [change(i)].filter((x) => x !== null) : [i])) })));
-  return { lists: useQuery(trpc.lists.queryOptions()), patchItem, refresh: () => queryClient.invalidateQueries({ queryKey: key }) };
+  return { patchItem, refresh: () => queryClient.invalidateQueries({ queryKey: key }) };
 }
 
 function ListPanel({ list }: { list: List }) {
   const trpc = useTRPC();
-  const { patchItem, refresh } = useListsData();
+  const { patchItem, refresh } = useListsCache();
   const settle = { onSettled: refresh };
   const add = useMutation(trpc.addListItem.mutationOptions(settle));
   const check = useMutation(trpc.setListItemChecked.mutationOptions(settle));
@@ -79,10 +93,7 @@ function ListPanel({ list }: { list: List }) {
       adder={
         <AddItemField
           label={`Add an item to ${list.name}`}
-          onAdd={async (text) => {
-            const result = await add.mutateAsync({ listId: list.id, text });
-            return result.outcome === ListWriteOutcome.duplicate ? alreadyThere(text) : null;
-          }}
+          onAdd={(text) => saved(() => add.mutateAsync({ listId: list.id, text }), text)}
         />
       }
     >
@@ -95,10 +106,7 @@ function ListPanel({ list }: { list: List }) {
             patchItem(item.id, (i) => ({ ...i, checked }));
             check.mutate({ id: item.id, checked });
           }}
-          onRename={async (text) => {
-            const result = await rename.mutateAsync({ id: item.id, text });
-            return result.outcome === ListWriteOutcome.duplicate ? alreadyThere(text) : null;
-          }}
+          onRename={(text) => saved(() => rename.mutateAsync({ id: item.id, text }), text)}
           onRemove={() => {
             patchItem(item.id, () => null);
             removeItem.mutate({ id: item.id });
@@ -115,7 +123,8 @@ function ListPanel({ list }: { list: List }) {
  */
 export function ListsScreen() {
   const trpc = useTRPC();
-  const { lists, refresh } = useListsData();
+  const lists = useQuery(trpc.lists.queryOptions());
+  const { refresh } = useListsCache();
   const create = useMutation(trpc.createList.mutationOptions({ onSettled: refresh }));
   return (
     <Page label="Lists">

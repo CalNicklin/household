@@ -107,8 +107,9 @@ export function listsRouter(db: ListsDb) {
       .mutation(async ({ ctx, input }): Promise<ListWriteResult> => {
         const author = actingPerson(ctx.actor);
         if (author === null) forbid("PRV-1: a list item must come from a person");
-        const fromJob = ctx.actor.kind === ActorKind.agent;
-        if (ctx.actor.kind === ActorKind.agent && ctx.actor.message !== input.sourceMessage) forbid("PRV-1: a job can only add what the message it is handling asked for");
+        const job = ctx.actor.kind === ActorKind.agent ? ctx.actor : null;
+        if (job !== null && job.message !== input.sourceMessage) forbid("PRV-1: a job can only add what the message it is handling asked for");
+        const fromJob = job !== null;
         const list = await db.query.lists.findFirst({ where: eq(schema.lists.id, input.listId) });
         if (list === undefined) forbid(`no list ${input.listId}`);
         const existing = await duplicateOf(list.id, input.text, null);
@@ -143,9 +144,8 @@ export function listsRouter(db: ListsDb) {
 
     /** Tick or untick. Ticked items stay on the list, struck through. */
     setChecked: personProcedure.input(zListItemCheckInput).output(zListItem).mutation(async ({ ctx, input }) => {
-      await itemById(input.id);
       const [row] = await db.update(schema.items).set({ checked: input.checked }).where(eq(schema.items.id, input.id)).returning();
-      if (row === undefined) throw new Error("update failed");
+      if (row === undefined) forbid(`no list item ${input.id}`);
       ctx.publish("lists");
       return toItem(row);
     }),

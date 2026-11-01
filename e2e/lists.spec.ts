@@ -78,6 +78,9 @@ test("[CAP-6][PRV-1] anything said adds to a list, and it shows on the other scr
   await say(page, "add wrapping paper to the christmas presents list");
   // limit: captureBudgetMs
   await expect(list(phone, "Christmas presents").getByRole("button", { name: "wrapping paper", exact: true })).toBeVisible({ timeout: Limits.captureBudgetMs.value });
+  await say(page, "add batteries to the shopping list");
+  // limit: captureBudgetMs
+  await expect(list(phone, "Shopping").getByRole("button", { name: "batteries", exact: true })).toBeVisible({ timeout: Limits.captureBudgetMs.value });
   await evidence(phone, "CAP-6-said-on-the-ipad-seen-on-the-phone");
   await phoneCtx.close();
 });

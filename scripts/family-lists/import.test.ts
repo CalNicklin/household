@@ -91,13 +91,18 @@ describe("Family Lists import (CAP-6)", () => {
     expect(dry).toMatchObject({ code: 0 });
     expect(dry.out).toContain('"lists":4,"items":7');
 
-    const first = await importScript({ [FAMILY_LISTS_ENV]: sourceUrl });
+    // Without the house's own settings it would land in the practice household, so it refuses.
+    const unaimed = await importScript({ [FAMILY_LISTS_ENV]: sourceUrl });
+    expect(unaimed.code).toBe(2);
+    expect(unaimed.out).toContain("family-lists-import-refused");
+
+    const first = await importScript({ [FAMILY_LISTS_ENV]: sourceUrl }, ["--practice"]);
     expect(first.code, first.out).toBe(0);
     expect(first.out).toContain('"event":"family-lists-imported"');
-    const again = await importScript({ [FAMILY_LISTS_ENV]: sourceUrl });
+    const again = await importScript({ [FAMILY_LISTS_ENV]: sourceUrl }, ["--practice"]);
     expect(again.code).toBe(1);
     expect(again.out).toContain("only runs once");
-    for (const r of [dry, first, again]) {
+    for (const r of [dry, unaimed, first, again]) {
       expect(r.out).not.toContain(readerPassword);
       expect(r.out).not.toContain(sourceUrl);
     }
@@ -128,7 +133,7 @@ describe("Family Lists import (CAP-6)", () => {
     expect(missing.code).toBe(2);
     expect(missing.out).toContain(FAMILY_LISTS_ENV);
     const wrong = sourceUrl.replace(readerPassword, "not-the-password-123");
-    const failed = await importScript({ [FAMILY_LISTS_ENV]: wrong });
+    const failed = await importScript({ [FAMILY_LISTS_ENV]: wrong }, ["--practice"]);
     expect(failed.code).toBe(1);
     expect(failed.out).toContain("family-lists-import-failed");
     expect(failed.out).not.toContain("not-the-password-123");
