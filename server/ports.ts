@@ -15,6 +15,17 @@ export interface CalendarSource {
   changes(syncToken: string | null): Promise<{ upserts: ExternalEvent[]; deletedExternalIds: string[]; nextSyncToken: string | null }>;
 }
 
+/**
+ * CH-6: Google's push notifications for the calendar. A channel is a subscription, not an event:
+ * opening or closing one changes nothing in the calendar (PRV-1).
+ */
+export interface CalendarPush {
+  /** The calendar this pushes for. */
+  readonly calendarId: string;
+  open(channel: { id: string; address: string; token: string }): Promise<{ resourceId: string; expiresAt: string }>;
+  close(channel: { id: string; resourceId: string }): Promise<void>;
+}
+
 export type HourlyForecast = { hour: string; precipitationProbability: number; temperatureC: number };
 
 export interface WeatherSource {
@@ -62,6 +73,8 @@ export interface Transcriber {
 export type Ports = {
   clock: Clock;
   calendar: CalendarSource;
+  /** Only the real Google Calendar has push; the practice calendar is edited through the same webhook path. */
+  calendarPush?: CalendarPush;
   weather: WeatherSource;
   messenger: MessengerTransport;
   objects: ObjectStore;
