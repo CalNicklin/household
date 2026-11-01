@@ -21,6 +21,7 @@ const decodeShots = (shots: z.infer<typeof zShot>[]) => shots.map((s) => ({ name
  * helper's API and nothing else: never the supermarket login, which only the helper can read.
  */
 export class HttpShoppingHelper implements ShoppingHelper {
+  readonly connected = true;
   readonly #url: string;
   readonly #token: string;
 
@@ -63,20 +64,23 @@ export class HttpShoppingHelper implements ShoppingHelper {
   }
 }
 
-const NO_HELPER = "the shopping helper is not connected yet, so nothing was added to the basket";
+const NO_HELPER = "the shopping helper is not connected yet, so nothing was looked for or added; the request is saved";
 
 /**
  * The real house before its helper is running (it needs a home connection: the supermarket blocks
- * data-centre addresses). Every request fails with that reason, so it shows as not added rather than
- * pretending; the basket is empty with no delivery, so no basket summary goes out.
+ * data-centre addresses). Every request is kept as saved, with that reason: nothing was looked for, so
+ * it never says it couldn't find something (HOU-148). The basket is empty with no delivery, so no
+ * basket summary goes out.
  */
 export class NoShoppingHelper implements ShoppingHelper {
+  readonly connected = false;
+
   async addItem(item: string): Promise<HelperResult> {
-    return { kind: "failed", reason: NO_HELPER, log: [`"${item}": ${NO_HELPER}`], screenshots: [] };
+    return { kind: "not-connected", reason: NO_HELPER, log: [`"${item}": ${NO_HELPER}`], screenshots: [] };
   }
 
   async addProduct(sku: string): Promise<HelperResult> {
-    return { kind: "failed", reason: NO_HELPER, log: [`${sku}: ${NO_HELPER}`], screenshots: [] };
+    return { kind: "not-connected", reason: NO_HELPER, log: [`${sku}: ${NO_HELPER}`], screenshots: [] };
   }
 
   async basket() {

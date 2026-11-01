@@ -31,14 +31,18 @@ export function houseTools(scope: JobScope) {
     if (!scope.effects.replan.includes(today())) scope.effects.replan.push(today());
   };
 
+  // HOU-148: each capture claims its position before awaiting anything, so captures the model makes
+  // in parallel for one message get distinct positions (a retried job builds a fresh counter).
+  let captures = 0;
   const capture = createTool({
     id: "capture",
-    description: "Put a thought on the shared backlog: a job with no date. Guess tags for what it needs.",
+    description: "Put a thought on the shared backlog: a job with no date, including fixing, setting up, booking or buying anything that is not groceries ('get the printer working', 'buy a new kettle'). One sentence is one item unless it clearly lists separate jobs. Guess tags for what it needs.",
     inputSchema: z.object({ text: z.string().min(1), tags: z.array(zBacklogTag).optional() }),
     execute: record("capture", async (input: { text: string; tags?: BacklogTag[] | undefined }) => {
+      const index = captures++;
       const hints = await rt.system("tags").household.tagHints();
       const tags = input.tags !== undefined && input.tags.length > 0 ? input.tags : guessTags(input.text, hints);
-      const item = await api.backlog.create({ text: input.text, tags, createdVia: scope.channel, sourceMessage: scope.messageId });
+      const item = await api.backlog.create({ text: input.text, tags, createdVia: scope.channel, sourceMessage: scope.messageId, index });
       // HOU-149: today's plan says whether the backlog is empty ("Getting started"), so redraw it now.
       replanToday();
       return { id: item.id, tags: item.tags, say: `Added to the backlog: ${item.text}.` };
@@ -47,7 +51,7 @@ export function houseTools(scope: JobScope) {
 
   const shop = createTool({
     id: "shop",
-    description: "Groceries someone mentioned. They go in the next supermarket shop (the helper adds them).",
+    description: "Groceries for the weekly supermarket shop ('we're out of oat milk and bread'), one item each. Never a job, a repair or a set-up, and never pieces of a sentence about something to do: that is capture.",
     inputSchema: z.object({ items: z.array(z.string().min(1)).min(1) }),
     execute: record("shop", async (input: { items: string[] }) => {
       const ids: string[] = [];
@@ -56,6 +60,8 @@ export function houseTools(scope: JobScope) {
         scope.effects.long.push({ tool: LongTool.shop, requestId: request.id, sku: null });
         ids.push(request.id);
       }
+      // HOU-148: with no helper connected nothing will be looked for, so it says the request is saved.
+      if (!rt.ports.shopping.connected) return { requests: ids, added: false, saved: true, say: `Saved ${input.items.join(" and ")} for when shopping is connected.` };
       // Nothing is in the basket yet: the helper adds it afterwards, or asks if there's no exact match (AUT-3).
       return { requests: ids, added: false, say: `I'll put ${input.items.join(" and ")} in the next shop. The home screen will show which product once it's in.` };
     }),
