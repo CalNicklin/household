@@ -29,6 +29,25 @@ test("[HOME-1][CH-6] a change in Google Calendar shows on the screen within a mi
   await evidence(page, "HOME-1-calendar-change");
 });
 
+test("[HOME-1] events come from Priya's, Tom's and the shared calendar, each with its person; an invite on both calendars is one event", async ({ page, request }) => {
+  await login(page);
+  const row = (title: string) => page.getByRole("listitem").filter({ hasText: title });
+  // From Priya's own calendar, and from Tom's.
+  await expect(row("Nursery drop-off")).toContainText("Nursery drop-off · Priya");
+  await expect(row("Nursery pick-up")).toContainText("Nursery pick-up · Tom");
+  // Dinner at Sam's is on both their calendars (one invite): it shows once, with both of them, and the
+  // babysitter rule sees them both out.
+  await expect(row("Dinner at Sam's")).toHaveCount(1);
+  await expect(row("Dinner at Sam's")).toContainText("Dinner at Sam's · Priya & Tom");
+  await expect(page.getByText(/both out tomorrow at 19:30 — no babysitter yet/)).toBeVisible();
+  // A change on Tom's own calendar shows within a minute, as his.
+  const t0 = Date.now();
+  await request.post("/api/practice/calendar", { data: { upsert: { externalId: "g-e2e-tom", calendar: "tom", title: "Boiler engineer", start: "2026-11-02T15:00:00Z", end: "2026-11-02T16:00:00Z", attendees: ["tom"], away: [] } } });
+  await expect(row("Boiler engineer")).toContainText("Boiler engineer · Tom");
+  expect(Date.now() - t0).toBeLessThan(60_000);
+  await evidence(page, "HOME-1-three-calendars");
+});
+
 test("[HOME-4][HOME-5] one tap dismisses a suggestion, on the iPad and on the phone straight away; nothing is overdue", async ({ page, browser }) => {
   await login(page);
   const phoneCtx = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
