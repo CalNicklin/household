@@ -53,6 +53,8 @@ export const zShopView = z.object({
   deliveryDate: zLocalDate.nullable(),
   changeUrl: z.string(),
   requests: z.array(zShoppingRequest),
+  /** HOU-157: false when no shopping helper is connected, so nothing is looked for. */
+  helperConnected: z.boolean(),
 });
 export type ShopView = z.infer<typeof zShopView>;
 

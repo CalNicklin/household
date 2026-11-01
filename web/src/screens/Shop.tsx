@@ -20,7 +20,9 @@ const STATUS_LINE: Record<ShoppingStatus, (r: ShoppingRequest) => string> = {
 const DISMISSABLE: ReadonlySet<ShoppingStatus> = new Set([ShoppingStatus.failed, ShoppingStatus.saved]);
 
 /** AUT-3: no exact match → one question with two or three options to tap. */
-function Request({ request }: { request: ShoppingRequest }) {
+function Request({ request, helperConnected }: { request: ShoppingRequest; helperConnected: boolean }) {
+  // HOU-157: with no helper connected nothing was looked for, whatever an older request says.
+  const status = !helperConnected && request.status === ShoppingStatus.failed ? ShoppingStatus.saved : request.status;
   const queryClient = useQueryClient();
   // HOU-148: a tap like any other (CH-8), so it is dismissed everywhere and the reply says what happened.
   const dismiss = () => {
@@ -30,7 +32,7 @@ function Request({ request }: { request: ShoppingRequest }) {
     void say({ text: name, ref: `shopping:${request.id}`, action: ActionKind.answer, value: sku }).then(() => queryClient.invalidateQueries());
   };
   return (
-    <BacklogRow title={request.item} meta={STATUS_LINE[request.status](request)} tone={request.status === ShoppingStatus.added ? "suggestion" : "muted"}>
+    <BacklogRow title={request.item} meta={STATUS_LINE[status](request)} tone={request.status === ShoppingStatus.added ? "suggestion" : "muted"}>
       {request.status === ShoppingStatus.needsChoice ? (
         <Row>
           {request.options.map((o) => (
@@ -70,7 +72,7 @@ export function ShopScreen() {
         <Section label="Asked for" tone="suggestion">
           <ListCard label="Asked for">
             {(data?.requests ?? []).map((r) => (
-              <Request key={r.id} request={r} />
+              <Request key={r.id} request={r} helperConnected={data?.helperConnected ?? true} />
             ))}
           </ListCard>
           {data?.requests.length === 0 ? <Text tone="muted">Nothing asked for yet.</Text> : null}
