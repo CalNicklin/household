@@ -84,3 +84,29 @@ test("[CAP-6][PRV-1] anything said adds to a list, and it shows on the other scr
   await evidence(phone, "CAP-6-said-on-the-ipad-seen-on-the-phone");
   await phoneCtx.close();
 });
+
+test("[CAP-6] on a slow connection a rename cannot be typed over while it saves, and words typed while an add saves are kept", async ({ page }) => {
+  await login(page);
+  await page.goto("/lists");
+  // A slow connection: every list write takes a moment to come back.
+  await page.route(/\/api\/trpc\/(renameListItem|addListItem)/, async (route) => {
+    await new Promise((resolve) => setTimeout(resolve, 800));
+    await route.continue();
+  });
+  const shopping = list(page, "Shopping");
+  await shopping.getByRole("button", { name: "bin bags", exact: true }).click();
+  const rename = shopping.getByRole("textbox", { name: "Rename bin bags" });
+  await rename.fill("black bin bags");
+  await rename.press("Enter");
+  // While it saves the field cannot be typed into, so nothing typed then is lost.
+  await expect(rename).not.toBeEditable();
+  await expect(rename).toHaveValue("black bin bags");
+  await expect(shopping.getByRole("button", { name: "black bin bags", exact: true })).toBeVisible();
+
+  const add = shopping.getByRole("textbox", { name: "Add an item to Shopping" });
+  await add.fill("Matches");
+  await add.press("Enter");
+  await add.fill("Candles");
+  await expect(shopping.getByRole("button", { name: "Matches", exact: true })).toBeVisible();
+  await expect(add).toHaveValue("Candles");
+});

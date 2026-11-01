@@ -103,6 +103,8 @@ export function CheckRow({
   const [error, setError] = useState<string | null>(null);
   const [confirming, setConfirming] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+  /** While a rename is saving the field is read-only, so nothing typed in the meantime can be lost. */
+  const [saving, setSaving] = useState(false);
   useEffect(() => {
     if (editing) inputRef.current?.select();
   }, [editing]);
@@ -113,13 +115,15 @@ export function CheckRow({
     setDraft(text);
   };
   const commit = async () => {
+    if (saving) return;
     const next = draft.trim();
     if (next === "" || next === text) return stop();
+    setSaving(true);
     const refused = await onRename(next);
-    if (refused === null) {
-      setEditing(false);
-      setError(null);
-    } else setError(refused);
+    setSaving(false);
+    if (refused !== null) return setError(refused);
+    setEditing(false);
+    setError(null);
   };
 
   return (
@@ -138,6 +142,8 @@ export function CheckRow({
             className="ds-check-row__input"
             aria-label={`Rename ${text}`}
             aria-invalid={error === null ? undefined : true}
+            aria-busy={saving}
+            readOnly={saving}
             value={draft}
             onChange={(e) => {
               setDraft(e.target.value);
