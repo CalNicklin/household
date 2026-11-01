@@ -72,8 +72,8 @@ services:
     mem_limit: *postgres-memory
     memswap_limit: *postgres-memory
     logging: *logging
-    environment:
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?run pnpm env:init --real first}
+    # Passed through by name from /srv/household/.env (generated there by `pnpm env:init --real`).
+    environment: [POSTGRES_PASSWORD]
     # Tuned small: one family's data, a few connections per domain.
     command:
       - postgres
