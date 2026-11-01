@@ -97,7 +97,7 @@ export class GoogleCalendarSource implements CalendarSource {
    * can be read, the sync fails.
    */
   async changes(syncTokens: Readonly<Record<string, string>>): Promise<CalendarChanges> {
-    const out: CalendarChanges = { upserts: [], deletedExternalIds: [], nextSyncTokens: {}, complete: true };
+    const out: CalendarChanges = { upserts: [], deletedExternalIds: [], nextSyncTokens: {}, sharedRead: true };
     let failure: unknown = null;
     let read = 0;
     for (const calendar of this.calendars) {
@@ -110,7 +110,7 @@ export class GoogleCalendarSource implements CalendarSource {
         read += 1;
       } catch (error) {
         failure = error;
-        out.complete = false;
+        if (calendar.owner === CalendarOwnerKind.shared) out.sharedRead = false;
         if (token !== null) out.nextSyncTokens[calendar.calendarId] = token;
         console.warn(JSON.stringify({ event: "calendar-read-failed", owner: calendar.owner, calendarId: calendar.calendarId, error: error instanceof Error ? error.message : String(error) }));
       }

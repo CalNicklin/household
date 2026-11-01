@@ -58,7 +58,7 @@ describe("Google Calendar source", () => {
     expect(server.requests[0]?.headers.authorization).toBe("Bearer access-1");
 
     const next = await cal.changes({ [FAMILY]: "s1" });
-    expect(next).toEqual({ upserts: [], deletedExternalIds: [`${FAMILY}/e1`], nextSyncTokens: { [FAMILY]: "s2" }, complete: true });
+    expect(next).toEqual({ upserts: [], deletedExternalIds: [`${FAMILY}/e1`], nextSyncTokens: { [FAMILY]: "s2" }, sharedRead: true });
     const nextUrl = new URL(server.requests[1]?.path ?? "", server.url);
     expect(nextUrl.searchParams.get("syncToken")).toBe("s1");
     expect(nextUrl.searchParams.get("timeMin")).toBeNull();
@@ -153,7 +153,10 @@ describe("Google Calendar source", () => {
     const chloe = { calendarId: "chloe@example.com", owner: "chloe" };
     const out = await source(server.url, [chloe, shared]).changes({ "chloe@example.com": "old" });
     expect(out.nextSyncTokens).toEqual({ "chloe@example.com": "old", [FAMILY]: "ok" });
-    expect(out.complete).toBe(false);
+    // Chloe's failing doesn't stop the shared calendar counting as read; the shared one failing does.
+    expect(out.sharedRead).toBe(true);
+    const sharedFails = await source(server.url, [{ calendarId: "chloe-shared", owner: "shared" }, { calendarId: "tom@example.com", owner: "tom" }]).changes({});
+    expect(sharedFails.sharedRead).toBe(false);
     await expect(source(server.url, [chloe]).changes({})).rejects.toThrow(/404/);
   });
 

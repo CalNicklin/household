@@ -92,7 +92,7 @@ async function handleMessageImpl(messageId: string): Promise<void> {
             deletedExternalIds: changes.deletedExternalIds,
             syncTokens: changes.nextSyncTokens,
             calendarIds: rt.ports.calendar.calendars.map((c) => c.calendarId),
-            complete: changes.complete,
+            sharedRead: changes.sharedRead,
           });
           return { ...applied, firstSync: Object.keys(tokens).length === 0 };
         },

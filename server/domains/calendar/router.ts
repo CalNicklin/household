@@ -105,8 +105,9 @@ export function calendarRouter(db: CalendarDb, timeZone: string) {
         await db.delete(schema.events).where(eq(schema.events.externalId, ext));
       }
       // A calendar the house no longer reads is dropped. Copies from before calendars were recorded
-      // (calendar_id '') go only once every calendar has been read, so a failed read never empties the screen.
-      const gone = input.complete ? input.calendarIds : [...input.calendarIds, ""];
+      // (calendar_id '') all came from the shared calendar: they go once it has been read in full, so a
+      // failed read of it never empties the screen, and another calendar failing never leaves them doubled.
+      const gone = input.sharedRead ? input.calendarIds : [...input.calendarIds, ""];
       const stale = await db.delete(schema.events).where(notInArray(schema.events.calendarId, gone)).returning();
       for (const s of stale) touch(s.start, s.end);
       const changedDates = [...changed].sort();

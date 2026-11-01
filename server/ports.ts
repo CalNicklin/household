@@ -14,8 +14,8 @@ export type CalendarChanges = {
   upserts: ExternalEvent[];
   deletedExternalIds: string[];
   nextSyncTokens: Record<string, string>;
-  /** Every calendar was read (none failed this time). */
-  complete: boolean;
+  /** The shared calendar(s) were read this time, or the house reads none. */
+  sharedRead: boolean;
 };
 
 /**

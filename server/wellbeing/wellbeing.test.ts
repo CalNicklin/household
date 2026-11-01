@@ -17,7 +17,7 @@ let h: TestHousehold;
 beforeAll(async () => {
   h = await testHousehold({ jobs: false });
   const changes = await h.ports.calendar.changes({});
-  await h.rt.system("t").calendar.applySync({ upserts: changes.upserts, deletedExternalIds: changes.deletedExternalIds, syncTokens: changes.nextSyncTokens, calendarIds: h.ports.calendar.calendars.map((c) => c.calendarId), complete: changes.complete });
+  await h.rt.system("t").calendar.applySync({ upserts: changes.upserts, deletedExternalIds: changes.deletedExternalIds, syncTokens: changes.nextSyncTokens, calendarIds: h.ports.calendar.calendars.map((c) => c.calendarId), sharedRead: changes.sharedRead });
 });
 afterAll(async () => h.close());
 
