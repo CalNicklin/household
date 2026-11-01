@@ -108,10 +108,6 @@ a:hover {
   max-width: 760px;
 }
 
-.ds-focus > .ds-card--focus {
-  max-width: 840px;
-}
-
 /* HOU-149: the composer and the house's answer stay in view however long the page is ("always present"). */
 .ds-footer {
   position: sticky;
@@ -254,6 +250,16 @@ a:hover {
   flex-direction: column;
 }
 
+/* HOU-153: a list with nothing in it is not drawn as an empty white bar. */
+.ds-card--list:empty {
+  display: none;
+}
+
+/* HOU-153: row cards lay themselves out by their own width (see the container query below). */
+.ds-card--fluid {
+  container-type: inline-size;
+}
+
 .ds-card--stack {
   display: flex;
   flex-direction: column;
@@ -385,6 +391,8 @@ a:hover {
 .ds-list-row__time {
   width: var(--size-target-time-column);
   flex-shrink: 0;
+  display: flex;
+  align-items: center;
   font-size: var(--size-body-small);
   font-weight: var(--weight-bold);
 }
@@ -1114,6 +1122,34 @@ a:hover {
   background: var(--color-ground);
 }
 
+/* ── Narrow cards (HOU-153) ─────────────────────────────────────────────────
+   A row card narrower than this (the iPad's right-hand column, or any phone) puts its actions under
+   the text, as on Phone.dc.html and Main.dc.html's "Could fit this week" card. A suggestion drops
+   its lead icon there, as on the Phone canvas; an alert keeps its icon beside the title. */
+
+@container (max-width: 519px) {
+  .ds-card__row {
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+  .ds-card__main {
+    flex: 1 1 0;
+  }
+  .ds-card__row > .ds-card__actions {
+    flex-basis: 100%;
+  }
+  .ds-card--alert .ds-card__lead {
+    width: auto;
+  }
+  .ds-card--suggestion .ds-card__lead {
+    display: none;
+  }
+  .ds-card--suggestion .ds-card__row,
+  .ds-card--suggestion .ds-card__main {
+    gap: var(--space-stack);
+  }
+}
+
 /* ── Phone: one column, nothing cut off (HOME-10) ───────────────────────── */
 
 @media (max-width: 899px) {
@@ -1152,20 +1188,8 @@ a:hover {
   .ds-section__label {
     font-size: var(--size-label-phone);
   }
-  .ds-card__row {
-    flex-wrap: wrap;
-  }
-  .ds-card__row {
-    gap: 12px;
-  }
   .ds-card__lead {
     width: auto;
-  }
-  .ds-card__main {
-    flex: 1 1 180px;
-  }
-  .ds-card--suggestion.ds-card__row > .ds-card__lead {
-    display: none;
   }
   .ds-card--suggestion,
   .ds-card--alert {
@@ -1173,6 +1197,10 @@ a:hover {
   }
   .ds-card__title {
     font-size: 18px;
+  }
+  /* HOU-153: a small title (alert, backlog pick) stays smaller than an item title, as on the Phone canvas. */
+  .ds-card__title--small {
+    font-size: var(--size-body-small);
   }
   .ds-card--focus {
     padding: 24px;
