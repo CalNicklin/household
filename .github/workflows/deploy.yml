@@ -40,20 +40,15 @@ jobs:
             echo "configured=false" >> "$GITHUB_OUTPUT"
             echo "::notice title=Deploy skipped::Add HOUSEHOLD_SSH_KEY, HOUSEHOLD_SSH_HOST and HOUSEHOLD_SSH_KNOWN_HOSTS (docs/OPERATIONS.md) to deploy."
           fi
-      # CI runs once per push and can finish out of order: only main's newest commit is ever deployed,
-      # so an older run finishing late never puts older code back on the server.
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: deploy/still-main-head.sh
+          sparse-checkout-cone-mode: false
+      # An older CI run finishing late never puts older code back on the server.
       - id: current
         env:
           GH_TOKEN: ${{ github.token }}
-          SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
-        run: |
-          main="$(gh api "repos/$GITHUB_REPOSITORY/commits/main" --jq .sha)"
-          if [ "$main" = "$SHA" ]; then
-            echo "current=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "current=false" >> "$GITHUB_OUTPUT"
-            echo "::notice title=Deploy skipped::$SHA is no longer main's head ($main); that commit's own run deploys it."
-          fi
+        run: deploy/still-main-head.sh "${{ github.event.workflow_run.head_sha || github.sha }}"
 
   image:
     needs: ready
@@ -92,14 +87,15 @@ jobs:
       contents: read
       packages: read
     steps:
-      # main may have moved on while the image built: check again, last thing before the server.
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: deploy/still-main-head.sh
+          sparse-checkout-cone-mode: false
+      # main may have moved on while the image built: the same check, last thing before the server.
       - id: current
         env:
           GH_TOKEN: ${{ github.token }}
-          SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
-        run: |
-          main="$(gh api "repos/$GITHUB_REPOSITORY/commits/main" --jq .sha)"
-          if [ "$main" = "$SHA" ]; then echo "current=true" >> "$GITHUB_OUTPUT"; else echo "::notice title=Deploy skipped::$SHA is no longer main's head ($main)."; fi
+        run: deploy/still-main-head.sh "${{ github.event.workflow_run.head_sha || github.sha }}"
       - name: Deploy over SSH
         if: steps.current.outputs.current == 'true'
         env:
