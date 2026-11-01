@@ -12,4 +12,8 @@ Closes LINEAR-ISSUE-ID
 - Screenshots of the journey on the preview (FB-4):
 - Entire checkpoint (QA-4):
 
+## Review
+
+> Fresh-reviewer findings (correctness and security) and what was done about each. Every medium and high is fixed; a low is fixed or its reason is given here.
+
 ## Assumptions

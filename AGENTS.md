@@ -5,7 +5,7 @@ Read `README.md` once. `VERIFICATIONS.md` is the only spec.
 ## Pick work
 1. Query Linear for issues in this project that are unblocked and unassigned. Take the lowest-numbered gate first, then anything else.
 2. Assign yourself. One cloud session per Linear issue; the session's branch is the issue's branch.
-3. Never open a second PR from a branch that already had one. Entire tracks a trail by head branch, and a reused branch belongs to a closed trail, so Entire never reviews the new PR.
+3. Never open a second PR from a branch that already had one: one PR per issue (QA-5).
 
 ## Make it true
 - Types and enumerated values go in `contracts/` first; schemas, routers and the UI take them from there.
@@ -21,8 +21,11 @@ Read `README.md` once. `VERIFICATIONS.md` is the only spec.
 ## Hand it over
 - One PR per issue. Commit messages end with the Entire checkpoint trailer; CI rejects commits without one.
 - PR body: the verification line verbatim, the evidence, anything you had to assume.
-- Entire reviews every PR: its trail's agents (Code review, Security review) review each push, and its gates post an `Entire Gates` check on the PR. Fix every finding.
-- Merge it yourself, with a merge commit, only when `Entire Gates` and `check` (CI running `pnpm check`) are both green on the PR's latest commit and it has no conflicts. Never bypass a gate. If `Entire Gates` says no trail tracks the branch, don't merge; report it.
+- Before merging, ask a fresh reviewer: the Agent tool, given none of your context, only the PR's diff against `origin/main` and the verification lines it claims. It runs a correctness review and a security review, following the `/code-review` and `/security-review` skills.
+- Fix every medium and high finding. Fix each low finding or note it in the PR body with the reason.
+- After a push that fixes findings, have a fresh reviewer re-review only the new commits, once. Don't loop.
+- The PR body gets a "Review" section listing every finding and what was done about it.
+- Merge it yourself, with a merge commit, only when `check` (CI running `pnpm check`) is green on the PR's latest commit, the Review section is in the body, and it has no conflicts. Never bypass a gate.
 - If a verification line is wrong or impossible, say so on the issue and stop. Do not reinterpret it.
 
 ## Never
