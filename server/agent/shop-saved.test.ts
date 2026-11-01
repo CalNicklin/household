@@ -1,4 +1,4 @@
-import { ActionKind, ShoppingStatus } from "@household/contracts";
+import { ActionKind, ActorKind, ShoppingStatus } from "@household/contracts";
 import { afterAll, beforeAll, describe, expect, test } from "vitest";
 import { NoShoppingHelper } from "../integrations/shopping-helper.ts";
 import { testHousehold, type TestHousehold } from "../testing/household.ts";
@@ -37,6 +37,8 @@ describe("HOU-148: a person dismisses a shopping request that went nowhere; it i
     const { scope } = await shop(["saffron"]);
     const id = scope.effects.long[0]?.requestId ?? "";
     await expect(h.rt.system("t").shopping.dismiss({ id })).rejects.toThrow(/person/);
+    // A job acting for nobody (a timer, an unknown sender) cannot dismiss; only one acting for a person can.
+    await expect(h.rt.as({ kind: ActorKind.agent, job: "job-nobody", onBehalfOf: null, message: "msg-nobody" }).shopping.dismiss({ id })).rejects.toThrow(/person/);
     const tap = jobScope(h.rt, "job-dismiss", "msg-dismiss", "tom", "app");
     expect(await respond(tap, `shopping:${id}`, ActionKind.notToday, null)).toBe("Okay, dismissed.");
     expect(tap.effects.replan).toEqual([localDate(h.ports.clock.now(), h.rt.timeZone)]);
