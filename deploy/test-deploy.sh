@@ -101,11 +101,13 @@ next="$(docker image inspect --format '{{index .RepoDigests 0}}' localhost:5000/
 docker image rm localhost:5000/household:next > /dev/null
 running="$(docker inspect -f '{{.Id}} {{.State.StartedAt}}' household-app-1)"
 cp "$work/srv/.env" "$work/env.good"
+n=0
 refused() { # <what> <expected line>: deploy $next with this .env; it must refuse and change nothing
-  set +e; "$lib/household-deploy.sh" "$next" < /dev/null > "$work/refused.log" 2>&1; rc=$?; set -e
-  [ "$rc" -eq 1 ] || { cat "$work/refused.log" >&2; fail "household-deploy took $1 (exit $rc)"; }
-  grep -q "\"event\":\"settings-refused\".*$2" "$work/refused.log" || { cat "$work/refused.log" >&2; fail "no settings-refused line for $1"; }
-  grep -q "refuses $work/srv/.env, so it was not started; the house keeps running localhost:5000/household@$digest" "$work/refused.log" || fail "household-deploy did not say the house keeps running for $1"
+  n=$((n + 1)); log="$work/refused-$n.log"
+  set +e; "$lib/household-deploy.sh" "$next" < /dev/null > "$log" 2>&1; rc=$?; set -e
+  [ "$rc" -eq 1 ] || { cat "$log" >&2; fail "household-deploy took $1 (exit $rc)"; }
+  grep -q "\"event\":\"settings-refused\".*$2" "$log" || { cat "$log" >&2; fail "no settings-refused line for $1"; }
+  grep -q "refuses $work/srv/.env, so it was not started; the house keeps running localhost:5000/household@$digest" "$log" || fail "household-deploy did not say the house keeps running for $1"
   [ "$(docker inspect -f '{{.Id}} {{.State.StartedAt}}' household-app-1)" = "$running" ] || fail "the running app was replaced or restarted for $1"
   [ "$(docker inspect -f '{{.State.Health.Status}}' household-app-1)" = healthy ] || fail "the app is not healthy after $1"
   [ "$(curl -sk --resolve localhost:443:127.0.0.1 https://localhost/healthz)" = ok ] || fail "healthz after $1"
@@ -119,7 +121,6 @@ sed 's/^MODEL_PROVIDER=.*/MODEL_PROVIDER=practice/' "$work/env.good" > "$work/sr
 refused "MODEL_PROVIDER=practice" "will not run on the practice model"
 sed 's/^ANTHROPIC_API_KEY=.*/ANTHROPIC_API_KEY=/' "$work/env.good" > "$work/srv/.env"
 refused "no ANTHROPIC_API_KEY" "MODEL_PROVIDER=anthropic needs ANTHROPIC_API_KEY"
-grep -q 'placeholder-not-a-key' "$work/refused.log" "$work/deploy"*.log && fail "a deploy printed the API key"
 
 step "HOU-160: install.sh's env-init fills in what an old .env lacks, changing nothing already there"
 grep -vE '^MODEL_(PROVIDER|ID)=' "$work/env.good" > "$work/srv/.env"
@@ -137,7 +138,8 @@ step "HOU-160: household-status says which model the running house uses"
 grep -qx "image: localhost:5000/household@$digest" "$work/status.log" || fail "household-status image"
 grep -qx "app: running healthy" "$work/status.log" || fail "household-status app"
 grep -qx "model: anthropic claude-opus-5-5 (ANTHROPIC_API_KEY set)" "$work/status.log" || fail "household-status model"
-grep -q 'placeholder-not-a-key' "$work/status.log" && fail "household-status printed the API key"
+# No deploy, refusal or status output ever carries the key.
+if grep -l 'placeholder-not-a-key' "$work"/*.log; then fail "the API key was printed"; fi
 docker logs household-app-1 2>&1 | grep -q '"event":"listening".*"model":"anthropic claude-opus-5-5 (ANTHROPIC_API_KEY set)"' || fail "the app did not log its model at start"
 
 step "a broken image never replaces a working one: household-deploy rolls back"
