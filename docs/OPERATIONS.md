@@ -91,8 +91,8 @@ SeaweedFS and the app have no host ports. The server never builds anything; CI b
 pushes it to GHCR.
 
 - **Shopping helper:** not on the VPS (Waitrose blocks data-centre addresses); it will run at home. Until
-  then each shopping request is recorded and fails at once, showing that nothing was added (nothing
-  retries it later), and the app says
+  then each shopping request is recorded and saved at once, shown as "Saved for when shopping is
+  connected" (nothing was looked for, and nothing retries it yet), and the app says
   `shopping (no helper: nothing is added)` at start.
 - **Hindsight:** the existing instance, not a second copy. It publishes only on the host's 127.0.0.1:8888,
   which no container can reach, so the app joins Hindsight's own Docker network and calls
