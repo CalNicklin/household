@@ -310,3 +310,11 @@ export function compose(input: ComposeInput): Block[] {
 export function shoppingForPlan(requests: readonly ShoppingRequest[], helperConnected: boolean): ShoppingRequest[] {
   return helperConnected ? [...requests] : [];
 }
+
+/**
+ * HOU-157: a "Couldn't find" or "Added to the shop" card is news about the shop, not something the house
+ * suggests: its only action is Dismiss. The "Which one?" question (AUT-3) is a real suggestion.
+ */
+export function isShopNews(b: Block): boolean {
+  return b.type === BlockType.suggestion && b.ref.startsWith("shopping:") && b.actions.every((a) => a.kind === ActionKind.notToday);
+}

@@ -2,6 +2,7 @@ import { DBOS } from "@dbos-inc/dbos-sdk";
 import { ActionKind, BlockType, Limits, type LocalDate, TimerKind, Urgency } from "@household/contracts";
 import { updateLearning } from "../learning/learn.ts";
 import { notify } from "../notify/notify.ts";
+import { isShopNews } from "../planner/compose.ts";
 import { gatherFacts } from "../planner/gather.ts";
 import { adultsOf } from "../rules/day.ts";
 import { allRules, recipientsHomeAt } from "../rules/nudges.ts";
@@ -48,12 +49,16 @@ async function weeklyReport(jobId: string, today: LocalDate): Promise<void> {
       const api = rt.system("weekly");
       const from = addLocalDays(today, -7);
       const suggested = new Set<string>();
+      // HOU-157: shop news reports on the shop; it was not suggested, and dismissing it is not a dismissal.
+      const shopNews = new Set<string>();
       for (let d = 0; d < 7; d++) {
         const p = await api.plans.latest({ date: addLocalDays(from, d) });
-        // HOU-157: a shop card reports on the shop; it is not something the house suggested.
-        for (const b of p?.blocks ?? []) if ((b.type === BlockType.suggestion || b.type === BlockType.backlogPick || b.type === BlockType.alert) && !b.id.startsWith("shopping:")) suggested.add(b.id);
+        for (const b of p?.blocks ?? []) {
+          if (isShopNews(b)) shopNews.add(b.id);
+          else if (b.type === BlockType.suggestion || b.type === BlockType.backlogPick || b.type === BlockType.alert) suggested.add(b.id);
+        }
       }
-      const responses = await api.plans.responsesBetween({ from, to: today });
+      const responses = (await api.plans.responsesBetween({ from, to: today })).filter((r) => !shopNews.has(r.ref));
       const accepted = responses.filter((r) => r.action === ActionKind.accept || r.action === ActionKind.done).length;
       const dismissed = responses.filter((r) => r.action === ActionKind.notToday || r.action === ActionKind.notHelpful).length;
       const jobs = await api.jobs.jobsBetween({ from: startOfLocalDay(from, rt.timeZone).toISOString(), to: startOfLocalDay(today, rt.timeZone).toISOString() });

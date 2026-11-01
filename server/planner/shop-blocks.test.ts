@@ -3,7 +3,8 @@ import { afterAll, beforeAll, describe, expect, test } from "vitest";
 import { NoShoppingHelper } from "../integrations/shopping-helper.ts";
 import { eventually, testHousehold, type TestHousehold } from "../testing/household.ts";
 import { localDate } from "../time.ts";
-import { shoppingForPlan } from "./compose.ts";
+import { applyResponses } from "../views/screen.ts";
+import { isShopNews, shoppingForPlan } from "./compose.ts";
 import { gatherFacts, oneThingCandidates } from "./gather.ts";
 
 const shopBlocks = (blocks: readonly Block[]) => blocks.filter((b) => "ref" in b && b.ref.startsWith("shopping:"));
@@ -71,7 +72,22 @@ describe("HOU-157: a shop block that does show (a helper is connected) has a one
     await h.wait(accepted);
     expect((await api.learning.events()).length).toBe(events);
     expect((await api.jobs.replies({ person: "priya" })).some((r) => r.text === "Okay, dismissed.")).toBe(true);
-    await eventually(async () => (await added()) === undefined || (await api.plans.responsesOn({ date })).some((r) => r.ref === ref));
+    // The screen shows the plan through today's responses: the dismissed card is gone from it.
+    const closed = new Set((await api.plans.responsesOn({ date })).filter((r) => r.action === ActionKind.notToday).map((r) => r.ref));
+    const shown = applyResponses((await api.plans.latest({ date }))?.blocks ?? [], closed);
+    expect(shown.some((b) => "ref" in b && b.ref === ref)).toBe(false);
+  });
+
+  test("[AUT-3][MOM-2] the 'Which one?' question is a real suggestion, not shop news, so it can still be the one thing", async () => {
+    const date = localDate(h.ports.clock.now(), h.rt.timeZone);
+    const api = h.rt.system("t");
+    await h.sayAndWait("we need some oatly");
+    const question = async () => shopSuggestions((await api.plans.latest({ date }))?.blocks ?? []).find((b) => b.title === "Which oatly?");
+    await eventually(async () => (await question()) !== undefined);
+    const q = await question();
+    expect(q === undefined ? true : isShopNews(q)).toBe(false);
+    const candidates = await oneThingCandidates(h.rt, await gatherFacts(h.rt, date, 2), date, h.ports.clock.now(), new Set(), "priya");
+    expect(candidates.map((c) => c.ref)).toContain(q?.ref);
   });
 
   test("[HOME-4] shoppingForPlan keeps every request with a helper and none without", () => {
