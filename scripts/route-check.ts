@@ -25,7 +25,7 @@ const zPhrases = z.object({ phrases: z.array(z.object({ text: z.string(), expect
 const { phrases } = zPhrases.parse(JSON.parse(readFileSync(new URL("../practice/phrases/routing.json", import.meta.url), "utf8")));
 
 const pg = await ensurePostgres();
-if (!["localhost", "127.0.0.1", "::1"].includes(new URL(pg.url).hostname)) throw new Error("route-check only runs against a Postgres on this machine");
+if (!["localhost", "127.0.0.1", "[::1]"].includes(new URL(pg.url).hostname)) throw new Error("route-check only runs against a Postgres on this machine");
 const model = { MODEL_PROVIDER: process.env["MODEL_PROVIDER"] ?? "anthropic", MODEL_ID: process.env["MODEL_ID"] ?? "claude-opus-5-5" };
 const env = loadEnv({ DATABASE_URL: pg.url, DB_PREFIX: `routecheck_${model.MODEL_ID.replace(/\W/g, "_")}`, PRACTICE: "true", ...model });
 await resetPractice(env);
