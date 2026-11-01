@@ -34,7 +34,8 @@ export async function handleTelegramUpdate(rt: Runtime, raw: unknown): Promise<v
   if (update === null) return;
   const person = (await identify(rt, Channel.telegram, update.fromId)) ?? (await identify(rt, Channel.telegram, update.chatId));
   if (person === null) {
-    await dropUnknown(rt, Channel.telegram, update.chatId);
+    // The sender's own user ID (the chat's, in a private chat), so an adult can find theirs (household-telegram senders).
+    await dropUnknown(rt, Channel.telegram, update.fromId);
     return;
   }
   const base = { household: rt.env.HOUSEHOLD_ID, person, channel: Channel.telegram, dedupeKey: `telegram:update:${update.updateId}`, receivedAt: rt.ports.clock.now().toISOString() };

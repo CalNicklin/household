@@ -6,6 +6,8 @@ import {
   zAcceptMessageInput,
   zAcceptMessageOutput,
   zDropInput,
+  zDroppedSender,
+  zDroppedSendersInput,
   zEnqueueNotificationInput,
   zIdInput,
   zInboundMessage,
@@ -107,6 +109,17 @@ export function jobsRouter(db: JobsDb) {
     dropped: readProcedure.output(z.array(z.object({ channel: z.string(), address: z.string(), reason: z.string() }))).query(async () =>
       db.select({ channel: schema.dropped.channel, address: schema.dropped.address, reason: schema.dropped.reason }).from(schema.dropped),
     ),
+    /** CH-3: each sender dropped on a channel, newest first, so an adult can find their own ID on the server. */
+    droppedSenders: readProcedure.input(zDroppedSendersInput).output(z.array(zDroppedSender)).query(async ({ input }) => {
+      const lastAt = sql<Date>`max(${schema.dropped.at})`.mapWith(schema.dropped.at);
+      const rows = await db
+        .select({ address: schema.dropped.address, lastAt, times: sql<number>`count(*)`.mapWith(Number) })
+        .from(schema.dropped)
+        .where(eq(schema.dropped.channel, input.channel))
+        .groupBy(schema.dropped.address)
+        .orderBy(desc(lastAt));
+      return rows.map((r) => ({ address: r.address, lastAt: iso(r.lastAt), times: r.times }));
+    }),
 
     startJob: systemProcedure.input(zJobStartInput).mutation(async ({ ctx, input }) => {
       const message = await db.query.messages.findFirst({ where: eq(schema.messages.id, input.messageId) });
