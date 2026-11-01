@@ -101,6 +101,12 @@ describe("a new or quiet house", () => {
     expect(latest?.pick?.title).toBe("Ring the dentist");
     expect(latest?.pick?.why).toMatch(/oldest quick job|fifteen minutes/);
   });
+
+  test("[HOME-3] (HOU-149) saying a job redraws today at once, so 'the backlog is empty' is never left up", async () => {
+    const ids = (await screenView(h.rt, "priya", today())).blocks.map((b) => b.id);
+    expect(ids).not.toContain("start:backlog");
+    expect(ids).toContain("start:calendar");
+  });
 });
 
 describe("first-day blocks", () => {
@@ -110,3 +116,4 @@ describe("first-day blocks", () => {
     expect(firstDayBlocks({ calendarConnected: false, backlogItems: 3 }).map((b) => b.id)).toEqual(["start:calendar", "start:ask"]);
   });
 });
+

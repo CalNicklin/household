@@ -34,6 +34,8 @@ export function houseTools(scope: JobScope) {
       const hints = await rt.system("tags").household.tagHints();
       const tags = input.tags !== undefined && input.tags.length > 0 ? input.tags : guessTags(input.text, hints);
       const item = await api.backlog.create({ text: input.text, tags, createdVia: scope.channel, sourceMessage: scope.messageId });
+      // HOU-149: today's plan says whether the backlog is empty ("Getting started"), so redraw it now.
+      replanToday();
       return { id: item.id, tags: item.tags, say: `Added to the backlog: ${item.text}.` };
     }),
   });
