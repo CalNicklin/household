@@ -15,13 +15,12 @@ export function WeekScreen() {
       <Header title="This week" line="What's fixed, and what could fit" nav={navFor("/week")} />
       <Stack>
         {days.length === 0 && !week.isPending ? <Text tone="muted">Nothing planned for the week yet.</Text> : null}
-        {/* The first day is always today (server/views/week.ts). */}
-        {days.map((day, i) => {
+        {days.map((day) => {
           // HOU-153: filter first, so a day whose blocks were all dismissed still says so.
           const shown = day.blocks.filter((b) => !handlers.isHidden(b));
           return (
             <Section key={day.date} label={day.label}>
-              {shown.length === 0 ? <Text tone="muted">Nothing fixed.</Text> : <BlockList blocks={shown} handlers={handlers} today={i === 0} />}
+              {shown.length === 0 ? <Text tone="muted">Nothing fixed.</Text> : <BlockList blocks={shown} handlers={handlers} today={day.today} />}
             </Section>
           );
         })}

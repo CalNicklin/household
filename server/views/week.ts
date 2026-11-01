@@ -21,7 +21,7 @@ export async function weekView(rt: Runtime, _person: string): Promise<WeekView> 
     const blocks =
       saved?.blocks ??
       compose({ date, now, facts, rules: allRules(facts, date, now).items, closed, pick: null, oneThing: null, question: null, screenNotes: [], shopping: [], avoid: new Set(), otherAdult: otherAdultOf(facts), fill: null });
-    days.push({ date, label: longDate(date), blocks: applyResponses(blocks, closed).filter((b) => b.type !== "composer" && b.type !== "context" && b.section !== Section.start) });
+    days.push({ date, label: longDate(date), today: date === today, blocks: applyResponses(blocks, closed).filter((b) => b.type !== "composer" && b.type !== "context" && b.section !== Section.start) });
   }
   return { days };
 }
