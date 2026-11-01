@@ -58,7 +58,7 @@ const PROVIDER_KEY: Record<ModelProvider, string | null> = {
   [ModelProvider.openai]: "OPENAI_API_KEY",
 };
 
-/** HOU-160 / PRV-6: settings the real house will not start with; `refuseOnBadSettings` turns it into one log line. */
+/** HOU-160 / PRV-6: settings the real house will not start with; `loadEnvOrExit` turns it into one log line and exit 78. */
 class SettingsRefused extends Error {}
 
 /** Exit code for refused settings (sysexits' EX_CONFIG); household-deploy reads it to keep the running house. */
