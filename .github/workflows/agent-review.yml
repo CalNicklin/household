@@ -17,7 +17,9 @@
 name: agent-review
 on:
   pull_request:
-    types: [opened, synchronize, reopened, ready_for_review]
+    # `edited` too: a changed base branch (a check's result belongs to the head commit, so a review made
+    # against another base would otherwise still count) or description (part of what is reviewed).
+    types: [opened, synchronize, reopened, ready_for_review, edited]
 
 # The latest push is the one that counts: a newer one cancels a review still running.
 concurrency:

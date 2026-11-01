@@ -571,7 +571,9 @@ in three stages: Entire's code, security and slop reviews, whose prompts are `.g
 with the stage's confidence (0.5 to 1; anything lower is dropped, as the prompts say). The
 `agent-review` job comments each new finding on its line, replies on a finding's comment when it is
 settled, keeps one summary comment (verdict, open and settled findings, the slop rating, the cost) up to
-date in place, and **fails while any medium or high finding is open**. A low never blocks. A finding on
+date in place, and **fails while any medium or high finding is open**. A low never blocks. It runs
+again when the PR's base branch or description is edited, since a check's result belongs to the head
+commit and would otherwise outlive a change of base. A finding on
 a file or line outside the diff, or about the PR as a whole, is posted as a comment on the PR instead.
 A PR whose diff is over the limit (`reviewMaxDiffChars`, with the lockfile, `evidence/` and `design/`
 left out) fails the review: split it.

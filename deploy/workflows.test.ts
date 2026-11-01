@@ -64,7 +64,7 @@ const zJob = z.looseObject({ if: z.string(), permissions: z.record(z.string(), z
 const review = (() => {
   const w = workflows.find((x) => x.file === "agent-review.yml");
   if (w === undefined) throw new Error("no agent-review.yml");
-  const doc = z.looseObject({ permissions: z.record(z.string(), z.string()), jobs: z.object({ review: zJob, "agent-review": zJob }) }).parse(parse(w.text));
+  const doc = z.looseObject({ on: z.unknown(), permissions: z.record(z.string(), z.string()), jobs: z.object({ review: zJob, "agent-review": zJob }) }).parse(parse(w.text));
   return { text: w.text, ...doc };
 })();
 
@@ -87,6 +87,11 @@ const decide = (run: string, hasReview: boolean, baseRef: string) => {
 };
 
 describe("HOU-151 the agent review workflow", () => {
+  it("reviews again when a PR's base branch or description changes, not only on a push", () => {
+    const on = z.object({ pull_request: z.object({ types: z.array(z.string()) }) }).parse(review.on);
+    expect(on.pull_request.types).toEqual(expect.arrayContaining(["opened", "synchronize", "reopened", "edited"]));
+  });
+
   it("runs for this repository's PRs only, with no permission unless a job asks for it", () => {
     expect(review.permissions).toEqual({});
     for (const job of Object.values(review.jobs)) expect(job.if).toContain("github.event.pull_request.head.repo.full_name == github.repository");
