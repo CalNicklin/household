@@ -3,18 +3,21 @@ import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "n
 
 /**
  * PLT-8 / PRV-6: generate every secret docker compose needs, at random, into `.env` and `.secrets/`
- * (both git-ignored). Nothing secret has a default in the repo. Re-running keeps existing values.
+ * (both git-ignored). Nothing secret has a default in the repo. Re-running keeps every existing line
+ * as it is and only adds the settings `.env` lacks (HOU-160: `deploy/install.sh` runs it on every run, so a
+ * house set up before MODEL_PROVIDER existed gets it). A setting written empty (`NAME=`) counts as lacking.
  *   pnpm env:init            → a practice household (the default)
  *   pnpm env:init --real     → the real house: PRACTICE=false; then fill in the credentials in .env
  */
 const real = process.argv.includes("--real");
 const random = (bytes = 24) => randomBytes(bytes).toString("base64url");
+const lines = existsSync(".env") ? readFileSync(".env", "utf8").split("\n") : [];
+if (lines.at(-1) === "") lines.pop();
 const existing = new Map<string, string>();
-if (existsSync(".env"))
-  for (const line of readFileSync(".env", "utf8").split("\n")) {
-    const m = /^([A-Z0-9_]+)=(.*)$/.exec(line);
-    if (m?.[1] !== undefined && m[2] !== undefined && m[2] !== "") existing.set(m[1], m[2]);
-  }
+for (const line of lines) {
+  const m = /^([A-Z0-9_]+)=(.*)$/.exec(line);
+  if (m?.[1] !== undefined && m[2] !== undefined && m[2] !== "") existing.set(m[1], m[2]);
+}
 const keep = (name: string, make: () => string) => existing.get(name) ?? make();
 
 const values: Record<string, string> = {
@@ -38,8 +41,14 @@ const values: Record<string, string> = {
   PRACTICE_SUPERMARKET_PASSWORD: keep("PRACTICE_SUPERMARKET_PASSWORD", () => random()),
   SUPERMARKET_SECRET_FILE: keep("SUPERMARKET_SECRET_FILE", () => (real ? "./.secrets/waitrose.json" : "./.secrets/supermarket.json")),
 };
-const rest = [...existing.entries()].filter(([k]) => !(k in values)).map(([k, v]) => `${k}=${v}`);
-writeFileSync(".env", `${[...Object.entries(values).map(([k, v]) => `${k}=${v}`), ...rest].join("\n")}\n`, { mode: 0o600 });
+const added = Object.keys(values).filter((name) => !existing.has(name));
+for (const name of added) {
+  const line = `${name}=${values[name]}`;
+  const empty = lines.flatMap((l, i) => (l === `${name}=` ? [i] : []));
+  if (empty.length === 0) lines.push(line);
+  for (const i of empty) lines[i] = line;
+}
+writeFileSync(".env", `${lines.join("\n")}\n`, { mode: 0o600 });
 
 mkdirSync(".secrets", { recursive: true, mode: 0o700 });
 writeFileSync(
@@ -52,6 +61,8 @@ if (!real) writeFileSync(".secrets/supermarket.json", JSON.stringify({ url: "htt
 console.log(
   [
     `wrote .env and .secrets/ (${real ? "the real house" : "a practice household"})`,
+    // Names only, never values: install.sh prints this line.
+    `added to .env: ${added.length === 0 ? "nothing" : added.join(", ")}`,
     "The shopping helper runs as uid 1001 and refuses a login file anyone else can read:",
     `  sudo chown 1001 ${values["SUPERMARKET_SECRET_FILE"]} && chmod 600 ${values["SUPERMARKET_SECRET_FILE"]}`,
     real ? "Now fill in ANTHROPIC_API_KEY, TELEGRAM_BOT_TOKEN, the Google settings and the Waitrose login file (see .env.example)." : "",

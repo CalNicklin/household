@@ -15,6 +15,8 @@ import { OpenMeteoWeather } from "./weather-open-meteo.ts";
 
 const clock = { now: () => new Date("2026-11-02T07:00:00Z") };
 const options = { timeZone: "Europe/London", personForEmail: () => null };
+// HOU-160: the real house always runs on a real model, with its key.
+const realModel = { MODEL_PROVIDER: "anthropic", MODEL_ID: "claude-opus-5-5", ANTHROPIC_API_KEY: "placeholder-not-a-key" };
 
 describe("real ports", () => {
   it("[QA-9] with nothing configured, every credentialed port falls back to the practice household and says so", () => {
@@ -44,6 +46,7 @@ describe("real ports", () => {
       CALENDAR_WEBHOOK_TOKEN: "test-calendar",
       MCP_TOKEN: "test-mcp",
       HELPER_TOKEN: "test-helper",
+      ...realModel,
     });
     const { ports, missing } = realPorts(env, clock, options);
     expect(ports.calendar).toBeInstanceOf(GoogleCalendarSource);
@@ -56,7 +59,7 @@ describe("real ports", () => {
   });
 
   it("[PLT-8] the real house with no shopping helper runs, and saves each request (nothing looked for) instead of using a practice basket", async () => {
-    const real = { PRACTICE: "false", SESSION_SECRET: "s", STORAGE_KEY: "ab".repeat(32), TELEGRAM_WEBHOOK_SECRET: "t", EMAIL_WEBHOOK_SECRET: "e", CALENDAR_WEBHOOK_TOKEN: "c", MCP_TOKEN: "m", HELPER_TOKEN: "h" };
+    const real = { PRACTICE: "false", SESSION_SECRET: "s", STORAGE_KEY: "ab".repeat(32), TELEGRAM_WEBHOOK_SECRET: "t", EMAIL_WEBHOOK_SECRET: "e", CALENDAR_WEBHOOK_TOKEN: "c", MCP_TOKEN: "m", HELPER_TOKEN: "h", ...realModel };
     const { ports, missing } = realPorts(loadEnv(real), clock, options);
     expect(ports.shopping).toBeInstanceOf(NoShoppingHelper);
     expect(missing).toContain("shopping (no helper: nothing is added)");
@@ -67,10 +70,10 @@ describe("real ports", () => {
     expect(await ports.shopping.basket()).toEqual({ items: [], deliveryDate: null, changeUrl: "" });
   });
 
-  it("[PLT-9] the real house on the default practice model says so at start; with a real provider it does not", () => {
+  it("[PLT-9][HOU-160] the real house never reaches its ports on the practice model: its settings are refused first", () => {
     const real = { PRACTICE: "false", SESSION_SECRET: "s", STORAGE_KEY: "ab".repeat(32), TELEGRAM_WEBHOOK_SECRET: "t", EMAIL_WEBHOOK_SECRET: "e", CALENDAR_WEBHOOK_TOKEN: "c", MCP_TOKEN: "m", HELPER_TOKEN: "h" };
-    expect(realPorts(loadEnv(real), clock, options).missing).toContain("model (MODEL_PROVIDER is practice: messages are read by the practice model's patterns)");
-    expect(realPorts(loadEnv({ ...real, MODEL_PROVIDER: "anthropic", MODEL_ID: "claude-opus-5-5" }), clock, options).missing.some((m) => m.startsWith("model"))).toBe(false);
+    expect(() => loadEnv(real)).toThrow(/will not run on the practice model/);
+    expect(realPorts(loadEnv({ ...real, ...realModel }), clock, options).missing.some((m) => m.startsWith("model"))).toBe(false);
   });
 
   it("[HOU-147] after Google refuses the refresh token, a newly copied google.json is read without a restart", async () => {

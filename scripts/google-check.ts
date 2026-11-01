@@ -1,10 +1,10 @@
-import { loadEnv } from "../server/env.ts";
+import { loadEnvOrExit } from "../server/env.ts";
 import { realPorts } from "../server/integrations/index.ts";
 import { createRuntime } from "../server/runtime.ts";
 import { googleCheck } from "./google/check.ts";
 
 /** HOU-147: what `sudo household-google check` runs, in the app's image with the house's settings. */
-const env = loadEnv();
+const env = loadEnvOrExit();
 if (env.PRACTICE) {
   console.error("google:check is for the real house (PRACTICE=false); the practice household has no Google");
   process.exit(2);
