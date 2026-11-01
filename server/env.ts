@@ -59,10 +59,10 @@ const PROVIDER_KEY: Record<ModelProvider, string | null> = {
 };
 
 /** HOU-160 / PRV-6: settings the real house will not start with; `refuseOnBadSettings` turns it into one log line. */
-export class SettingsRefused extends Error {}
+class SettingsRefused extends Error {}
 
 /** Exit code for refused settings (sysexits' EX_CONFIG); household-deploy reads it to keep the running house. */
-export const SETTINGS_REFUSED_EXIT = 78;
+const SETTINGS_REFUSED_EXIT = 78;
 
 /** Which model the house uses and whether its key is there (never the key), for logs and `household-status`. */
 export function modelStatus(env: Pick<Env, "MODEL_PROVIDER" | "MODEL_ID">, source: Record<string, string | undefined> = process.env): string {
