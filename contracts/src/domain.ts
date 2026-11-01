@@ -139,8 +139,8 @@ export const zCalendarEvent = z.object({
   /** Someone has the kids alone during this event (for WB-1). */
   soloWithKids: z.string().nullable(),
   /**
-   * HOME-1: whose calendars it is on, in the configured order: person IDs and/or `shared`
-   * (CalendarOwnerKind). An event on several calendars is one event with every owner here.
+   * HOME-1: whose calendars it is on: `shared` (CalendarOwnerKind) first, then person IDs in
+   * alphabetical order. An event on several calendars is one event with every owner here.
    */
   calendars: z.array(z.string()),
 });

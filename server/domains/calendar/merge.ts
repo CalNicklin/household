@@ -2,7 +2,7 @@ import { type CalendarCopy, type CalendarEvent, CalendarOwnerKind } from "@house
 
 export type StoredCopy = CalendarCopy & { id: string };
 
-/** Shared calendar first (it carries the household's own wording), then people in name order. */
+/** Shared calendar first (it carries the household's own wording), then person IDs alphabetically. */
 const ownerRank = (owner: string): string => (owner === CalendarOwnerKind.shared ? "" : owner);
 const byOwner = (a: StoredCopy, b: StoredCopy): number => ownerRank(a.owner).localeCompare(ownerRank(b.owner)) || a.externalId.localeCompare(b.externalId);
 
@@ -18,8 +18,9 @@ const union = (lists: readonly (readonly string[])[]): string[] => {
  *   Chloe, or a copy on the shared calendar) are one event, with every owner's people on it.
  * - Nothing else is matched: a free/busy-only copy (no uid, no title) stands alone as "Busy" for its
  *   owner, even at the same time as someone else's event, so "both going" is never guessed.
- * - The title, times and solo flag come from the shared calendar's copy if there is one, else from the
- *   first full copy; attendees and who is away are the union of every copy; it is work if any copy is.
+ * - The title and times come from the shared calendar's copy if there is one, else from the first full
+ *   copy; the solo flag from that copy, else the first other copy that has one; attendees and who is
+ *   away are the union of every copy; it is work if any copy is.
  */
 export function mergeCopies(copies: readonly StoredCopy[]): CalendarEvent[] {
   const groups = new Map<string, StoredCopy[]>();
@@ -31,10 +32,10 @@ export function mergeCopies(copies: readonly StoredCopy[]): CalendarEvent[] {
   }
   const events: CalendarEvent[] = [];
   for (const group of groups.values()) {
-    const sorted = [...group].sort(byOwner);
-    const primary = sorted.find((c) => !c.busy) ?? sorted[0];
+    // Already in owner order: the copies were sorted before grouping.
+    const primary = group.find((c) => !c.busy) ?? group[0];
     if (primary === undefined) continue;
-    const ordered = [primary, ...sorted.filter((c) => c !== primary)];
+    const ordered = [primary, ...group.filter((c) => c !== primary)];
     events.push({
       id: primary.id,
       externalId: primary.uid ?? primary.externalId,
@@ -46,7 +47,7 @@ export function mergeCopies(copies: readonly StoredCopy[]): CalendarEvent[] {
       away: union(ordered.map((c) => c.away)),
       work: group.some((c) => c.work),
       soloWithKids: ordered.find((c) => c.soloWithKids !== null)?.soloWithKids ?? null,
-      calendars: union([sorted.map((c) => c.owner)]),
+      calendars: [...new Set(group.map((c) => c.owner))],
     });
   }
   return events.sort((a, b) => a.start.localeCompare(b.start) || a.externalId.localeCompare(b.externalId));
