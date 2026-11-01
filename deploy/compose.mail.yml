@@ -11,6 +11,10 @@ x-memory:
   mail: &mail-memory 128m
 
 services:
+  # The app also joins the receiver's own network, the only thing the receiver can reach in the house.
+  app:
+    networks: [default, mailhook]
+
   caddy:
     environment:
       MAIL_DOMAIN: ${MAIL_DOMAIN:?}
@@ -42,6 +46,9 @@ services:
       - /run/mail-state:size=1m,mode=0700,uid=10001
     volumes:
       - caddy-data:/caddy-data:ro
+    # Its own network, shared only with the app: it parses mail from the internet, so it gets no route to
+    # Postgres, object storage or Caddy. (The network reaches the internet, for the DNS of SPF and DKIM.)
+    networks: [mailhook]
     environment:
       MAIL_DOMAIN: ${MAIL_DOMAIN:?}
       EMAIL_WEBHOOK_URL: http://app:3001/webhooks/email
@@ -53,3 +60,6 @@ services:
       interval: 30s
       start_period: 20s
       retries: 3
+
+networks:
+  mailhook: {}

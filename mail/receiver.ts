@@ -1,11 +1,12 @@
 import { createHash } from "node:crypto";
-import { type InboundEmail, Limits } from "@household/contracts";
-import { authenticate, type DNSResolver } from "mailauth";
+import type { Socket } from "node:net";
+import { type InboundEmail, Limits, SenderProof } from "@household/contracts";
+import { authenticate, type AuthenticateResult, type DNSResolver } from "mailauth";
 import { simpleParser } from "mailparser";
 import { SMTPServer, type SMTPServerDataStream, type SMTPServerSession } from "smtp-server";
 import { z } from "zod";
 import { saveConfirmation } from "./confirmation.ts";
-import { forwardingConfirmationCode, provenSenders } from "./verify.ts";
+import { forwardingConfirmationCode, type ProvenSender, provenSenders } from "./verify.ts";
 
 /**
  * HOU-150: the house's own mail receiver. It takes mail for exactly one address, orders@<domain>, and
@@ -14,8 +15,8 @@ import { forwardingConfirmationCode, provenSenders } from "./verify.ts";
  * switched off, so there is nothing to relay through even with a login.
  *
  * Unproven mail is answered 250 and dropped: refusing it would make the sending server bounce it to
- * the envelope sender, who may be anyone. Only when the app can't be reached is the answer 451, so a
- * real forward is tried again later.
+ * the envelope sender, who may be anyone. The answer is 451 (try again later) only when the receiver
+ * couldn't decide: a DNS lookup failed for now, the checks ran out of time, or the app can't be reached.
  */
 export type ReceiverOptions = {
   /** The receiver's own host name, e.g. orders.example.com; mail is taken for orders@ it only. */
@@ -26,7 +27,7 @@ export type ReceiverOptions = {
   stateDir: string;
   /** STARTTLS with this certificate; none until Caddy has one (never a self-signed one). */
   tls?: { key: Buffer; cert: Buffer } | undefined;
-  /** DNS for SPF, DKIM and DMARC; the system resolver unless a test gives one. */
+  /** DNS for SPF, DKIM, DMARC and ARC; the system resolver unless a test gives one. */
   resolver?: DNSResolver | undefined;
 };
 
@@ -34,10 +35,9 @@ const zAnswer = z.object({ outcome: z.string() });
 type SmtpError = Error & { responseCode: number };
 const smtpError = (responseCode: number, message: string): SmtpError => Object.assign(new Error(message), { responseCode });
 const log = (event: string, fields: Record<string, unknown> = {}) => console.info(JSON.stringify({ event, ...fields }));
-
-function recipientFor(domain: string): string {
-  return `orders@${domain}`.toLowerCase();
-}
+const recipientFor = (domain: string): string => `orders@${domain}`.toLowerCase();
+/** The container's own healthcheck connects from here; anything else counts as the internet. */
+const isHealthcheck = (address: string): boolean => address === "127.0.0.1" || address === "::1";
 
 // One email is checked and parsed at a time, whatever the number of sessions.
 let queue: Promise<unknown> = Promise.resolve();
@@ -50,7 +50,7 @@ async function take(options: ReceiverOptions, stream: SMTPServerDataStream, sess
     log("mail-refused-size");
     return smtpError(552, "5.3.4 message too big");
   }
-  const handled = queue.then(() => receive(options, raw, session));
+  const handled = queue.then(() => withDeadline(receive(options, raw, session)));
   queue = handled.catch(() => undefined);
   try {
     await handled;
@@ -61,15 +61,26 @@ async function take(options: ReceiverOptions, stream: SMTPServerDataStream, sess
   }
 }
 
+function withDeadline<T>(work: Promise<T>): Promise<T> {
+  let timer: NodeJS.Timeout | undefined;
+  const deadline = new Promise<never>((_, reject) => {
+    // limit: inboundEmailCheckMs
+    timer = setTimeout(() => reject(new Error("the checks took too long")), Limits.inboundEmailCheckMs.value);
+  });
+  return Promise.race([work, deadline]).finally(() => clearTimeout(timer));
+}
+
 export function createReceiver(options: ReceiverOptions): SMTPServer {
   const recipient = recipientFor(options.domain);
+  const messages = new Map<string, number>();
+  const seats = new Map<string, string>();
   const server = new SMTPServer({
     name: options.domain,
     banner: "orders only; nothing is relayed",
     // limit: inboundEmailMaxBytes
     size: Limits.inboundEmailMaxBytes.value,
-    // limit: inboundEmailMaxClients
-    maxClients: Limits.inboundEmailMaxClients.value,
+    // Sessions are limited by seat() in onConnect, not by smtp-server's maxClients, which would also
+    // count the refused ones and the healthcheck.
     // limit: inboundEmailSocketMs
     socketTimeout: Limits.inboundEmailSocketMs.value,
     // No AUTH at all, so no login can make it relay; STARTTLS only with Caddy's real certificate.
@@ -78,6 +89,16 @@ export function createReceiver(options: ReceiverOptions): SMTPServer {
     disableReverseLookup: true,
     logger: false,
     ...(options.tls === undefined ? {} : { key: options.tls.key, cert: options.tls.cert }),
+    onConnect(session, callback) {
+      callback(seat(seats, session));
+    },
+    onMailFrom(_address, session, callback) {
+      const count = (messages.get(session.id) ?? 0) + 1;
+      messages.set(session.id, count);
+      // limit: inboundEmailMessagesPerSession
+      if (count > Limits.inboundEmailMessagesPerSession.value) return callback(smtpError(421, "4.7.0 too many messages in one session"));
+      callback();
+    },
     onRcptTo(address, _session, callback) {
       if (address.address.toLowerCase() === recipient) return callback();
       log("mail-refused-recipient");
@@ -86,9 +107,45 @@ export function createReceiver(options: ReceiverOptions): SMTPServer {
     onData(stream, session, callback) {
       void (async () => callback(await take(options, stream, session)))();
     },
+    onClose(session) {
+      messages.delete(session.id);
+      seats.delete(session.id);
+    },
   });
+  limitLifetime(server);
   server.on("error", (error) => log("mail-server-error", { reason: error.message }));
   return server;
+}
+
+/**
+ * At most inboundEmailMaxClients sessions from the internet at once, inboundEmailClientsPerAddress of them
+ * from one address. The container's own healthcheck (127.0.0.1) always gets in, so a flood can't make the
+ * house's deploy fail. Counted by SMTP session (onConnect and onClose), which also ends for a session that
+ * went over to TLS, whose plain socket never says it closed.
+ */
+function seat(seats: Map<string, string>, session: SMTPServerSession): SmtpError | null {
+  const address = session.remoteAddress.replace(/^::ffff:/, "");
+  if (isHealthcheck(address)) return null;
+  const fromHere = [...seats.values()].filter((a) => a === address).length;
+  // limit: inboundEmailMaxClients
+  const full = seats.size >= Limits.inboundEmailMaxClients.value;
+  // limit: inboundEmailClientsPerAddress
+  if (full || fromHere >= Limits.inboundEmailClientsPerAddress.value) {
+    log("mail-refused-connection", { open: seats.size, fromThisAddress: fromHere });
+    return smtpError(421, "4.7.0 too many connections, try again later");
+  }
+  seats.set(session.id, address);
+  return null;
+}
+
+/** Every connection is closed after inboundEmailSessionMs, however busy it keeps itself. */
+function limitLifetime(server: SMTPServer): void {
+  server.server.on("connection", (socket: Socket) => {
+    // limit: inboundEmailSessionMs
+    const lifetime = setTimeout(() => socket.destroy(), Limits.inboundEmailSessionMs.value);
+    lifetime.unref();
+    socket.once("close", () => clearTimeout(lifetime));
+  });
 }
 
 /** The whole message, or null when it is over the size limit (read to the end, never kept). */
@@ -106,6 +163,20 @@ function readMessage(stream: SMTPServerDataStream): Promise<Buffer | null> {
   });
 }
 
+/** DKIM-Signature and ARC headers in the message's header block: each costs a DNS lookup and a body hash. */
+function signatureCount(raw: Buffer): number {
+  const end = raw.indexOf("\r\n\r\n");
+  const header = raw.subarray(0, end === -1 ? raw.length : end).toString("latin1");
+  return header.match(/^(dkim-signature|arc-seal|arc-message-signature|arc-authentication-results):/gim)?.length ?? 0;
+}
+
+const TEMPORARY = new Set(["temperror", "temperr"]);
+/** A DNS lookup failed for now: the sender may well be proven once it answers, so ask for a retry. */
+function undecided(auth: AuthenticateResult): boolean {
+  const results = [auth.spf === false ? "" : auth.spf.status.result, auth.arc === false ? "" : auth.arc.status.result, ...auth.dkim.results.map((r) => r.status.result)];
+  return results.some((r) => TEMPORARY.has(r));
+}
+
 /** `Screwfix <orders@screwfix.com>`, as the shop wrote it (mailparser's own text quotes the name). */
 const authorOf = (author: { name: string; address?: string | undefined } | undefined): string => {
   if (author === undefined) return "";
@@ -113,41 +184,59 @@ const authorOf = (author: { name: string; address?: string | undefined } | undef
   return author.name === "" ? address : `${author.name.replace(/[<>"\r\n]/g, "")} <${address}>`;
 };
 
+/** In a forward by hand, the shop is the From of the forwarded message ("---- Forwarded message ----\nFrom: …"). */
+const forwardedAuthor = (text: string): string | null => /^[>\s*]*From:\s*\**\s*(.+?)\s*$/im.exec(text)?.[1] ?? null;
+
 async function receive(options: ReceiverOptions, raw: Buffer, session: SMTPServerSession): Promise<void> {
+  const recipient = recipientFor(options.domain);
+  // limit: inboundEmailMaxSignatures
+  if (signatureCount(raw) > Limits.inboundEmailMaxSignatures.value) {
+    log("mail-dropped-unproven-sender", { reason: "too many signatures" });
+    return;
+  }
   const envelopeFrom = session.envelope.mailFrom === false ? "" : session.envelope.mailFrom.address;
-  const ip = session.remoteAddress.replace(/^::ffff:/, "");
   const auth = await authenticate(raw, {
-    ip,
+    ip: session.remoteAddress.replace(/^::ffff:/, ""),
     helo: session.hostNameAppearsAs,
     sender: envelopeFrom,
     mta: options.domain,
-    disableArc: true,
     disableBimi: true,
     ...(options.resolver === undefined ? {} : { resolver: options.resolver }),
   });
+  const senders = provenSenders(auth, envelopeFrom, recipient);
+  if (senders.length === 0) {
+    if (undecided(auth)) throw new Error("a DNS lookup failed for now");
+    // CH-3: dropped and logged, with no reply and no bounce. Only the results, never an address.
+    log("mail-dropped-unproven-sender", { spf: auth.spf === false ? "none" : auth.spf.status.result, dkim: auth.dkim.results.map((r) => r.status.result), arc: auth.arc === false ? "none" : auth.arc.status.result });
+    return;
+  }
+  // Only a proven email is parsed.
   const mail = await simpleParser(raw, { skipImageLinks: true });
   const subject = mail.subject ?? "";
-
-  const code = forwardingConfirmationCode(auth, subject);
+  const code = forwardingConfirmationCode(senders, subject);
   if (code !== null) {
     await saveConfirmation(options.stateDir, code, new Date());
     log("mail-forwarding-confirmation");
     return;
   }
-  const senders = provenSenders(auth, envelopeFrom);
-  if (senders.length === 0) {
-    // CH-3: dropped and logged, with no reply and no bounce. Only the results, never an address.
-    log("mail-dropped-unproven-sender", { spf: auth.spf === false ? "none" : auth.spf.status.result, dkim: auth.dkim.results.map((r) => r.status.result), dmarc: auth.dmarc === false ? "none" : auth.dmarc.status.result });
-    return;
-  }
-  const email: InboundEmail = {
-    from: authorOf(mail.from?.value[0]),
-    to: recipientFor(options.domain),
-    subject,
-    text: (mail.text ?? "").slice(0, Limits.maxInboundTextChars.value),
-    messageId: mail.messageId ?? `<${createHash("sha256").update(raw).digest("hex")}@${options.domain}>`,
+  await handToApp(options, toEmail(mail, raw, senders, recipient, options.domain), senders);
+}
+
+function toEmail(mail: Awaited<ReturnType<typeof simpleParser>>, raw: Buffer, senders: ProvenSender[], recipient: string, domain: string): InboundEmail {
+  const text = mail.text ?? "";
+  // A forward by hand comes From the person; the shop is in the forwarded message's own From line.
+  const byHand = senders.every((s) => s.proof === SenderProof.authorDkim);
+  return {
+    from: (byHand ? forwardedAuthor(text) : null) ?? authorOf(mail.from?.value[0]),
+    to: recipient,
+    subject: mail.subject ?? "",
+    text: text.slice(0, Limits.maxInboundTextChars.value),
+    messageId: mail.messageId ?? `<${createHash("sha256").update(raw).digest("hex")}@${domain}>`,
     provenSenders: senders.map((s) => s.address),
   };
+}
+
+async function handToApp(options: ReceiverOptions, email: InboundEmail, senders: ProvenSender[]): Promise<void> {
   const response = await fetch(options.webhookUrl, {
     method: "POST",
     headers: { "content-type": "application/json", "x-webhook-secret": options.webhookSecret },

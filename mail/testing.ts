@@ -1,6 +1,6 @@
 import { generateKeyPairSync } from "node:crypto";
 import { connect } from "node:net";
-import { dkimSign, type DNSResolver } from "mailauth";
+import { dkimSign, type DNSResolver, sealMessage } from "mailauth";
 
 /**
  * HOU-150 test fixtures: emails shaped like the ones Gmail really forwards, signed with keys made here,
@@ -32,6 +32,7 @@ export function fixtureWorld(googleIps = "ip4:209.85.128.0/17", given?: Keys) {
     "google.com/TXT": ["v=spf1 include:_spf.google.com ~all"],
     "_dmarc.google.com/TXT": ["v=DMARC1; p=reject; rua=mailto:mailauth-reports@google.com"],
     "20230601._domainkey.google.com/TXT": [keys.google.record],
+    "arc-20240605._domainkey.google.com/TXT": [keys.google.record],
     "screwfix.com/TXT": ["v=spf1 ip4:198.51.100.0/24 -all"],
     "_dmarc.screwfix.com/TXT": ["v=DMARC1; p=reject"],
     "sf1._domainkey.screwfix.com/TXT": [keys.shop.record],
@@ -46,6 +47,7 @@ export function fixtureWorld(googleIps = "ip4:209.85.128.0/17", given?: Keys) {
   const signer = {
     gmail: { domain: "gmail.com", selector: "20230601", privateKey: keys.gmail.privateKey },
     google: { domain: "google.com", selector: "20230601", privateKey: keys.google.privateKey },
+    googleArc: { domain: "google.com", selector: "arc-20240605", privateKey: keys.google.privateKey },
     shop: { domain: "screwfix.com", selector: "sf1", privateKey: keys.shop.privateKey },
     evil: { domain: "evil.test", selector: "s1", privateKey: keys.evil.privateKey },
   } satisfies Record<string, Signer>;
@@ -85,23 +87,31 @@ export function screwfixOrder(to: string, id = "SF-88231"): string {
 }
 
 /**
- * What Gmail adds when it auto-forwards: the forwarding headers and its ARC set on top, the shop's
- * message and signature untouched. Its envelope sender is `<user>+caf_=<to with = for @>@gmail.com`.
+ * What Gmail does when it auto-forwards: it seals the message as it received it (an ARC set, google.com's
+ * key), then adds the forwarding headers on top, the shop's message and signature untouched. Its
+ * envelope sender is `<user>+caf_=<to with = for @>@gmail.com`. `sealer` is the key that seals it.
  */
-export function gmailForwarded(shopMessage: string, user: string, forwardTo: string): { message: string; envelopeFrom: string } {
+export async function gmailForwarded(shopMessage: string, user: string, forwardTo: string, sealer: Signer): Promise<{ message: string; envelopeFrom: string }> {
   const [local, domain] = user.split("@");
+  const received = crlf([
+    `Delivered-To: ${user}`,
+    `Received: from mta7.screwfix.com (mta7.screwfix.com. [198.51.100.7]) by mx.google.com with ESMTPS id a1si123456wrx.0.2026.11.01.01.12.02 for <${user}>; Sun, 01 Nov 2026 01:12:02 -0800 (PST)`,
+  ]) + shopMessage;
+  const seal = await sealMessage(received, {
+    signingDomain: sealer.domain,
+    selector: sealer.selector,
+    privateKey: sealer.privateKey,
+    authResults: "mx.google.com; dkim=pass header.i=@screwfix.com header.s=sf1; spf=pass (google.com: domain of orders@screwfix.com designates 198.51.100.7 as permitted sender) smtp.mailfrom=orders@screwfix.com; dmarc=pass (p=REJECT sp=REJECT dis=NONE) header.from=screwfix.com",
+    cv: "none",
+  });
   const message =
     crlf([
       `X-Forwarded-To: ${forwardTo}`,
       `X-Forwarded-For: ${user} ${forwardTo}`,
-      `Delivered-To: ${user}`,
       "Received: by 2002:a05:7300:5b8c:b0:1a2:3b4c:5d6e with SMTP id k12csp1234567dyb; Sun, 1 Nov 2026 01:12:03 -0800 (PST)",
-      "ARC-Seal: i=1; a=rsa-sha256; t=1793524323; cv=none; d=google.com; s=arc-20240605; b=Zm9yd2FyZGVkIGJ5IGdtYWls",
-      "ARC-Message-Signature: i=1; a=rsa-sha256; c=relaxed/relaxed; d=google.com; s=arc-20240605; h=subject:message-id:date:to:from:dkim-signature; bh=YWJj; b=ZGVm",
-      "ARC-Authentication-Results: i=1; mx.google.com; dkim=pass header.i=@screwfix.com header.s=sf1 header.b=abc; spf=pass (google.com: domain of orders@screwfix.com designates 198.51.100.7 as permitted sender) smtp.mailfrom=orders@screwfix.com; dmarc=pass (p=REJECT sp=REJECT dis=NONE) header.from=screwfix.com",
-      "Return-Path: <orders@screwfix.com>",
-      "Received: from mta7.screwfix.com (mta7.screwfix.com. [198.51.100.7]) by mx.google.com with ESMTPS id a1si123456wrx.0.2026.11.01.01.12.02 for <" + user + ">; Sun, 01 Nov 2026 01:12:02 -0800 (PST)",
-    ]) + shopMessage;
+    ]) +
+    seal.toString() +
+    received;
   return { message, envelopeFrom: `${local}+caf_=${forwardTo.replace("@", "=")}@${domain}` };
 }
 
@@ -128,8 +138,8 @@ export function gmailConfirmation(user: string, forwardTo: string, code: string)
  */
 const replyCode = (reply: string) => Number(reply.slice(0, 3));
 
-export async function smtpSession(port: number, host = "127.0.0.1") {
-  const socket = connect(port, host);
+export async function smtpSession(port: number, host = "127.0.0.1", localAddress?: string) {
+  const socket = connect({ port, host, ...(localAddress === undefined ? {} : { localAddress }) });
   let buffer = "";
   const waiting: Array<(line: string) => void> = [];
   const replies: string[] = [];
@@ -146,18 +156,24 @@ export async function smtpSession(port: number, host = "127.0.0.1") {
       else next(reply);
     }
   });
+  // A closed connection answers whatever is still waiting, so a test never hangs on it.
+  socket.on("close", () => {
+    for (const next of waiting.splice(0)) next("421 connection closed\r\n");
+  });
   const reply = () => new Promise<string>((resolve) => {
+    if (socket.destroyed && replies.length === 0) return resolve("421 connection closed\r\n");
     const ready = replies.shift();
     if (ready === undefined) waiting.push(resolve);
     else resolve(ready);
   });
-  await reply();
+  const greeting = await reply();
   const send = async (line: string) => {
     socket.write(`${line}\r\n`);
     const r = await reply();
     return { code: replyCode(r), text: r };
   };
   return {
+    greeting: { code: replyCode(greeting), text: greeting },
     send,
     /** DATA, then the message (dot-stuffed), then the end mark: the reply to the message itself. */
     async data(message: string) {
@@ -167,8 +183,14 @@ export async function smtpSession(port: number, host = "127.0.0.1") {
       const r = await reply();
       return { code: replyCode(r), text: r };
     },
-    close() {
-      socket.end("QUIT\r\n");
+    /** QUIT, and wait for the server to close the connection, as a sending server does. */
+    close(): Promise<void> {
+      if (socket.destroyed) return Promise.resolve();
+      return new Promise((resolve) => {
+        socket.once("close", () => resolve());
+        socket.write("QUIT\r\n");
+        socket.end();
+      });
     },
   };
 }

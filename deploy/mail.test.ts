@@ -55,6 +55,11 @@ describe("the mail receiver on the VPS", () => {
     expect(mail.ports).toEqual(["25:2525"]);
     expect(mail.image).toMatch(/^\$\{HOUSEHOLD_IMAGE:\?.*\}$/);
     expect(mail.network_mode).toBeUndefined();
+    // Only the app shares its network: no route to Postgres, object storage or Caddy.
+    expect(mail.networks).toEqual(["mailhook"]);
+    expect(overlay.services["app"]?.networks).toEqual(["default", "mailhook"]);
+    const onIt = Object.entries(overlay.services).filter(([, s]) => JSON.stringify(s.networks ?? []).includes("mailhook"));
+    expect(onIt.map(([name]) => name).sort()).toEqual(["app", "mail"]);
     expect(mail.privileged ?? false).toBe(false);
     expect(mail.read_only).toBe(true);
     expect(mail.cap_drop).toEqual(["ALL"]);

@@ -81,24 +81,30 @@ async function deliver(envelopeFrom: string, rcpt: string[], message: string) {
   const rcpts = [];
   for (const r of rcpt) rcpts.push((await s.send(`RCPT TO:<${r}>`)).code);
   const data = rcpts.includes(250) ? (await s.data(message)).code : null;
-  s.close();
+  await s.close();
   return { mail, rcpts, data };
 }
 
 const s = await smtpSession(port);
 say("ehlo", (await s.send("EHLO mail-sor-f41.google.com")).text.trim().split("\r\n"));
-s.close();
+await s.close();
 
 // Arriving tomorrow, so it is on the home screen (the shop signs the body, so it is changed before signing).
 const tomorrowOrder = await signed(screwfixOrder(PERSON, "SF-90001").replaceAll("Thursday 5 November", "tomorrow"), world.signer.shop);
-const forwarded = gmailForwarded(tomorrowOrder, PERSON, ORDERS);
+const forwarded = await gmailForwarded(tomorrowOrder, PERSON, ORDERS, world.signer.googleArc);
 say("genuine Gmail forward of a Screwfix order", await deliver(forwarded.envelopeFrom, [ORDERS], forwarded.message));
+
+const byHand = await signed(
+  [`From: Sam <${PERSON}>`, `To: ${ORDERS}`, "Subject: Fwd: Your Currys order", "Message-ID: <fwd-currys@mail.gmail.com>", "Content-Type: text/plain", "", "---------- Forwarded message ---------", "From: Currys <orders@currys.example>", "Subject: Your Currys order", "", "Thanks for your order. Arriving tomorrow between 10am and 2pm.", ""].join("\r\n"),
+  world.signer.gmail,
+);
+say("a forward by hand of a Currys order", await deliver(PERSON, [ORDERS], byHand));
 
 const argos = (from: string, id: string) =>
   [`X-Forwarded-For: ${PERSON} ${ORDERS}`, `X-Forwarded-To: ${ORDERS}`, `Delivered-To: ${PERSON}`, `Resent-From: ${PERSON}`, `From: ${from}`, `To: ${PERSON}`, "Subject: Your Argos order is confirmed", `Message-ID: <${id}@argos.example>`, "", "Thanks for your order. Arriving tomorrow between 7am and 7pm.", ""].join("\r\n");
 say("spoof: forwarding headers naming the household, from a server that isn't Google", await deliver(`${local}+caf_=${ORDERS.replace("@", "=")}@${domain}`.replace("@gmail.com", "@gmail.org"), [ORDERS], argos(`Argos <orders@argos.example>`, "spoof-1")));
 say("spoof: From the household person, sent from evil.test", await deliver("mallory@evil.test", [ORDERS], argos(`Sam <${PERSON}>`, "spoof-2")));
-const strangersGmail = gmailForwarded(await signed(argos("Argos <orders@argos.example>", "spoof-3"), world.signer.evil), "mallory@gmail.com", ORDERS);
+const strangersGmail = await gmailForwarded(await signed(argos("Argos <orders@argos.example>", "spoof-3"), world.signer.evil), "mallory@gmail.com", ORDERS, world.signer.googleArc);
 say("spoof: a stranger's own Gmail forwarding, headers rewritten to name the household", await deliver(strangersGmail.envelopeFrom, [ORDERS], strangersGmail.message.replace(`X-Forwarded-For: mallory@gmail.com`, `X-Forwarded-For: ${PERSON}`)));
 say("mail for another recipient here", await deliver("mallory@evil.test", [`sam@${ORDERS.split("@")[1] ?? ""}`], argos("Argos <orders@argos.example>", "other-1")));
 say("relay attempt (RCPT to someone elsewhere)", await deliver("mallory@evil.test", ["victim@gmail.com", "victim@example.org"], argos("Argos <orders@argos.example>", "relay-1")));
@@ -106,13 +112,18 @@ const big = screwfixOrder(PERSON, "SF-BIG").replace("2x LED bulbs", `${"x".repea
 say("oversize message (5.3 MB)", await deliver(forwarded.envelopeFrom, [ORDERS], big));
 say("Gmail's forwarding confirmation", await deliver("forwarding-noreply@google.com", [ORDERS], await signed(gmailConfirmation(PERSON, ORDERS, "693452117"), world.signer.google)));
 
-// A burst for the memory cap: 40 messages of 1 MB each, four sessions at a time (the receiver's limit),
+// Three sessions at once from one address: the third is refused.
+const seats = [await smtpSession(port), await smtpSession(port), await smtpSession(port)];
+say("three sessions at once from one address (greetings)", seats.map((x) => x.greeting.code));
+await Promise.all(seats.map((seat) => seat.close()));
+
+// A burst for the memory cap: 40 messages of 1 MB each, two sessions at a time (one address's limit),
 // each one read, checked and parsed in full. Sent by mallory, so only the shop's signature is proven,
 // and the app drops each one as nobody's (CH-3).
 const burstBody = await signed(screwfixOrder(PERSON, "SF-BURST").replace("2x LED bulbs", `${"y".repeat(76)}\r\n`.repeat(13_000)), world.signer.shop);
 const results: Array<number | null> = [];
-for (let round = 0; round < 10; round++) {
-  const codes = await Promise.all(Array.from({ length: 4 }, () => deliver("mallory@evil.test", [ORDERS], burstBody).then((r) => r.data)));
+for (let round = 0; round < 20; round++) {
+  const codes = await Promise.all(Array.from({ length: 2 }, () => deliver("mallory@evil.test", [ORDERS], burstBody).then((r) => r.data)));
   results.push(...codes);
 }
 say("burst of 40 x 1 MB (data replies)", [...new Set(results)].map((code) => [String(code), results.filter((c) => c === code).length]));

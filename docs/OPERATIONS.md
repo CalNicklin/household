@@ -580,32 +580,46 @@ given `--mail-domain`, so until then a deploy runs exactly the four containers a
 
 - **One address:** mail for `orders@<mail domain>` is taken. Every other recipient is refused at `RCPT`
   (`550`), whoever sent it, so the receiver can't be used as a relay. There is no `AUTH` to log in with.
-  Messages over 5 MB are refused (`552`). At most four connections at once, one message checked at a
-  time, idle connections closed after a minute. The reasons are in `contracts/limits.ts`
-  (`inboundEmail*`).
-- **Who sent it:** anyone can send to `orders@`, and a forwarded order's `From:` is the shop, so the
-  receiver works out who forwarded it from what their own mail provider vouches for, never from what the
+  - Messages over 5 MB are refused (`552`), and so is a message with more than ten DKIM/ARC headers
+    (dropped unchecked).
+  - Connections are limited: at most four from the internet at once and two from any one address. Each
+    is closed after a minute idle or ten minutes in all, and ten messages per connection.
+  - One message is checked at a time, for at most 30 seconds.
+  - The container's healthcheck always gets in, so a flood can't fail a deploy.
+  - The reasons are in `contracts/limits.ts` (`inboundEmail*`).
+- **Who sent it:** anyone can send to `orders@`, and a forwarded order's `From:` is the shop. So the
+  receiver works out who forwarded it from what their mail provider vouches for, never from what the
   headers say (`mail/verify.ts`):
-  - Gmail's auto-forward comes from Google's servers with the envelope sender
-    `cal+caf_=orders=orders.tracesknown.com@gmail.com`. When SPF for `gmail.com` passes, that is
-    `cal@gmail.com`. Gmail sends with an account's own address only, so another Gmail user can't use it.
-  - A forward by hand (`Fwd:` from Cal's own mailbox) counts when its `From:` domain carries a passing
-    DKIM signature from that same domain.
+  - **Gmail's auto-forward:** it comes from Google's servers with the envelope sender
+    `cal+caf_=orders=orders.tracesknown.com@gmail.com`, aimed at our own address, and carries Gmail's ARC
+    seal (google.com). When SPF for `gmail.com` passes and that seal verifies, that is `cal@gmail.com`.
+    An SPF pass alone proves no one: anyone on shared servers (Google's, Microsoft's, an ISP's) can pass
+    it for another customer, so no other envelope counts.
+  - **A forward by hand** (`Fwd:` from Cal's own mailbox): its `From:` domain carries a passing DKIM
+    signature of that same domain, over a `To:`/`Cc:` naming our address. An old signed email re-sent to
+    us doesn't count. The shop is then taken from the forwarded message's own `From:` line.
 
   `X-Forwarded-For`, `X-Forwarded-To`, `Delivered-To`, `Resent-From` and `To:` are written by whoever
   sent the email, so they prove nothing and are never used. The app then accepts the email only if a
-  proven address is an adult's `email` from `house.json` (CH-3). Anything else is answered `250` and
-  dropped, and the drop is logged (`mail-dropped-unproven-sender`, or the app's `dropped-unknown-sender`).
-  Refusing it would make the sending server bounce it to whoever is in its envelope.
+  proven address is an adult's `email` from `house.json` (CH-3).
+  - Anything else is answered `250` and dropped, and the drop is logged (`mail-dropped-unproven-sender`,
+    or the app's `dropped-unknown-sender`). Refusing it would make the sending server bounce it to
+    whoever is in its envelope.
+  - Only a DNS lookup failing for now, a check running out of time, or the app being unreachable gets
+    `451`, so a real forward is tried again.
+  - Only proven mail is parsed.
 - **TLS:** Caddy gets and renews the certificate for the mail domain, as it does for the house. The
   receiver offers STARTTLS with it once it exists, and checks for a renewal every ten minutes. Until then,
   for the first few minutes after the first deploy, it takes mail without TLS rather than offer a
   self-signed certificate.
-- **Privileges:** the container starts as root with no capability but `SETUID`/`SETGID`, only to copy
-  Caddy's key for the mail domain (Caddy keeps its keys root-only). It then runs the receiver as the
-  image's unprivileged `house` user with no capabilities, on a read-only filesystem. The receiver gets
-  only `EMAIL_WEBHOOK_SECRET`, not the house's `.env`, and posts to the app's `/webhooks/email` on the
-  project's own network.
+- **Privileges and reach:**
+  - The container starts as root with no capability but `SETUID`/`SETGID`, only to copy Caddy's key for
+    the mail domain (Caddy keeps its keys root-only).
+  - It then runs the receiver as the image's unprivileged `house` user with no capabilities, on a
+    read-only filesystem.
+  - It is on a network of its own, shared only with the app. It can't reach Postgres, object storage or
+    Caddy.
+  - It gets only `EMAIL_WEBHOOK_SECRET`, not the house's `.env`, and posts to the app's `/webhooks/email`.
 - **Gmail's forwarding confirmation** is kept (the code and when it came, in memory only) and never
   reaches the app. `sudo household-email last-confirmation` prints the code if it came within the hour,
   and nothing else. The deploy user can't run it.
@@ -719,30 +733,43 @@ sudo docker logs household-mail-1 2>&1 | grep -E '"event":"mail-' | tail -3
 The home screen on the iPad then shows an **Arriving** block for tomorrow (arrivals show the day before
 and the day itself). It is named after the email's sender, which for a real order is the shop; for this
 test it is the other account's name. If the log shows `mail-dropped-unproven-sender` instead, the forward
-didn't come from Google's servers as Gmail's (check there is no AAAA record for `orders`). If the app's
+didn't pass as Gmail's. Check there is no AAAA record for `orders`, and that the forwarding address is
+exactly `orders@orders.tracesknown.com`. The log line shows which of SPF, DKIM and ARC failed. If the app's
 log has `dropped-unknown-sender`, the forwarding address isn't your `email` in `house.json`.
 
 ### Tried on the build sandbox — 1 November 2026
 
 The build sandbox can't reach the real server or real mail. So `deploy/test-mail.sh` deploys the house
 with the real `household-deploy`, with `MAIL_DOMAIN=orders.localhost`, against local Docker. A test DNS
-server (`scripts/mail-proof.ts`) answers the receiver's SPF, DKIM and DMARC lookups with test records and
-keys, and treats the Docker gateway as Google's servers. Everything else goes over real SMTP into port 25:
+server (`scripts/mail-proof.ts`, in its own container) answers the receiver's SPF, DKIM, DMARC and ARC
+lookups with test records and keys. It treats the Docker gateway as Google's servers. The practice model
+reads the orders, because there is no model key. Everything else goes over real SMTP into port 25:
 
-- the receiver ran as uid 10001 with no capabilities, on a read-only filesystem, and offered STARTTLS with
-  the certificate Caddy issued for `orders.localhost` (Caddy's local CA, as `.localhost` gets);
-- a Gmail-shaped auto-forward of a Screwfix order (`sam+caf_=…@gmail.com`, the shop's DKIM signature
-  intact) was taken with `250`. The app recorded `Screwfix | tomorrow | 8am–1pm | someone in | sam`. The
-  home screen couldn't be drawn because planning a day needs the weather service, which the sandbox can't
-  reach;
-- three spoofs were answered `250` and none became an arrival:
+- **The container:**
+  - the receiver ran as uid 10001 with no capabilities, on a read-only filesystem;
+  - from its network it reached the app and nothing else (not Postgres, SeaweedFS's S3 or master port,
+    or Caddy);
+  - it offered STARTTLS with the certificate Caddy issued for `orders.localhost` (Caddy's local CA, as
+    `.localhost` gets).
+- **A Gmail-shaped auto-forward** of a Screwfix order (`sam+caf_=…@gmail.com`, Google's ARC seal, the
+  shop's DKIM signature intact) was answered `250`. The app recorded
+  `Screwfix | tomorrow | 8am–1pm | someone in | sam`.
+- **A forward by hand** of a Currys order (From sam, signed by gmail.com, To orders@) was recorded as
+  `Currys | tomorrow | 10am–2pm | sam`, named after the shop.
+- **The home screen** couldn't be drawn in the sandbox: planning a day needs the weather service, which
+  the sandbox can't reach.
+- **Three spoofs** were answered `250` and none became an arrival:
   - forwarding headers naming sam, from a server that isn't Google: dropped by the receiver;
-  - `From: sam`, sent from another domain: dropped by the receiver;
+  - `From: sam` sent from another domain: dropped by the receiver;
   - a stranger's own Gmail forward with the headers rewritten: only the stranger was proven, and the app
-    dropped and logged them;
-- mail for another address here (`550` at RCPT), a relay attempt to two outside addresses (`550`, `550`)
-  and a 5.3 MB message (`552`) were refused;
-- Gmail-shaped forwarding confirmation: `household-email last-confirmation` printed its code and nothing
-  else;
-- memory: 70 MiB at idle and at most 100 MiB of the 128 MiB cap under a burst of 40 one-megabyte messages,
-  four connections at a time. Every one was answered `250`, with no restart and no OOM kill.
+    dropped and logged them.
+- **Refused:**
+  - mail for another address here: `550` at RCPT;
+  - a relay attempt to two outside addresses: `550`, `550`;
+  - a 5.3 MB message: `552`;
+  - a third session at once from one address: `421`.
+- **Gmail-shaped forwarding confirmation:** `household-email last-confirmation` printed its code and
+  nothing else.
+- **Memory:** 72 MiB at idle, and at most 83 MiB of the 128 MiB cap under a burst of 40 one-megabyte
+  messages, two connections at a time. Every message was answered `250`, with no restart and no OOM
+  kill.
