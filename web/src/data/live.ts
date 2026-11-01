@@ -11,6 +11,10 @@ function localDay(): string {
  * PLT-11 / MOM-3 / CH-10: listen for changes and refetch. EventSource reconnects by itself; every
  * (re)connect refetches, so a screen left open all week catches up (HOME-6). The local date is
  * checked every minute and whenever the screen becomes visible.
+ *
+ * HOU-154: a deploy answers the reconnect with a 502 while the new server starts, and EventSource
+ * gives up for good on that. So the minute check opens it again when it has closed, and also asks
+ * whether a new service worker is out: an open screen finds a deploy within a minute either way.
  */
 export function useLive(): void {
   const queryClient = useQueryClient();
@@ -20,14 +24,19 @@ export function useLive(): void {
     const refresh = () => {
       void queryClient.cancelQueries().then(() => queryClient.invalidateQueries());
     };
-    const source = new EventSource("/api/live");
-    source.addEventListener("change", refresh);
-    source.addEventListener("hello", () => {
-      refresh();
-      void flushOutbox();
-      // HOU-154: a reconnect is often a deploy (the server restarted); see if a new build is out.
-      checkForUpdate();
-    });
+    const live: { source: EventSource | null } = { source: null };
+    const connect = () => {
+      const source = new EventSource("/api/live");
+      live.source = source;
+      source.addEventListener("change", refresh);
+      source.addEventListener("hello", () => {
+        refresh();
+        void flushOutbox();
+        // HOU-154: a reconnect is often a deploy (the server restarted); see if a new build is out.
+        checkForUpdate();
+      });
+    };
+    connect();
 
     let day = localDay();
     const checkDay = () => {
@@ -37,11 +46,20 @@ export function useLive(): void {
         refresh();
       }
     };
-    const timer = window.setInterval(checkDay, 60_000);
+    // HOU-154: a connection EventSource gave up on is opened again, and a new build is looked for.
+    const keepUp = () => {
+      if (live.source?.readyState === EventSource.CLOSED) connect();
+      checkForUpdate();
+    };
+    const timer = window.setInterval(() => {
+      checkDay();
+      keepUp();
+    }, 60_000);
     const onVisible = () => {
       if (document.visibilityState === "visible") {
         checkDay();
         refresh();
+        keepUp();
       }
     };
     const onOnline = () => {
@@ -51,7 +69,7 @@ export function useLive(): void {
     document.addEventListener("visibilitychange", onVisible);
     window.addEventListener("online", onOnline);
     return () => {
-      source.close();
+      live.source?.close();
       window.clearInterval(timer);
       document.removeEventListener("visibilitychange", onVisible);
       window.removeEventListener("online", onOnline);

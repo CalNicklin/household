@@ -97,11 +97,18 @@ test("[HOME-6] (HOU-154) after a deploy one reload shows the new build, an open 
     await page.reload();
     await expect(shown).toHaveAttribute("content", b);
 
-    // Deploy C to a page that a worker controlled when it loaded: it reloads itself too.
+    // Deploy C to a page that a worker controlled when it loaded, behind a proxy that answers the live
+    // connection's reconnect with a 502 while the new server starts: EventSource gives up on that for
+    // good. The next minute's check (or a glance at the screen, as here) opens it again and finds C.
+    await page.route("**/api/live", (route) => route.fulfill({ status: 502 }));
     loads = 0;
     await deploy("c");
     const c = await buildOf();
     expect(c).not.toBe(b);
+    await pause(3_000);
+    expect(await shown.getAttribute("content")).toBe(b);
+    await page.unroute("**/api/live");
+    await page.evaluate(() => document.dispatchEvent(new Event("visibilitychange")));
     await eventually(async () => (await shown.getAttribute("content")) === c);
     await pause(3_000);
     expect(loads).toBe(1);
