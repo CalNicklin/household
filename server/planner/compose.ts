@@ -244,8 +244,19 @@ export function compose(input: ComposeInput): Block[] {
     });
   for (const r of input.shopping) {
     const ref = `shopping:${r.id}`;
+    // HOU-157: every shop block is planner-made, so each has a no-guilt dismiss (HOME-4).
     if (r.status === ShoppingStatus.added && r.chosen !== null)
-      body.push({ id: `${ref}:added`, type: BlockType.event, section: Section.now, placement: Placement.main, reason: `You said "${r.item}"; the shopping helper added the exact match`, provenance: Provenance.planner, time: null, title: `Added to the shop: ${r.chosen.name}`, detail: `for “${r.item}”, ${r.chosen.price}`, ref: `${ref}:added` });
+      body.push({
+        id: `${ref}:added`,
+        type: BlockType.suggestion,
+        section: Section.now,
+        placement: Placement.main,
+        reason: `You said "${r.item}"; the shopping helper added the exact match, ${r.chosen.price}`,
+        provenance: Provenance.planner,
+        title: `Added to the shop: ${r.chosen.name}`,
+        ref: `${ref}:added`,
+        actions: [{ kind: ActionKind.notToday, label: "Dismiss", ref: `${ref}:added` }],
+      });
     if (r.status === ShoppingStatus.needsChoice)
       body.push({
         id: ref,
@@ -259,7 +270,17 @@ export function compose(input: ComposeInput): Block[] {
         actions: r.options.map((o) => ({ kind: ActionKind.answer, label: o.name, ref, value: o.sku })),
       });
     if (r.status === ShoppingStatus.failed)
-      body.push({ id: ref, type: BlockType.event, section: Section.now, placement: Placement.main, reason: `The supermarket had nothing like "${r.item}"`, provenance: Provenance.planner, time: null, title: `Couldn't find ${r.item}`, detail: "nothing was added", ref });
+      body.push({
+        id: ref,
+        type: BlockType.suggestion,
+        section: Section.now,
+        placement: Placement.main,
+        reason: `The supermarket had nothing like "${r.item}", so nothing was added`,
+        provenance: Provenance.planner,
+        title: `Couldn't find ${r.item}`,
+        ref,
+        actions: [{ kind: ActionKind.notToday, label: "Dismiss", ref }],
+      });
   }
   if (input.question !== null)
     body.push({
@@ -279,4 +300,21 @@ export function compose(input: ComposeInput): Block[] {
   const unique = visible.filter((b) => (seen.has(b.id) ? false : (seen.add(b.id), true)));
   unique.sort((a, b) => sectionOrder.indexOf(a.section) - sectionOrder.indexOf(b.section) || typeRank(a) - typeRank(b) || sortKey(a).localeCompare(sortKey(b)));
   return [header, ...unique, composer()];
+}
+
+/**
+ * HOU-157: the shopping requests that may make a home block. With no shopping helper connected nothing
+ * was ever looked for, so no request makes one (a request from before HOU-148 may still say failed);
+ * the Shop screen shows them as saved instead.
+ */
+export function shoppingForPlan(requests: readonly ShoppingRequest[], helperConnected: boolean): ShoppingRequest[] {
+  return helperConnected ? [...requests] : [];
+}
+
+/**
+ * HOU-157: a "Couldn't find" or "Added to the shop" card is news about the shop, not something the house
+ * suggests: its only action is Dismiss. The "Which one?" question (AUT-3) is a real suggestion.
+ */
+export function isShopNews(b: Block): boolean {
+  return b.type === BlockType.suggestion && b.ref.startsWith("shopping:") && b.actions.every((a) => a.kind === ActionKind.notToday);
 }
