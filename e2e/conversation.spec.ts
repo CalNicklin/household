@@ -18,6 +18,8 @@ async function open(browser: Browser, size: keyof typeof SIZES, baseURL: string 
   return page;
 }
 
+/** The same journeys run in Chromium and WebKit; each engine's screenshots keep their own names. */
+const engine = () => (test.info().project.name === "ipad" ? "" : `-${test.info().project.name}`);
 const box = (page: Page) => page.getByRole("textbox", { name: /tell the house|ask the house/i });
 const conversation = (page: Page) => page.getByRole("region", { name: "Today with the house" });
 const answer = (page: Page) => page.getByRole("status", { name: "The house's answer" });
@@ -47,7 +49,7 @@ for (const size of ["ipad", "phone"] as const) {
     await expect(answer(page).getByText("The one thing")).toBeVisible();
     await expect(answer(page)).toContainText(/babysitter|Jess|Dinner/);
     await expect(answer(page)).toBeInViewport({ ratio: 1 });
-    await evidence(page, `HOU-159-answer-${size}`, { fullPage: false });
+    await evidence(page, `HOU-159-answer-${size}${engine()}`, { fullPage: false });
 
     await typeAndSend(page, "what's happening today?");
     await expect(conversation(page).getByText("“what's happening today?”")).toBeVisible();
@@ -58,7 +60,7 @@ for (const size of ["ipad", "phone"] as const) {
     await expect(conversation(page)).toContainText(/babysitter|Jess|Dinner/);
     await expect(answer(page)).toBeInViewport({ ratio: 1 });
     await expect(box(page)).toBeInViewport({ ratio: 1 });
-    await evidence(page, `HOU-159-follow-up-${size}`, { fullPage: false });
+    await evidence(page, `HOU-159-follow-up-${size}${engine()}`, { fullPage: false });
 
     // Collapsible: hiding it leaves one quiet link that opens it again.
     await answer(page).getByRole("button", { name: "Hide this answer" }).click();
@@ -90,7 +92,7 @@ for (const size of ["ipad", "phone"] as const) {
     await typeAndSend(page, "what's happening today?");
     await expect(answer(page).getByText("From the house")).toBeVisible();
     await expect(answer(page)).toBeInViewport({ ratio: 1 });
-    await evidence(page, `HOU-159-lists-${size}`, { fullPage: false });
+    await evidence(page, `HOU-159-lists-${size}${engine()}`, { fullPage: false });
     await page.context().close();
   });
 
@@ -123,11 +125,11 @@ for (const size of ["ipad", "phone"] as const) {
     await page.getByRole("button", { name: "Talk" }).click();
     await expect(page.getByText("Listening…")).toBeVisible();
     await expect(page.getByRole("button", { name: "Stop listening" })).toBeVisible();
-    await evidence(page, `HOU-159-listening-${size}`, { fullPage: false });
+    await evidence(page, `HOU-159-listening-${size}${engine()}`, { fullPage: false });
     await fail("no-speech");
     await expect(page.getByText("Couldn't hear that — try the keyboard's mic.")).toBeVisible();
     await expect(box(page)).toBeFocused();
-    await evidence(page, `HOU-159-mic-error-${size}`, { fullPage: false });
+    await evidence(page, `HOU-159-mic-error-${size}${engine()}`, { fullPage: false });
 
     // No permission: say so, and point at the keyboard's mic.
     await page.getByRole("button", { name: "Talk" }).click();
@@ -155,7 +157,7 @@ for (const size of ["ipad", "phone"] as const) {
     await page.getByRole("button", { name: "Talk" }).click();
     await expect(page.getByText("Voice isn't available in this browser. Tap the keyboard's mic to dictate instead.")).toBeVisible();
     await expect(box(page)).toBeFocused();
-    await evidence(page, `HOU-159-no-speech-api-${size}`, { fullPage: false });
+    await evidence(page, `HOU-159-no-speech-api-${size}${engine()}`, { fullPage: false });
     await page.context().close();
   });
 }
