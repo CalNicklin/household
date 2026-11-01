@@ -3,9 +3,12 @@
 # the way the VPS runs them, with a local registry standing in for GHCR. Needs Docker and ports 80, 443
 # and 5000 free, and no `household` compose project on this machine (it would be the same project: it
 # refuses rather than touch one); leaves nothing behind.
-#   docker build -t household:local . && deploy/test-deploy.sh household:local
+# It builds the image itself with deploy/build-image.sh, the way the workflows do (HOU-145), from the
+# committed tree at <ref> (default HEAD); that script's BUILDX_BUILDER and NPM_CA apply.
+#   deploy/test-deploy.sh [<ref>]
 set -euo pipefail
-local_image="${1:?usage: deploy/test-deploy.sh <locally built household image>}"
+ref="${1:-HEAD}"
+local_image="household:test-deploy-$$"
 repo="$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)"
 # The production project is named `household`, like the dev stack in docker-compose.yml. Its containers
 # and volumes are only ever ours to remove when this run made them.
@@ -19,11 +22,15 @@ export HOUSEHOLD_CONF="$work/household.conf"
 cleanup() {
   ( cd "$work/srv" 2>/dev/null && HOUSEHOLD_IMAGE=x docker compose -p household -f compose.yml --env-file .env down -v --remove-orphans > /dev/null 2>&1 ) || true
   docker rm -f household-test-registry > /dev/null 2>&1 || true
+  docker image rm -f "$local_image" > /dev/null 2>&1 || true
   rm -rf "$work"
 }
 trap cleanup EXIT
 step() { printf '\n== %s\n' "$*"; }
 fail() { echo "FALSE PLT-8: $*" >&2; exit 1; }
+
+step "the image, built as deploy.yml and preview.yml build it"
+"$repo/deploy/build-image.sh" "$local_image" "$ref"
 
 step "a registry standing in for GHCR, holding the image CI would have pushed"
 docker run -d --rm --name household-test-registry -p 127.0.0.1:5000:5000 "${REGISTRY_IMAGE:-registry:2}" > /dev/null

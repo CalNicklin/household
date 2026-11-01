@@ -3,9 +3,12 @@
 # against local Docker, the way the VPS runs them, with a local registry standing in for GHCR. Needs
 # Docker, ports 80, 443 and 5000 free, and no household project, preview or household-previews network on
 # this machine (it refuses rather than touch them); leaves nothing behind.
-#   docker build -t household:local . && deploy/test-preview.sh household:local
+# It builds the image itself with deploy/build-image.sh, the way the workflows do (HOU-145), from the
+# committed tree at <ref> (default HEAD); that script's BUILDX_BUILDER and NPM_CA apply.
+#   deploy/test-preview.sh [<ref>]
 set -euo pipefail
-local_image="${1:?usage: deploy/test-preview.sh <locally built household image>}"
+ref="${1:-HEAD}"
+local_image="household:test-preview-$$"
 repo="$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)"
 existing="$(docker ps -aq --filter label=com.docker.compose.project=household; docker volume ls -q --filter label=com.docker.compose.project=household; docker ps -aq --filter name='^household-pr-')"
 if [ -n "$existing" ] || docker network inspect household-previews > /dev/null 2>&1; then
@@ -24,11 +27,15 @@ cleanup() {
   docker rm -f household-test-hindsight > /dev/null 2>&1 || true
   docker network rm household-test-hindsight > /dev/null 2>&1 || true
   docker rm -f household-test-registry > /dev/null 2>&1 || true
+  docker image rm -f "$local_image" > /dev/null 2>&1 || true
   rm -rf "$work"
 }
 trap cleanup EXIT
 step() { printf '\n== %s\n' "$*"; }
 fail() { echo "FALSE FB-5: $*" >&2; exit 1; }
+
+step "the image, built as deploy.yml and preview.yml build it"
+"$repo/deploy/build-image.sh" "$local_image" "$ref"
 https() { local host="$1" path="$2"; shift 2; curl -sk --max-time 20 --resolve "$host:443:127.0.0.1" "$@" "https://$host$path"; }
 # A removed preview's URL reaches nothing: no certificate, or (once Caddy holds one) a 502 from Caddy.
 gone() { case "$(https "$1.preview.localhost" /healthz -o /dev/null -w '%{http_code}')" in 000 | 502) return 0 ;; *) return 1 ;; esac; }
