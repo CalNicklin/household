@@ -1,4 +1,5 @@
 import { LongTool } from "@household/contracts";
+import { z } from "zod";
 import { afterAll, beforeAll, describe, expect, test } from "vitest";
 import { testHousehold, type TestHousehold } from "../testing/household.ts";
 import { jobScope } from "./scope.ts";
@@ -63,5 +64,22 @@ describe("MOM-6 through the real tool", () => {
     expect(output).toMatchObject({ say: "Okay, Tom has it now, with one message about it." });
     expect(JSON.stringify(output)).not.toMatch(/\b(he|she|him|her|his|hers|they|them|their)\b/i);
     expect(scope.effects.notify.map((n) => n.person)).toEqual(["tom"]);
+  });
+});
+
+const idOf = (output: unknown) => z.object({ id: z.string() }).parse(output).id;
+
+describe("CAP-1 through the real tool", () => {
+  test("[CAP-1] one message that lists two jobs captures both; capturing the same job again (a retried job) writes it once", async () => {
+    const scope = jobScope(h.rt, "job-two-jobs", "msg-two-jobs", "priya", "app");
+    const execute = houseTools(scope).capture.execute;
+    if (execute === undefined) throw new Error("capture has no execute");
+    const gate = idOf(await execute({ text: "Fix the gate" }, {}));
+    const shed = await execute({ text: "Paint the shed" }, {});
+    expect(shed).toMatchObject({ say: "Added to the backlog: Paint the shed." });
+    expect(idOf(shed)).not.toBe(gate);
+    expect(idOf(await execute({ text: "Paint the shed" }, {}))).toBe(idOf(shed));
+    const mine = (await h.rt.system("t").backlog.list()).filter((i) => i.text === "Fix the gate" || i.text === "Paint the shed");
+    expect(mine.map((i) => i.text).sort()).toEqual(["Fix the gate", "Paint the shed"]);
   });
 });
