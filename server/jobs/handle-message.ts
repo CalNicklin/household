@@ -86,7 +86,8 @@ async function handleMessageImpl(messageId: string): Promise<void> {
           const api = rt.system("calendar-sync");
           const token = await api.calendar.syncToken();
           const changes = await rt.ports.calendar.changes(token);
-          return api.calendar.applySync({ upserts: changes.upserts, deletedExternalIds: changes.deletedExternalIds, syncToken: changes.nextSyncToken });
+          const applied = await api.calendar.applySync({ upserts: changes.upserts, deletedExternalIds: changes.deletedExternalIds, syncToken: changes.nextSyncToken });
+          return { ...applied, firstSync: token === null };
         },
         { name: "calendar-sync" },
       );
@@ -94,8 +95,10 @@ async function handleMessageImpl(messageId: string): Promise<void> {
       const effects = emptyEffects();
       const today = localDate(rt.ports.clock.now(), rt.timeZone);
       effects.replan = changed.changedDates.filter((d) => d >= today);
+      // HOU-149: the first sync connects the calendar, which today's "Getting started" cards talk about.
+      if (changed.firstSync && !effects.replan.includes(today)) effects.replan.unshift(today);
       usage = await applyEffects(jobId, effects, null);
-      toolCalls = [{ tool: "calendar-sync", input: {}, output: changed }];
+      toolCalls = [{ tool: "calendar-sync", input: {}, output: { changedDates: changed.changedDates } }];
     } else {
       const step = await DBOS.runStep(() => agentStep(jobId, messageId, meta), { name: "agent" });
       intent = step.intent;

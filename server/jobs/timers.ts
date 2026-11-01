@@ -117,6 +117,10 @@ export async function runTimer(jobId: string, timer: TimerKind, scheduledFor: st
       await plan(jobId, today, totals, "timer:hourly-refresh");
       await dispatchDue(jobId, today);
       break;
+    case TimerKind.catchUpPlan:
+      // HOU-149: someone looked and today had no plan. Plan today only; rule nudges keep to their own timers.
+      await plan(jobId, today, totals, "timer:catch-up-plan");
+      break;
     case TimerKind.bins:
     case TimerKind.deliveries:
       await dispatchDue(jobId, today);

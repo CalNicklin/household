@@ -143,7 +143,7 @@ sudo deploy/install.sh --domain house.example.com --deploy-key "$(cat household-
 ```
 
 It installs `/srv/household` (compose file, Caddyfile, `.env` with every secret generated there), the
-`household-deploy`, `household-setup`, `household-backup` and `household-restore` commands, the
+`household-deploy`, `household-setup`, `household-backup`, `household-restore` and `household-google` commands, the
 `household` user with its forced command and sudoers rule (`/etc/sudoers.d/household-deploy`), and the
 nightly backup timer. Running it again is safe: it keeps the secrets and changes only what you pass.
 Check what it found: `sudo grep -E '^(HOUSEHOLD_DOMAIN|HINDSIGHT_NETWORK)=' /srv/household/.env`.
@@ -211,15 +211,8 @@ sudo household-setup < house.json
 `healthOwner` is the one adult whose health tracking may exist (PRV-2). Leave it out and nobody's does.
 It prints each adult's app login once (username and a generated password): put them in the password
 manager. Then fill in the credentials `.env` still lacks (`sudo nano /srv/household/.env`:
-`ANTHROPIC_API_KEY`, `TELEGRAM_BOT_TOKEN`, the Google settings; see `.env.example`). The Google token file
-goes where only the app can read it, and `.env` names it by its path inside the container:
-
-```bash
-sudo install -o 10001 -m 400 google.json /srv/household/credentials/google.json
-# in /srv/household/.env:
-GOOGLE_ACCESS_TOKEN_FILE=/run/household-credentials/google.json
-```
- Redeploy what's running with
+`ANTHROPIC_API_KEY`, `TELEGRAM_BOT_TOKEN`; see `.env.example`). Google Calendar has its own steps
+(**Google Calendar**, below). Redeploy what's running with
 `sudo household-deploy "$(sudo cut -d@ -f2 /srv/household/image)"`. Every later push to `main` deploys
 itself.
 
@@ -235,6 +228,95 @@ free -m
 ```
 
 Then log in at `https://house.example.com/` on the kitchen iPad.
+
+### Google Calendar
+
+The house reads **one** calendar, the shared family calendar, with the `calendar.readonly` scope only:
+it can't add, move or delete an event (PRV-1). Work is marked on that calendar: `#work` in an event's
+title or description (also `#home` and `#solo:<person>`; the conventions are at the top of
+`server/integrations/google-calendar.ts`). Nothing else needs naming: `workCalendarIds` marks every event
+of a calendar the house reads as work, and the house reads only the family one, so it stays unset. A
+separate work calendar is not read; that would be a new issue.
+
+Google pushes each change to `https://<HOUSEHOLD_DOMAIN>/webhooks/calendar` on a "watch" channel. The
+app opens it when it starts, checks it every hour (at :17), renews it a day before Google ends it
+(about a week after it opened), and syncs once whenever it opens one.
+
+**1. The Google Cloud project (once, on the laptop).** Signed in as the Google account that has the
+family calendar, at <https://console.cloud.google.com/>:
+
+- Create a project, e.g. `household`. **APIs & Services → Library → Google Calendar API → Enable.**
+- **Google Auth Platform** (the OAuth consent screen) → Get started: app name `Household`, your email,
+  audience **External**. Under **Data access → Add or remove scopes**, add only
+  `https://www.googleapis.com/auth/calendar.readonly`. Under **Audience → Test users**, add both adults'
+  Google addresses. Leave the publishing status on **Testing** (but see the 7-day limit below).
+- **Clients → Create client**, application type **Desktop app**, name `household laptop` → Create →
+  **Download JSON** (`client_secret_….json`). It holds the client secret: keep it in the password
+  manager, not the repo (`.gitignore` refuses `client_secret_*.json` and `google.json` anyway).
+
+**2. Connect (on the laptop),** from a checkout of this repo after `pnpm install`:
+
+```bash
+pnpm google:connect --client ~/Downloads/client_secret_….json
+```
+
+It prints a Google link. Open it, sign in as the account with the family calendar, pass the "Google
+hasn't verified this app" page (Continue: it is your own app), allow "See … your calendars", and the
+terminal says `Wrote google.json (mode 600, read-only calendar access)`. It uses a loopback redirect
+(`http://127.0.0.1:<port>/`) with PKCE and a random state, refuses anything wider than
+`calendar.readonly`, and never prints the refresh token. Don't open or paste `google.json`.
+
+**3. Copy it to the server** (into your home directory there, then where only the app can read it):
+
+```bash
+scp google.json you@203.0.113.10:google.json && rm google.json
+ssh you@203.0.113.10
+sudo install -o 10001 -g root -m 400 ~/google.json /srv/household/credentials/google.json && rm ~/google.json
+```
+
+**4. Settings.** Once per server, take the new `household-google` command: in the server's checkout,
+`git pull && sudo deploy/install.sh` (no options; it keeps everything else). Then in `/srv/household/.env`
+(`sudo nano /srv/household/.env`):
+
+```bash
+GOOGLE_ACCESS_TOKEN_FILE=/run/household-credentials/google.json
+GOOGLE_CALENDAR_ID=
+```
+
+Then `sudo household-google check`. It refreshes a token and lists the calendars the account can see,
+names and IDs only (never events). Put the family calendar's ID in `GOOGLE_CALENDAR_ID`: it looks like
+`…@group.calendar.google.com` (or your address, for your own primary calendar).
+
+**5. Redeploy and check:**
+
+```bash
+sudo household-deploy "$(sudo cut -d@ -f2 /srv/household/image)"
+sudo household-google check     # ✓ token, → the family calendar, ✓ watch … (in 6d 23h); "All good."
+sudo docker logs household-app-1 2>&1 | grep -E '"event":"calendar-watch'
+```
+
+The kitchen screen then shows the family calendar's events; a change in Google shows up as soon as
+Google pushes it.
+
+**Google's limits, and what to do:**
+
+- **Testing mode: the refresh token dies after 7 days.** Google expires refresh tokens for an External
+  app in Testing a week after consent. `household-google check` then says "Google refused the refresh
+  token" and the screen stops changing. To stop it happening, publish the app: **Google Auth Platform →
+  Audience → Publish app** ("In production"). For your own unverified app that is allowed (under 100
+  users); everyone who connects sees the "unverified" page once. Then do steps 2 and 3 once more, so
+  the token in use was issued after publishing. Staying in Testing works too: repeat steps 2 and 3
+  every week. Either way the app reads the new file at its next try, with no redeploy.
+- **Other ways a refresh token stops working:** unused for six months, access removed at
+  <https://myaccount.google.com/connections>, or over 100 tokens for this client on one account
+  (Google drops the oldest; one `google:connect` makes one). The fix is always steps 2 and 3.
+- **No refresh token from `google:connect`:** remove "Household" at
+  <https://myaccount.google.com/connections> and run it again.
+- **Watch channels** end after about a week (Google says when; `household-google check` shows it).
+  Google needs HTTPS with a valid certificate at the address, which Caddy gives it. A failure to open
+  or renew is logged as `calendar-watch-failed` with the HTTP status and tried again the next hour.
+  Google says push notifications aren't guaranteed; a missed one is caught up by the next change's sync
+  (each sync asks for everything since the last).
 
 ### Backups on the server
 

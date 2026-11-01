@@ -90,7 +90,11 @@ export type SpendView = z.infer<typeof zSpendView>;
 
 export const zArrivalsView = z.array(zArrival);
 
-export const zConversationView = z.array(z.object({ id: z.string(), text: z.string(), createdAt: zIsoDateTime }));
+/** MOM-2: the one thing a `what_now` answer named, so the screen can show it as the thing plus its reason. */
+export const zAnswerPick = z.object({ title: z.string(), why: z.string() });
+export type AnswerPick = z.infer<typeof zAnswerPick>;
+
+export const zConversationView = z.array(z.object({ id: z.string(), text: z.string(), createdAt: zIsoDateTime, pick: zAnswerPick.nullable() }));
 export type ConversationView = z.infer<typeof zConversationView>;
 
 /** What the app posts to say something to the house (same ingress as WhatsApp, CH-1). */

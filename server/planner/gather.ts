@@ -1,9 +1,10 @@
-import { ActionKind, type BacklogItem, BacklogStatus, BlockType, type LocalDate, NotificationStatus, type NotifyAction } from "@household/contracts";
+import { ActionKind, type BacklogItem, BacklogStatus, BacklogTag, BlockType, type LocalDate, NotificationStatus, type NotifyAction } from "@household/contracts";
 import { findSlot, partOfDay } from "../rules/fit.ts";
 import { adultsOf, type HouseFacts, nameOf } from "../rules/day.ts";
 import type { Runtime } from "../runtime.ts";
 import { addLocalDays, atLocal, daysBetween, localDate, shortWeekday, startOfLocalDay } from "../time.ts";
 import type { BacklogPick, OneThing } from "./compose.ts";
+import { type HouseFill, START_REF_PREFIX } from "./first-day.ts";
 
 /** Everything the rules need, read through each domain's router (no cross-database reads, CODE-4). */
 export async function gatherFacts(rt: Runtime, from: LocalDate, days: number): Promise<HouseFacts> {
@@ -100,10 +101,44 @@ export async function oneThingCandidates(rt: Runtime, facts: HouseFacts, date: L
     });
   }
   for (const b of plan?.blocks ?? []) {
-    if (closed.has(b.id)) continue;
+    if (closed.has(b.id) || b.id.startsWith(START_REF_PREFIX)) continue;
     if (b.type === BlockType.suggestion) out.push({ ref: b.ref, title: b.title, why: b.reason, actions: withHandOver(b.ref, b.actions) });
   }
+  // HOU-149: a thin house still gets one answer — the oldest small job that needs nothing it can't check.
+  // It is marked `fallback`, so what_now can hold it back in quiet hours (the plan is made at 5:30).
+  const small = out.length === 0 ? oldestSmall(items) : undefined;
+  if (small !== undefined) {
+    const ref = `backlog:${small.id}`;
+    const age = daysBetween(localDate(new Date(small.createdAt), rt.timeZone), date);
+    out.push({
+      ref,
+      title: small.text,
+      why: `Of the quick jobs that need no weather, daylight or anyone else, it's the oldest (${age <= 0 ? "added today" : age === 1 ? "added yesterday" : `added ${age} days ago`}). About fifteen minutes.`,
+      actions: withHandOver(ref, [
+        { kind: ActionKind.done, label: "Done", ref },
+        { kind: ActionKind.notToday, label: "Not today", ref },
+      ]),
+      fallback: true,
+    });
+  }
   return out;
+}
+
+/** Tags a quick job may carry and still be suggested without a slot: nothing about weather, daylight or who is home. */
+const SMALL_OK: ReadonlySet<string> = new Set<string>([BacklogTag.quick, BacklogTag.phoneCall]);
+
+/** The oldest active quick job whose only needs are being quick (or a phone call). */
+function oldestSmall(items: readonly BacklogItem[]): BacklogItem | undefined {
+  return items
+    .filter((i) => i.status === BacklogStatus.active && i.tags.includes(BacklogTag.quick) && i.tags.every((t) => SMALL_OK.has(t)))
+    .sort((a, b) => a.createdAt.localeCompare(b.createdAt))[0];
+}
+
+/** HOU-149: whether the calendar has ever been read and how many jobs are on the backlog. */
+export async function houseFill(rt: Runtime): Promise<HouseFill> {
+  const api = rt.system("planner");
+  const backlogItems = (await api.backlog.list()).filter((i) => i.status === BacklogStatus.active).length;
+  return { calendarConnected: (await api.calendar.syncToken()) !== null, backlogItems };
 }
 
 /** Notifications waiting for the morning screen (PRO-7) or routed to it (CH-7). */
