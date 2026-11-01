@@ -138,8 +138,6 @@ step "HOU-160: household-status says which model the running house uses"
 grep -qx "image: localhost:5000/household@$digest" "$work/status.log" || fail "household-status image"
 grep -qx "app: running healthy" "$work/status.log" || fail "household-status app"
 grep -qx "model: anthropic claude-opus-5-5 (ANTHROPIC_API_KEY set)" "$work/status.log" || fail "household-status model"
-# No deploy, refusal or status output ever carries the key.
-if grep -l 'placeholder-not-a-key' "$work"/*.log; then fail "the API key was printed"; fi
 docker logs household-app-1 2>&1 | grep -q '"event":"listening".*"model":"anthropic claude-opus-5-5 (ANTHROPIC_API_KEY set)"' || fail "the app did not log its model at start"
 
 step "a broken image never replaces a working one: household-deploy rolls back"
@@ -170,4 +168,6 @@ for _ in $(seq 60); do [ "$(docker inspect -f '{{.State.Health.Status}}' househo
 [ "$(docker inspect -f '{{.State.Health.Status}}' household-app-1)" = healthy ] || fail "app not healthy after the restore"
 grep -q '^  sam ' "$work/logins" && [ -n "$(curl -sk -D - -o /dev/null -H 'content-type: application/json' -d "{\"username\":\"sam\",\"password\":\"$password\"}" https://localhost/api/login | grep -i '^set-cookie')" ] || fail "sam's login did not survive the restore"
 echo "backed up to $(basename "$backup") and restored; the house came back healthy"
+# HOU-160: no deploy, refusal, rollback or status output ever carries the key.
+if grep -l 'placeholder-not-a-key' "$work"/*.log; then fail "the API key was printed"; fi
 step "PASS: household-deploy, -setup, -status, -backup and -restore against local Docker"
