@@ -59,14 +59,11 @@ describe("[HOME-1] the house reads several calendars as one", () => {
     ]);
   });
 
-  test("a free/busy-only block joins a full event at exactly the same time on another calendar, else stands alone as Busy", () => {
-    const joined = mergeCopies([copy("tom", "b", { busy: true, title: "Busy" }), copy("priya", "inv", { uid: "u2", title: "Theatre" })]);
-    expect(joined).toHaveLength(1);
-    expect(joined[0]).toMatchObject({ title: "Theatre", attendees: ["priya", "tom"], away: ["priya", "tom"], calendars: ["priya", "tom"] });
-    const alone = mergeCopies([copy("tom", "b", { busy: true, title: "Busy", start: "2026-11-10T09:00:00.000Z", end: "2026-11-10T10:00:00.000Z" }), copy("priya", "inv", { uid: "u2" })]);
-    expect(alone.map((e) => [e.title, e.attendees])).toEqual([
+  test("a free/busy-only block stands alone as Busy for its owner, even at the same time as someone else's event", () => {
+    const events = mergeCopies([copy("tom", "b", { busy: true, title: "Busy" }), copy("priya", "inv", { uid: "u2", title: "Football" })]);
+    expect(events.map((e) => [e.title, e.attendees])).toEqual([
       ["Busy", ["tom"]],
-      ["Event", ["priya"]],
+      ["Football", ["priya"]],
     ]);
   });
 
