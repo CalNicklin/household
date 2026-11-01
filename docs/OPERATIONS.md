@@ -143,7 +143,7 @@ sudo deploy/install.sh --domain house.example.com --deploy-key "$(cat household-
 ```
 
 It installs `/srv/household` (compose file, Caddyfile, `.env` with every secret generated there), the
-`household-deploy`, `household-setup`, `household-backup` and `household-restore` commands, the
+`household-deploy`, `household-setup`, `household-backup`, `household-restore` and `household-telegram` commands, the
 `household` user with its forced command and sudoers rule (`/etc/sudoers.d/household-deploy`), and the
 nightly backup timer. Running it again is safe: it keeps the secrets and changes only what you pass.
 Check what it found: `sudo grep -E '^(HOUSEHOLD_DOMAIN|HINDSIGHT_NETWORK)=' /srv/household/.env`.
@@ -235,6 +235,82 @@ free -m
 ```
 
 Then log in at `https://house.example.com/` on the kitchen iPad.
+
+### Telegram
+
+The house talks to you both through one Telegram bot (CH-2). Telegram sends each message to
+`https://<HOUSEHOLD_DOMAIN>/webhooks/telegram` with a secret header; the app answers anything without
+the secret with 401 (PRV-6). The secret is `TELEGRAM_WEBHOOK_SECRET`, which `install.sh` generated into
+`/srv/household/.env`. The house knows who wrote by their Telegram user ID (CH-3). A message from an ID
+it doesn't know is dropped without a reply: its words are not kept, only the ID and the time. That is how
+you find your own ID below. `sudo household-telegram` runs each step inside the app's image with the
+house's `.env`, so the token and the secret are never on a command line and never printed.
+
+**1. Make the bot.** In Telegram, open a chat with **@BotFather** (the blue tick one) and send:
+
+- `/newbot`, then a name (e.g. `Home`) and a username ending in `bot` (e.g. `nicklin_home_bot`). BotFather
+  replies with the bot's token. It is a password: don't paste it anywhere but step 2.
+- `/setjoingroups`, pick the bot, **Disable**: nobody can add it to a group, so it only ever has private
+  chats with the people who message it.
+- `/setprivacy`, pick the bot, **Enable** (the default). If it were ever in a group, it would see only
+  messages meant for it.
+
+**2. The token.** On the server, `sudo nano /srv/household/.env` and set `TELEGRAM_BOT_TOKEN=<the token>`
+(one line, no quotes). Then redeploy so the app sends through Telegram:
+`sudo household-deploy "$(sudo cut -d@ -f2 /srv/household/image)"`.
+
+**3. Connect.**
+
+```bash
+sudo household-telegram connect
+```
+
+It points the bot's webhook at the house with the secret, for only the updates the house reads (messages
+and button taps), then shows what Telegram has:
+
+```text
+bot: @nicklin_home_bot
+webhook: https://house.example.com/webhooks/telegram (this house)
+updates: message, callback_query
+waiting to be delivered: 0
+connected
+```
+
+Running it again is safe. `sudo household-telegram status` shows the same without changing anything,
+plus Telegram's last delivery error if there is one (e.g. `Wrong response from the webhook: 401
+Unauthorized` means the house didn't get the right secret).
+
+**4. Each adult's Telegram ID.** Do this once for each of you (skip anyone whose `telegram` was already in
+`house.json` at setup):
+
+1. In Telegram, open the bot (search for its username, or `https://t.me/<username>`), tap **Start** and
+   send it anything. It won't answer: it doesn't know you yet.
+2. On the server:
+
+   ```bash
+   sudo household-telegram senders
+   ```
+
+   ```text
+   Telegram user IDs the house didn't know, newest first (their messages were dropped, not kept):
+     123456789  last 2026-11-02T09:14:03.000Z  2 times
+   ```
+
+   Yours is the newest, at the time you messaged (times are UTC). If you're not sure, message it again
+   and check that the count goes up.
+3. Give it to your person (the `id` from `house.json`, e.g. `cal` or `chloe`):
+
+   ```bash
+   sudo household-telegram set cal 123456789
+   ```
+
+   It takes effect at once: no redeploy. Running it again with another ID replaces the old one. It refuses
+   an ID that is already the other adult's.
+
+**5. Check it works.** Send the bot "we need to oil the squeaky door": within a few seconds it is on the
+Backlog in the app, as yours. Then `sudo household-telegram status` shows no delivery error and nothing
+waiting, and `sudo household-telegram senders` doesn't show your ID again. Urgent messages from the house
+now come to you on Telegram (Settings in the app chooses which).
 
 ### Backups on the server
 

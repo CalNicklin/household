@@ -30,7 +30,7 @@ lib=/usr/local/lib/household dir=/srv/household etc=/etc/household
 install -d -m 755 "$lib" "$etc"
 install -d -m 750 "$dir"
 install -m 755 "$repo"/deploy/household-*.sh "$repo/scripts/backup.sh" "$repo/scripts/restore.sh" "$lib/"
-for c in deploy setup backup restore preview; do ln -sfn "$lib/household-$c.sh" "/usr/local/sbin/household-$c"; done
+for c in deploy setup backup restore preview telegram; do ln -sfn "$lib/household-$c.sh" "/usr/local/sbin/household-$c"; done
 # Credential files only the app (uid 10001 in its image) can read, mounted read-only into it.
 install -d -o 10001 -g root -m 700 "$dir/credentials"
 install -m 644 "$repo/deploy/compose.yml" "$repo/deploy/compose.hindsight.yml" "$repo/deploy/compose.caddy-previews.yml" "$repo/deploy/Caddyfile" "$repo/deploy/Caddyfile.previews" "$dir/"

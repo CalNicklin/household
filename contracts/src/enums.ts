@@ -41,6 +41,13 @@ export const DeliveryChannel = {
 export type DeliveryChannel = ValueOf<typeof DeliveryChannel>;
 export const zDeliveryChannel = z.enum(DeliveryChannel);
 
+/** CH-2: the kinds of Telegram update the Telegram adapter handles; the webhook asks Telegram for only these. */
+export const TelegramUpdateType = {
+  message: "message",
+  callbackQuery: "callback_query",
+} as const;
+export type TelegramUpdateType = ValueOf<typeof TelegramUpdateType>;
+
 /**
  * How much a notification needs to reach someone now. `urgent` is anything the verifications call a
  * message (bins tonight, a delivery today, a hand-over, a question): the routing table sends it to the
