@@ -1,3 +1,5 @@
+import { Limits } from "@household/contracts";
+
 /**
  * HOME-6 / HOU-154: register the service worker, and pick up a deploy without anyone touching the
  * screen. Each deploy serves a new worker (it carries the build id); when a worker takes over whose
@@ -29,7 +31,7 @@ export function registerServiceWorker(): void {
     if (page === null || worker === null) return;
     void (async () => {
       const build = await buildOf(worker);
-      if (build !== null && build !== page) reloadWhenIdle();
+      if (build !== page) reloadWhenIdle();
     })();
   });
   void container.register("/sw.js", { updateViaCache: "none" }).catch(() => {});
@@ -47,9 +49,15 @@ export function checkForUpdate(): void {
     .catch(() => {});
 }
 
-/** The build a worker carries, asked over a message channel (web/public/sw.js); null if it cannot say. */
+/**
+ * The build a worker carries, asked over a message channel (web/public/sw.js); null if it cannot
+ * say. A worker that never answers (one from before builds were named, e.g. after a rollback) is not
+ * this page's build, so after the live-update budget it counts as "unknown" and the page reloads.
+ */
 function buildOf(worker: ServiceWorker): Promise<string | null> {
   return new Promise((resolve) => {
+    // limit: liveUpdateBudgetMs
+    window.setTimeout(() => resolve(null), Limits.liveUpdateBudgetMs.value);
     const channel = new MessageChannel();
     channel.port1.addEventListener("message", (e: MessageEvent) => resolve(typeof e.data === "string" ? e.data : null), { once: true });
     channel.port1.start();
