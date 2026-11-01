@@ -2,21 +2,26 @@
 # One-time (and re-runnable) server setup for the real house, run by Cal as root from a checkout of the
 # repo on the VPS (docs/OPERATIONS.md has the order):
 #   sudo deploy/install.sh --domain house.example.com --deploy-key "ssh-ed25519 AAAA... household-deploy"
+# and, for the PR previews (FB-5), once more with
+#   sudo deploy/install.sh --preview-domain preview.example.com --preview-key "ssh-ed25519 AAAA... household-preview"
 # It never touches the other apps on the server. It:
 #   - installs the compose file, Caddyfile and household-* commands (re-run it after changing deploy/);
 #   - generates every secret on the server into /srv/household/.env (root only), once;
 #   - finds the existing Hindsight's Docker network so the app can reach it;
 #   - creates the `household` user, whose SSH key can only run household-deploy, via one sudoers rule;
+#   - for previews: installs /srv/household-previews, and a second key that can only run household-preview;
 #   - switches on the nightly backup.
 set -euo pipefail
 umask 022
 [ "$(id -u)" -eq 0 ] || { echo "run as root: sudo deploy/install.sh ..." >&2; exit 1; }
 repo="$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)"
-domain="" key=""
+domain="" key="" preview_domain="" preview_key=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --domain) domain="${2:?}"; shift 2 ;;
     --deploy-key) key="${2:?}"; shift 2 ;;
+    --preview-domain) preview_domain="${2:?}"; shift 2 ;;
+    --preview-key) preview_key="${2:?}"; shift 2 ;;
     *) echo "unknown option $1" >&2; exit 2 ;;
   esac
 done
@@ -25,10 +30,15 @@ lib=/usr/local/lib/household dir=/srv/household etc=/etc/household
 install -d -m 755 "$lib" "$etc"
 install -d -m 750 "$dir"
 install -m 755 "$repo"/deploy/household-*.sh "$repo/scripts/backup.sh" "$repo/scripts/restore.sh" "$lib/"
-for c in deploy setup backup restore; do ln -sfn "$lib/household-$c.sh" "/usr/local/sbin/household-$c"; done
+for c in deploy setup backup restore preview; do ln -sfn "$lib/household-$c.sh" "/usr/local/sbin/household-$c"; done
 # Credential files only the app (uid 10001 in its image) can read, mounted read-only into it.
 install -d -o 10001 -g root -m 700 "$dir/credentials"
-install -m 644 "$repo/deploy/compose.yml" "$repo/deploy/compose.hindsight.yml" "$repo/deploy/Caddyfile" "$dir/"
+install -m 644 "$repo/deploy/compose.yml" "$repo/deploy/compose.hindsight.yml" "$repo/deploy/compose.caddy-previews.yml" "$repo/deploy/Caddyfile" "$repo/deploy/Caddyfile.previews" "$dir/"
+# FB-5: the PR previews' own directory: their compose file and which of them are running. Nothing of the
+# house's is in it.
+previews=/srv/household-previews
+install -d -m 755 "$previews" "$previews/live"
+install -m 644 "$repo/deploy/compose.preview.yml" "$previews/"
 if [ ! -f "$etc/household.conf" ]; then
   cat > "$etc/household.conf" <<'CONF'
 # Settings for the household-* commands. Root-owned; the deploy user cannot change them.
@@ -54,6 +64,16 @@ if [ -n "$domain" ]; then
   echo "HOUSEHOLD_DOMAIN=$domain" >> "$dir/.env"
 fi
 grep -qE '^HOUSEHOLD_DOMAIN=.+' "$dir/.env" || { echo "give the domain once: --domain house.example.com" >&2; exit 2; }
+# FB-5: previews are served at pr-<n>.<preview domain> by the house's Caddy, which then also joins the
+# previews' network (an internal one: nothing on it reaches the internet).
+if [ -n "$preview_domain" ]; then
+  [[ "$preview_domain" =~ ^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$ ]] || { echo "--preview-domain must be a lowercase domain, e.g. preview.example.com" >&2; exit 2; }
+  sed -i '/^PREVIEW_DOMAIN=/d' "$dir/.env"
+  echo "PREVIEW_DOMAIN=$preview_domain" >> "$dir/.env"
+fi
+if grep -qE '^PREVIEW_DOMAIN=.+' "$dir/.env"; then
+  docker network inspect household-previews > /dev/null 2>&1 || docker network create --internal household-previews > /dev/null
+fi
 
 # PLT-6: reuse the Hindsight already on the server. It publishes only on the host's 127.0.0.1, which a
 # container cannot reach, so the app joins Hindsight's own Docker network instead.
@@ -71,16 +91,28 @@ fi
 id household > /dev/null 2>&1 || useradd --system --create-home --shell /bin/bash household
 passwd -l household > /dev/null
 gpasswd -d household docker > /dev/null 2>&1 || true
-if [ -n "$key" ]; then
-  [[ "$key" =~ ^ssh-ed25519\ [A-Za-z0-9+/]+=*(\ [^\"]*)?$ ]] || { echo "--deploy-key must be one ssh-ed25519 public key" >&2; exit 2; }
-  home="$(getent passwd household | cut -d: -f6)"
+# Each key is forced to its one command: the deploy key to household-deploy, the preview key (FB-5) to
+# household-preview. Giving one key again replaces only that key's line.
+home="$(getent passwd household | cut -d: -f6)"
+authorized="$home/.ssh/authorized_keys"
+set_key() {
+  local command="$1" option="$2" given="$3" lines
+  [[ "$given" =~ ^ssh-ed25519\ [A-Za-z0-9+/]+=*(\ [^\"]*)?$ ]] || { echo "$option must be one ssh-ed25519 public key" >&2; exit 2; }
+  if grep -vF "/usr/local/sbin/$command " "$authorized" 2> /dev/null | grep -qF " $(cut -d' ' -f2 <<< "$given")"; then
+    echo "$option must be its own key, not the one another command already uses" >&2
+    exit 2
+  fi
   install -d -o root -g root -m 755 "$home/.ssh"
-  printf 'restrict,command="sudo -n /usr/local/sbin/household-deploy \\"$SSH_ORIGINAL_COMMAND\\"" %s\n' "$key" > "$home/.ssh/authorized_keys"
-  chown root:root "$home/.ssh/authorized_keys"
-  chmod 644 "$home/.ssh/authorized_keys"
-fi
+  lines="$(grep -vF "/usr/local/sbin/$command " "$authorized" 2> /dev/null || true)"
+  { [ -z "$lines" ] || printf '%s\n' "$lines"; printf 'restrict,command="sudo -n /usr/local/sbin/%s \\"$SSH_ORIGINAL_COMMAND\\"" %s\n' "$command" "$given"; } > "$authorized.new"
+  chown root:root "$authorized.new"
+  chmod 644 "$authorized.new"
+  mv "$authorized.new" "$authorized"
+}
+if [ -n "$key" ]; then set_key household-deploy --deploy-key "$key"; fi
+if [ -n "$preview_key" ]; then set_key household-preview --preview-key "$preview_key"; fi
 rule="$(mktemp)"
-echo 'household ALL=(root) NOPASSWD: /usr/local/sbin/household-deploy' > "$rule"
+echo 'household ALL=(root) NOPASSWD: /usr/local/sbin/household-deploy, /usr/local/sbin/household-preview' > "$rule"
 visudo -cqf "$rule"
 install -m 440 "$rule" /etc/sudoers.d/household-deploy
 rm -f "$rule"

@@ -1,0 +1,18 @@
+# FB-5: added to the real house's project by household-common.sh only when PREVIEW_DOMAIN is in
+# /srv/household/.env (install.sh --preview-domain). It gives the house's Caddy the preview sites and a
+# seat on the household-previews network, and nothing else: the app, Postgres and object storage of the
+# real house stay off that network, so no preview can reach them.
+services:
+  caddy:
+    environment:
+      PREVIEW_DOMAIN: ${PREVIEW_DOMAIN:?}
+    volumes:
+      - ./Caddyfile.previews:/etc/caddy/previews/previews.caddy:ro
+      # Which previews are running (household-preview writes one file per preview), for on-demand TLS.
+      - ${PREVIEWS_DIR:?}/live:/previews:ro
+    networks: [default, previews]
+
+networks:
+  previews:
+    name: household-previews
+    external: true

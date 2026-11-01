@@ -250,3 +250,108 @@ with a local registry standing in for GHCR. It covers:
 - did not give the `household` user Docker, any other sudo, or `.env`;
 - deployed by digest;
 - found a stand-in `hindsight` on its own network without changing it.
+
+## PR previews (FB-5)
+
+Every PR from this repository (never a fork's) gets a preview on the same VPS: the PR's image running
+the **practice household** on fakes, freshly seeded on every push, at `https://pr-<n>.<preview domain>/`.
+The `preview` workflow comments the URL and the practice logins on the PR (`priya` and `tom`, password
+`practice`; they are made up and guard nothing real, so they are not secrets). Closing the PR removes the
+preview.
+
+| Per preview (compose project `household-pr-<n>`) | Memory cap (swap capped too) | Reachable from |
+| --- | --- | --- |
+| `app` (the PR's image, `PRACTICE=true`; its object store is files in its own volume) | 192 MB | the house's Caddy |
+| `postgres` (its own; thrown away with the preview) | 96 MB | that preview's app |
+
+- **Memory:** the caps are in `x-memory` at the top of `deploy/compose.preview.yml` (288 MB a preview).
+  All previews together stay within `PREVIEW_BUDGET_MB` (600 by default, set in
+  `/etc/household/household.conf`), so **two previews run at once**. A third removes the oldest (the one
+  deployed longest ago) first, and the workflow tells that PR so; a push to it brings it back. With the
+  house's 552 MB that is 1.1 GB at most, inside the 1.9 GiB that was free.
+- **Isolation:** a preview gets none of the real house's `.env`, credentials, volumes or networks, and no
+  Hindsight. Its two networks are internal (no internet at all, DNS included on Docker 26 or later:
+  check with `docker version`). Its containers run as non-root users with every capability dropped,
+  no privilege escalation, and at most 0.75 (app) and 0.5 (Postgres) of a core and 256/128 processes.
+  Its tokens and secrets (session, MCP, webhooks) are made at random on each deploy, never the practice
+  defaults. Previews can reach each other's apps on the shared network, as they could through the
+  internet. The only house container on the
+  previews' network is Caddy, the public front, which a preview reaches exactly as the internet does;
+  the house's app, Postgres and object storage are not on it. The house's Caddy serves the previews by
+  adding `deploy/Caddyfile.previews` (via `deploy/compose.caddy-previews.yml`, only once a preview domain
+  is set).
+- **Certificates:** on demand. Caddy gets a preview's certificate the first time it is visited, and only
+  while that preview is running (it asks `household-preview`'s list of running previews first), so no one
+  can make it ask Let's Encrypt for arbitrary names.
+- **Deploys:** `.github/workflows/preview.yml` on each push to a PR builds the image, pushes it to GHCR as
+  `household-preview:pr-<n>` (its own package: `household-deploy` only pulls from `household`), and runs `ssh household@<server> "preview <n> sha256:<digest>"`; on close,
+  `"preview-stop <n>"`. That uses a **second** key, forced to `household-preview`, which accepts exactly
+  those two forms and nothing else. The deploy key still runs only `household-deploy`, and neither can
+  run the other's command. The preview key on its own can only start and stop practice previews. But the
+  workflow runs from the PR's own branch, so a PR can read any repository secret, the deploy key
+  included, until HOU-141 moves that key into an environment only `main` may use (see step 3).
+  By hand on the server: `sudo household-preview "preview-stop 12"`; running ones are listed in
+  `/srv/household-previews/live`.
+
+### Cal's one-time steps for previews
+
+**1. DNS.** Pick a preview domain, e.g. `preview.example.com`, and add a wildcard record for it pointing at
+the VPS: `*.preview.example.com. A 203.0.113.10` (and AAAA if the server has IPv6). Check with
+`dig +short pr-1.preview.example.com`.
+
+**2. The preview key, and re-running `install.sh`.** On your laptop:
+
+```bash
+ssh-keygen -t ed25519 -N '' -C household-preview -f household-preview
+```
+
+On the server, from the repo checkout (`git pull` first):
+
+```bash
+sudo deploy/install.sh --preview-domain preview.example.com --preview-key "$(cat household-preview.pub)"
+```
+
+It installs `household-preview`, `/srv/household-previews`, the second key line (the deploy key's line is
+kept), the sudoers rule for both commands, the `household-previews` network, and `PREVIEW_DOMAIN` in
+`/srv/household/.env`. Then redeploy the house so its Caddy picks up the preview sites:
+`sudo household-deploy "$(sudo cut -d@ -f2 /srv/household/image)"`.
+
+**3. The GitHub secret.** The host and known_hosts are the deploy workflow's own:
+
+```bash
+gh secret set HOUSEHOLD_PREVIEW_SSH_KEY < household-preview
+```
+
+Then delete the private key from the laptop. Until it exists, the preview workflow skips with a notice.
+
+A PR's workflow can read every repository secret, the deploy key included. HOU-141 moves
+`HOUSEHOLD_SSH_KEY` into a `production` environment that only `main` may use. Turn previews on (add this
+secret) only after HOU-141 has merged and its steps are done. **Don't move or delete
+`HOUSEHOLD_SSH_KEY` before HOU-141's change to `deploy.yml` has merged:** until then the deploy workflow
+reads it only at repository level, and without it every deploy silently skips.
+
+**4. The cloud environment's network allowlist.** For the building agent to perform journeys on a preview
+with computer use (FB-4), add the preview domain (`*.preview.example.com`) to the claude.ai cloud
+environment's allowed hosts.
+
+**5. Check it.** Open a PR: the workflow comments `https://pr-<n>.preview.example.com/`; log in as `priya`
+/ `practice`. On the server: `sudo docker ps --filter name=household-pr-` and
+`sudo docker stats --no-stream $(sudo docker ps -q --filter name=household-pr-)`; `hindsight`,
+`docker-ib-gateway-1` and `household-*` unchanged.
+
+### Tried on the build sandbox — 1 November 2026
+
+`deploy/test-preview.sh` drives the real `household-preview` next to the real house (deployed by
+`household-deploy`, with the preview overlay on its Caddy) against local Docker, with a local registry
+standing in for GHCR. It shows:
+
+- 20 malformed commands refused (and `household-deploy` refusing both preview forms);
+- two previews up at once behind the house's Caddy, each with its own database; `priya` logs in to each,
+  the house's login does not, and no practice login works on the house;
+- a preview finding and reaching no house container, no stand-in Hindsight, no internet (not even a DNS
+  lookup), and not Caddy's on-demand check; none of the house's secrets or files in a preview; each
+  preview running as non-root with no capabilities and its own random tokens;
+- a third preview evicting the oldest (containers, volumes and image gone), the caps adding up to 576 MB;
+- a new push giving a fresh household without evicting anything;
+- closing a PR removing its preview, and a PR with no preview getting no certificate;
+- the house's containers never restarted, and its volumes and `.env` unchanged.

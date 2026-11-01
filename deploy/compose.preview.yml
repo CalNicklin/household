@@ -1,0 +1,123 @@
+# FB-5: one PR's preview on Cal's VPS: the PR's image in practice mode, with its own Postgres and its own
+# object store (files in a volume of its own), freshly seeded. Installed to /srv/household-previews by
+# deploy/install.sh and run only by household-preview, once per PR, as the compose project
+# household-pr-<n>. It shares nothing with the real house: no .env, no credentials, no volumes, no
+# network but household-previews, where the house's Caddy reaches it as pr-<n>. Both its networks are
+# internal, so a preview cannot reach the internet, Hindsight or anything else on the server.
+name: household-preview
+
+# Every container's hard memory cap, swap included. household-preview adds these up to decide how many
+# previews fit in PREVIEW_BUDGET_MB (600 by default: two), and stops the oldest when the budget is full.
+# Measured: a practice app at about 142 MB after a login and the home screen; its Postgres 60 to 80 MB.
+x-memory:
+  app: &app-memory 192m
+  postgres: &postgres-memory 96m
+
+x-logging: &logging
+  driver: json-file
+  options: { max-size: 5m, max-file: "2" }
+
+# A PR's image is code nobody has reviewed yet: no root, no capabilities, no privilege escalation, and
+# a bounded share of the server's two cores and its process table, so it can't starve the house or
+# the trading containers.
+x-confined: &confined
+  cap_drop: [ALL]
+  security_opt: ["no-new-privileges:true"]
+
+services:
+  app:
+    image: ${PREVIEW_IMAGE:?household-preview sets PREVIEW_IMAGE}
+    restart: unless-stopped
+    mem_limit: *app-memory
+    memswap_limit: *app-memory
+    <<: *confined
+    # The image's own `house` user, whatever the PR's Dockerfile says.
+    user: "10001:10001"
+    cpus: 0.75
+    pids_limit: 256
+    logging: *logging
+    environment:
+      # The practice household on fakes (QA-9): no real calendar, model, messages or supermarket.
+      PRACTICE: "true"
+      PUBLIC_URL: https://pr-${PREVIEW_NUMBER:?}.${PREVIEW_DOMAIN:?}
+      DATABASE_URL: postgres://postgres@postgres:5432/postgres
+      PORT: "3001"
+      # Made per deploy by household-preview and kept nowhere else, so no preview runs on the practice
+      # defaults published in server/env.ts.
+      SESSION_SECRET: ${PREVIEW_SESSION_SECRET:?}
+      MCP_TOKEN: ${PREVIEW_MCP_TOKEN:?}
+      TELEGRAM_WEBHOOK_SECRET: ${PREVIEW_TELEGRAM_WEBHOOK_SECRET:?}
+      EMAIL_WEBHOOK_SECRET: ${PREVIEW_EMAIL_WEBHOOK_SECRET:?}
+      CALENDAR_WEBHOOK_TOKEN: ${PREVIEW_CALENDAR_WEBHOOK_TOKEN:?}
+      HELPER_TOKEN: ${PREVIEW_HELPER_TOKEN:?}
+      HELPER_URL: ""
+      NODE_OPTIONS: --max-old-space-size=112
+    # The object store: S3 is unset, so the app keeps its (encrypted) objects in files here.
+    volumes: [objects:/app/.data]
+    networks:
+      default: {}
+      previews:
+        aliases: ["pr-${PREVIEW_NUMBER:?}"]
+    depends_on:
+      postgres: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3001/healthz').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"]
+      interval: 5s
+      start_period: 60s
+      retries: 12
+
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    mem_limit: *postgres-memory
+    memswap_limit: *postgres-memory
+    <<: *confined
+    # The image's postgres user (70 in the alpine image) from the start, so it needs no capabilities.
+    user: "70:70"
+    cpus: 0.5
+    pids_limit: 128
+    logging: *logging
+    # Only this preview's app can reach it, on this project's own internal network; the data is made up.
+    environment: { POSTGRES_HOST_AUTH_METHOD: trust }
+    command:
+      - postgres
+      - -c
+      - shared_buffers=16MB
+      - -c
+      - effective_cache_size=32MB
+      - -c
+      - work_mem=1MB
+      - -c
+      - maintenance_work_mem=8MB
+      - -c
+      - wal_buffers=1MB
+      - -c
+      - max_connections=60
+      - -c
+      - max_worker_processes=2
+      - -c
+      - max_parallel_workers=0
+      - -c
+      - max_parallel_workers_per_gather=0
+      - -c
+      - autovacuum_max_workers=1
+      # Thrown away with the preview, so nothing needs to survive a crash.
+      - -c
+      - fsync=off
+    shm_size: 32m
+    volumes: [pgdata:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 2s
+      retries: 60
+
+networks:
+  default:
+    internal: true
+  previews:
+    name: household-previews
+    external: true
+
+volumes:
+  pgdata:
+  objects:

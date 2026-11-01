@@ -15,7 +15,7 @@ Read `README.md` once. `VERIFICATIONS.md` is the only spec.
 
 ## Prove it
 - `pnpm check` must pass. It is the only check.
-- A user-facing line needs a Playwright e2e test against the practice household, and you must perform the journey yourself with computer use on the preview and attach screenshots to the issue.
+- A user-facing line needs a Playwright e2e test against the practice household, and you must perform the journey yourself with computer use on the PR's preview and attach screenshots to the issue (FB-4). The `preview` workflow comments the preview's URL and the practice logins on the PR once its image is up.
 - Evidence (test name, screenshot, log line) goes on the Linear issue before it moves to Done.
 
 ## Hand it over
