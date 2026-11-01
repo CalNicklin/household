@@ -11,8 +11,8 @@ import {
   PracticeTranscriber,
 } from "../../practice/fakes.ts";
 import type { Env } from "../env.ts";
-import type { CalendarSource, Clock, ObjectStore, Ports, ShoppingHelper } from "../ports.ts";
-import { GoogleCalendarSource, refreshingTokenProvider } from "./google-calendar.ts";
+import type { CalendarPush, CalendarSource, Clock, ObjectStore, Ports, ShoppingHelper } from "../ports.ts";
+import { GoogleCalendarPush, GoogleCalendarSource, refreshingTokenProvider } from "./google-calendar.ts";
 import { HindsightMemory } from "./hindsight-memory.ts";
 import { NoShoppingHelper } from "./shopping-helper.ts";
 import { FsObjectStore, S3ObjectStore } from "./s3-object-store.ts";
@@ -29,9 +29,9 @@ const zGoogleCredentials = z.union([
   z.object({ access_token: z.string() }),
 ]);
 
-function googleTokenFromFile(file: string, clock: Clock): () => Promise<string> {
+export function googleTokenFromFile(file: string, clock: Clock): () => Promise<string> {
   let provider: (() => Promise<string>) | null = null;
-  return async () => {
+  const fromFile = async (): Promise<string> => {
     if (provider === null) {
       const creds = zGoogleCredentials.parse(JSON.parse(await readFile(file, "utf8")));
       if ("access_token" in creds) {
@@ -48,6 +48,16 @@ function googleTokenFromFile(file: string, clock: Clock): () => Promise<string> 
       }
     }
     return provider();
+  };
+  return async () => {
+    try {
+      return await fromFile();
+    } catch (error) {
+      // Read the file again next time: after a refused refresh token Cal copies in a new google.json,
+      // and the house picks it up without a restart (docs/OPERATIONS.md, "Google Calendar").
+      provider = null;
+      throw error;
+    }
   };
 }
 
@@ -85,15 +95,19 @@ export function realPorts(env: Env, clock: Clock, options: RealPortsOptions): { 
   const missing: string[] = [];
 
   let calendar: CalendarSource;
+  let calendarPush: CalendarPush | undefined;
   if (env.GOOGLE_CALENDAR_ID !== undefined && env.GOOGLE_ACCESS_TOKEN_FILE !== undefined) {
+    const getAccessToken = googleTokenFromFile(env.GOOGLE_ACCESS_TOKEN_FILE, clock);
     calendar = new GoogleCalendarSource({
       calendarId: env.GOOGLE_CALENDAR_ID,
-      getAccessToken: googleTokenFromFile(env.GOOGLE_ACCESS_TOKEN_FILE, clock),
+      getAccessToken,
       personForEmail: options.personForEmail,
       timeZone: options.timeZone,
       clock,
+      baseUrl: env.GOOGLE_CALENDAR_API,
       ...(options.workCalendarIds === undefined ? {} : { workCalendarIds: options.workCalendarIds }),
     });
+    calendarPush = new GoogleCalendarPush({ calendarId: env.GOOGLE_CALENDAR_ID, getAccessToken, baseUrl: env.GOOGLE_CALENDAR_API });
   } else {
     missing.push("calendar");
     calendar = new PracticeCalendar();
@@ -139,7 +153,7 @@ export function realPorts(env: Env, clock: Clock, options: RealPortsOptions): { 
   }
 
   return {
-    ports: { clock, calendar, weather: new OpenMeteoWeather(), messenger, objects, memory, shopping, transcriber },
+    ports: { clock, calendar, ...(calendarPush === undefined ? {} : { calendarPush }), weather: new OpenMeteoWeather(), messenger, objects, memory, shopping, transcriber },
     missing,
   };
 }

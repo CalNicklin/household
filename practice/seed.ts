@@ -23,20 +23,39 @@ export async function migrateAll(env: Env, template?: (d: Domain) => string): Pr
   }
 }
 
+/** The house's settings, its people, their logins and their own settings: what every practice house starts with. */
+async function seedPeople(dbs: ReturnType<typeof connectAll>): Promise<void> {
+  const h = dbs.household;
+  await h.insert(H.settings).values({ household: data.PRACTICE_HOUSEHOLD, name: "Practice household", timezone: data.PRACTICE_TZ, retainMessages: true, latitude: 51.4545, longitude: -2.5879, healthOwner: "priya" });
+  await h.insert(H.people).values(data.people.map((p) => ({ ...p, nurseryDays: [...p.nurseryDays] })));
+  await h.insert(H.identities).values([...data.identities]);
+  const passwordHash = hashPassword(data.PRACTICE_PASSWORD);
+  await h.insert(H.logins).values(data.logins.map((l) => ({ ...l, passwordHash })));
+  await h.insert(H.personSettings).values([
+    { personId: "priya", ...personDefaults() },
+    { personId: "tom", ...personDefaults() },
+  ]);
+}
+
+/**
+ * HOU-149: a brand-new house, as `pnpm house:setup` leaves it — settings, the people and their logins,
+ * nothing else. No calendar, backlog, rules or sitters, and no plan yet.
+ */
+async function seedEmpty(env: Env): Promise<void> {
+  const dbs = connectAll(env);
+  try {
+    await seedPeople(dbs);
+  } finally {
+    await Promise.all(Object.values(dbs).map((db) => closePool(db.$client)));
+  }
+}
+
 /** FB-6: people, a week of calendar (via the practice Google), twenty backlog items, three parcels, the shared lists. */
 export async function seedPractice(env: Env, now: Date = new Date(data.PRACTICE_START)): Promise<void> {
   const dbs = connectAll(env);
   try {
+    await seedPeople(dbs);
     const h = dbs.household;
-    await h.insert(H.settings).values({ household: data.PRACTICE_HOUSEHOLD, name: "Practice household", timezone: data.PRACTICE_TZ, retainMessages: true, latitude: 51.4545, longitude: -2.5879, healthOwner: "priya" });
-    await h.insert(H.people).values(data.people.map((p) => ({ ...p, nurseryDays: [...p.nurseryDays] })));
-    await h.insert(H.identities).values([...data.identities]);
-    const passwordHash = hashPassword(data.PRACTICE_PASSWORD);
-    await h.insert(H.logins).values(data.logins.map((l) => ({ ...l, passwordHash })));
-    await h.insert(H.personSettings).values([
-      { personId: "priya", ...personDefaults() },
-      { personId: "tom", ...personDefaults() },
-    ]);
     for (const s of data.sitters) {
       const [row] = await h.insert(H.sitters).values({ name: s.name, knownFreeDays: [...s.knownFreeDays] }).returning();
       if (row !== undefined) await h.insert(H.sitterIdentities).values({ sitterId: row.id, channel: Channel.telegram, address: s.telegram });
@@ -91,8 +110,11 @@ export async function resetPractice(env: Env, now?: Date): Promise<void> {
   await seedPractice(env, now);
 }
 
-/** Empty every practice table in place (the databases and their connections stay) and seed again. */
-export async function truncateAndSeed(env: Env, now: Date): Promise<void> {
+/**
+ * Empty every practice table in place (the databases and their connections stay) and seed again:
+ * the whole practice household, or with `empty` a brand-new house (HOU-149).
+ */
+export async function truncateAndSeed(env: Env, now: Date, options: { empty?: boolean } = {}): Promise<void> {
   const dbs = connectAll(env);
   try {
     for (const domain of Object.values(Domain)) {
@@ -102,5 +124,6 @@ export async function truncateAndSeed(env: Env, now: Date): Promise<void> {
   } finally {
     await Promise.all(Object.values(dbs).map((db) => closePool(db.$client)));
   }
-  await seedPractice(env, now);
+  if (options.empty === true) await seedEmpty(env);
+  else await seedPractice(env, now);
 }

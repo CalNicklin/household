@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { fakeServer, json } from "./fake-http.ts";
-import { createWatchChannel, GOOGLE_CALENDAR_SCOPE, GoogleCalendarSource, parseCalendarNotification, refreshingTokenProvider } from "./google-calendar.ts";
+import { GOOGLE_CALENDAR_SCOPE, GoogleCalendarPush, GoogleCalendarSource, listCalendars, parseCalendarNotification, refreshingTokenProvider } from "./google-calendar.ts";
 
 const servers: { close: () => Promise<void> }[] = [];
 afterEach(async () => {
@@ -112,13 +112,37 @@ describe("Google Calendar source", () => {
     expect(form.get("refresh_token")).toBe("rt");
   });
 
-  it("[CH-6] subscribes to change notifications with a shared token", async () => {
-    const server = await fakeServer((_req, res) => json(res, 200, { resourceId: "r1", expiration: "1790000000000" }));
+  it("[CH-6][PRV-1] opens and closes a push channel with a shared token, and touches no event", async () => {
+    const server = await fakeServer((req, res) => (req.path === "/channels/stop" ? res.writeHead(204).end() : json(res, 200, { kind: "api#channel", id: "ch1", resourceId: "r1", expiration: "1790000000000" })));
     servers.push(server);
-    const out = await createWatchChannel({ calendarId: "family", webhookUrl: "https://house.example/hooks/calendar", token: "tok", channelId: "ch1", getAccessToken: async () => "a", baseUrl: server.url });
-    expect(out.resourceId).toBe("r1");
-    expect(server.requests[0]?.path).toBe("/calendars/family/events/watch");
-    expect(JSON.parse(server.requests[0]?.body.toString() ?? "{}")).toEqual({ id: "ch1", type: "web_hook", address: "https://house.example/hooks/calendar", token: "tok" });
+    const push = new GoogleCalendarPush({ calendarId: "family@group.calendar.google.com", getAccessToken: async () => "a", baseUrl: server.url });
+    const out = await push.open({ id: "ch1", address: "https://house.example/webhooks/calendar", token: "tok" });
+    expect(out).toEqual({ resourceId: "r1", expiresAt: new Date(1_790_000_000_000).toISOString() });
+    await push.close({ id: "ch1", resourceId: "r1" });
+    expect(server.requests.map((r) => `${r.method} ${r.path}`)).toEqual(["POST /calendars/family%40group.calendar.google.com/events/watch", "POST /channels/stop"]);
+    expect(JSON.parse(server.requests[0]?.body.toString() ?? "{}")).toEqual({ id: "ch1", type: "web_hook", address: "https://house.example/webhooks/calendar", token: "tok" });
+    expect(JSON.parse(server.requests[1]?.body.toString() ?? "{}")).toEqual({ id: "ch1", resourceId: "r1" });
+    expect(server.requests[0]?.headers.authorization).toBe("Bearer a");
+    const methods = Object.getOwnPropertyNames(GoogleCalendarPush.prototype);
+    for (const m of methods) expect(m).not.toMatch(/insert|patch|update|delete|move|create|quickAdd|import|write|remove/i);
+  });
+
+  it("lists the calendars it can see by name and ID only, across pages", async () => {
+    const server = await fakeServer((req, res) =>
+      req.path.includes("pageToken=p2")
+        ? json(res, 200, { items: [{ id: "family@group.calendar.google.com", summary: "Family", summaryOverride: "Us", accessRole: "writer" }] })
+        : json(res, 200, { items: [{ id: "cal@example.com", summary: "cal@example.com", primary: true, accessRole: "owner" }], nextPageToken: "p2" }),
+    );
+    servers.push(server);
+    const list = await listCalendars({ getAccessToken: async () => "a", baseUrl: server.url });
+    expect(list).toEqual([
+      { id: "cal@example.com", name: "cal@example.com", primary: true, accessRole: "owner" },
+      { id: "family@group.calendar.google.com", name: "Us", primary: false, accessRole: "writer" },
+    ]);
+    for (const r of server.requests) {
+      expect(r.method).toBe("GET");
+      expect(new URL(r.path, server.url).pathname).toBe("/users/me/calendarList");
+    }
   });
 
   it("[CH-4][PRV-6] reads push-notification headers so the webhook can dedupe and check the token", () => {

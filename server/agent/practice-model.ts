@@ -71,7 +71,7 @@ function practiceIntent(prompt: string): Call[] {
   if (/\b(normal day|back to normal|cancel (the )?(slow|sick) day|not a slow day)\b/.test(lower)) calls.push({ tool: "set_mode", input: { mode: "normal" } });
   else if (/\b(we're|we are|i'm|i am)\s+away\b|\baway (today|this weekend|until)\b/.test(lower)) calls.push({ tool: "set_mode", input: { mode: "away" } });
   else if (modeMatch !== null) calls.push({ tool: "set_mode", input: { mode: modeMatch[1] === "sick" ? "sick" : "slow", extend: extend === null ? null : "tomorrow" } });
-  if (/\b(one thing|what should i do|what do i do|what now|what's next|whats next|if i do one|what should (?:i|we) prioriti[sz]e)\b/.test(lower)) calls.push({ tool: "what_now", input: {} });
+  if (/\b(one thing|what should i do|what do i do|what can i do|what now|what's next|whats next|if i do one|what should (?:i|we) prioriti[sz]e|focus on)\b/.test(lower)) calls.push({ tool: "what_now", input: {} });
   if (calls.length > 0) return calls;
 
   const hand = /^(\w+)\s+can\s+do\s+(?:it|this|that)\b|\b(?:give|hand)\s+(?:it|this|that)(?:\s+over)?\s+to\s+(\w+)/i.exec(text);

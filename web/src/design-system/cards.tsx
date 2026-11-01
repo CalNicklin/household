@@ -101,7 +101,8 @@ export function SuggestionCard({ title, reason, actions, onSelect, selected }: {
         <Title onSelect={onSelect}>{title}</Title>
         <p className="ds-card__detail">{reason}</p>
       </div>
-      <Actions actions={actions} variants={["primary", "suggestion-secondary"]} />
+      {/* A lone action (e.g. only a dismiss) stays quiet; the solid button is for "do it". */}
+      <Actions actions={actions} variants={actions.length === 1 ? ["suggestion-secondary"] : ["primary", "suggestion-secondary"]} />
     </div>
   );
 }
