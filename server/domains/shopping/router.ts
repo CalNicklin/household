@@ -40,14 +40,15 @@ export function shoppingRouter(db: ShoppingDb) {
     ),
     /**
      * HOU-148: a person's tap dismisses a request that went nowhere (saved, or not found). The row is
-     * kept as dismissed, never deleted; a request in any other state is left as it is.
+     * kept as dismissed, never deleted; dismissing it again is a no-op; a request in any other state
+     * is left as it is.
      */
     dismiss: actorProcedure.input(zIdInput).output(zShoppingRequest).mutation(async ({ ctx, input }) => {
       if (actingPerson(ctx.actor) === null) forbid("a dismissal is a person's");
       const [updated] = await db
         .update(schema.requests)
         .set({ status: ShoppingStatus.dismissed })
-        .where(and(eq(schema.requests.id, input.id), inArray(schema.requests.status, [ShoppingStatus.failed, ShoppingStatus.saved])))
+        .where(and(eq(schema.requests.id, input.id), inArray(schema.requests.status, [ShoppingStatus.failed, ShoppingStatus.saved, ShoppingStatus.dismissed])))
         .returning();
       if (updated === undefined) forbid("only a request that went nowhere can be dismissed");
       ctx.publish("shopping");

@@ -48,4 +48,18 @@ describe("HOU-148: a person dismisses a shopping request that went nowhere; it i
     await expect(tap.api.shopping.dismiss({ id: queued.id })).rejects.toThrow(/went nowhere/);
     expect((await h.rt.system("t").shopping.get({ id: queued.id }))?.status).toBe(ShoppingStatus.queued);
   });
+
+  test("[HOME-4][PRO-9] a second tap on a dismissed request says so and records nothing more; 'not today' on a request still in play is an ordinary not today", async () => {
+    const { scope } = await shop(["sumac"]);
+    const id = scope.effects.long[0]?.requestId ?? "";
+    expect(await respond(jobScope(h.rt, "job-tap-1", "msg-tap-1", "tom", "app"), `shopping:${id}`, ActionKind.notToday, null)).toBe("Okay, dismissed.");
+    const events = (await h.rt.system("t").learning.events()).length;
+    const second = jobScope(h.rt, "job-tap-2", "msg-tap-2", "tom", "app");
+    expect(await respond(second, `shopping:${id}`, ActionKind.notToday, null)).toBe("That's already dismissed.");
+    expect((await h.rt.system("t").learning.events()).length).toBe(events);
+    expect(second.effects.closeRefs).toEqual([]);
+    const queued = await scope.api.shopping.request({ item: "rice", sourceMessage: "msg-still:rice" });
+    expect(await respond(jobScope(h.rt, "job-tap-3", "msg-tap-3", "tom", "app"), `shopping:${queued.id}`, ActionKind.notToday, null)).toBe("Okay, not today.");
+    expect((await h.rt.system("t").shopping.get({ id: queued.id }))?.status).toBe(ShoppingStatus.queued);
+  });
 });

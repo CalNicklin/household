@@ -1,4 +1,4 @@
-import { ActionKind, BlockType, DayPart, type LocalDate, LongTool, ModeKind, NotificationStatus, RhythmSource } from "@household/contracts";
+import { ActionKind, BlockType, DayPart, type LocalDate, LongTool, ModeKind, NotificationStatus, RhythmSource, ShoppingStatus } from "@household/contracts";
 import { START_REF_PREFIX } from "../planner/first-day.ts";
 import { addLocalDays, localDate, localHour, weekdayOf } from "../time.ts";
 import type { JobScope } from "./scope.ts";
@@ -53,6 +53,14 @@ export async function respond(scope: JobScope, ref: string, action: ActionKind, 
   const date = localDate(now, tz);
   const person = scope.person;
   if (person === null) return "I don't know who that was.";
+  // HOU-148: decide about a shopping dismissal before recording anything. A second tap (or a job that
+  // runs again) finds it already dismissed; a request still in play takes the ordinary "not today".
+  let dismissShopping = false;
+  if (ref.startsWith("shopping:") && action === ActionKind.notToday) {
+    const request = await scope.api.shopping.get({ id: ref.slice("shopping:".length) });
+    if (request?.status === ShoppingStatus.dismissed) return "That's already dismissed.";
+    dismissShopping = request?.status === ShoppingStatus.failed || request?.status === ShoppingStatus.saved;
+  }
   await scope.api.plans.respond({ ref, action, channel: scope.channel, date, value });
   const subject = await subjectFor(scope, ref, date);
 
@@ -106,7 +114,7 @@ export async function respond(scope: JobScope, ref: string, action: ActionKind, 
   }
   // HOU-148: a shopping request that went nowhere, dismissed with one tap; today is replanned so it
   // leaves the home screen too (HOME-4, PRO-9).
-  if (ref.startsWith("shopping:") && action === ActionKind.notToday) {
+  if (dismissShopping) {
     await scope.api.shopping.dismiss({ id: ref.slice("shopping:".length) });
     if (!scope.effects.replan.includes(date)) scope.effects.replan.push(date);
     return "Okay, dismissed.";
