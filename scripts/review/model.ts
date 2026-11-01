@@ -5,7 +5,7 @@ import { Limits, type ReviewSeverity, type ReviewStage, type ReviewStatus, zSlop
 import { generateText, type LanguageModel, type ModelMessage, Output, stepCountIs, tool } from "ai";
 import { z } from "zod";
 import { costMicros, type TokenUsage } from "../../server/agent/model.ts";
-import { commentableLines } from "./diff.ts";
+import { commentableLines, SHA } from "./diff.ts";
 import { type Reply, type StageAnswer, zStageAnswer } from "./state.ts";
 
 /**
@@ -27,7 +27,6 @@ export function stagePrompt(root: string, stage: ReviewStage): string {
   return readFileSync(path.join(root, ".github/review", `${stage}.md`), "utf8");
 }
 
-const SHA = /^[0-9a-f]{7,40}$/;
 /** A repo-relative path a tool may be asked for: no option-looking or parent-escaping parts. */
 const zRepoPath = z
   .string()
@@ -186,7 +185,7 @@ export function reviewContext({ title, body, trees, diff }: ReviewInput): string
     "</pr_description>",
     "",
     "Patch:",
-    cap(diff, Limits.reviewMaxDiffChars.value),
+    diff,
     "</review_context>",
   ].join("\n");
 }

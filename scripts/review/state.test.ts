@@ -70,10 +70,21 @@ describe("HOU-151 the blocking decision", () => {
     const second = merge(first.state, answers({ code: { findings: [], earlier: [{ id: "AR-1", outcome: "accepted", reason: "the divisor is three on purpose" }] } }), head("aaaaaaa", a));
     expect(second.settled).toMatchObject([{ id: "AR-1", status: "accepted", reason: "the divisor is three on purpose" }]);
     expect(second.blocking).toBe(false);
-    // The model raises it again (with or without saying so): suppressed.
-    const third = merge(second.state, answers({ code: { findings: [finding({ line: 6 }), finding({ repeats: "AR-1", line: 40, file: "elsewhere.ts" })], earlier: [] } }), head("ccccccc", a));
+    // The model raises it again, on the same code or by name: suppressed.
+    const third = merge(second.state, answers({ code: { findings: [finding({ line: 5 }), finding({ repeats: "AR-1", line: 40, file: "elsewhere.ts" })], earlier: [] } }), head("ccccccc", a));
     expect(third.raised).toEqual([]);
     expect(third.blocking).toBe(false);
+    // A finding on other code nearby is a different finding.
+    expect(merge(second.state, answers({ code: { findings: [finding({ line: 6 })], earlier: [] } }), head("ccccccc", a)).raised).toMatchObject([{ id: "AR-2", line: 6 }]);
+  });
+
+  it("a new defect right next to a fixed one is still raised", () => {
+    const first = merge(emptyState(), answers({ code: { findings: [finding({ line: 10 })], earlier: [] } }), head("aaaaaaa", a));
+    const fixedFile = { "server/a.ts": lines(20, [10, "const l10 = fixed();"]) };
+    const second = merge(first.state, answers({ code: { findings: [finding({ line: 11, summary: "the fix broke the next line" })], earlier: [{ id: "AR-1", outcome: "fixed", reason: "changed" }] } }), head("bbbbbbb", fixedFile));
+    expect(second.settled).toMatchObject([{ id: "AR-1", status: "fixed" }]);
+    expect(second.raised).toMatchObject([{ id: "AR-2", line: 11 }]);
+    expect(second.blocking).toBe(true);
   });
 
   it("a finding raised and then dropped isn't raised again unless its code changes", () => {
@@ -101,7 +112,7 @@ describe("HOU-151 the blocking decision", () => {
     const second = merge(first.state, answers({ code: { findings: [], earlier: [{ id: "AR-1", outcome: "accepted", reason: "fine" }] }, security: { findings: [], earlier: [{ id: "AR-1", outcome: "still_open", reason: "no" }] } }), head("bbbbbbb", a));
     expect(second.open.map((f) => f.id)).toEqual(["AR-1"]);
     expect(priorFor(ReviewStage.code, second.state, new Map()).open).toEqual([]);
-    expect(priorFor(ReviewStage.security, second.state, new Map([[7, [{ author: "cal", body: "on purpose" }]]])).open).toMatchObject([{ id: "AR-1", replies: [] }]);
+    expect(priorFor(ReviewStage.security, second.state, new Map([["AR-1", [{ author: "cal", body: "on purpose" }]]])).open).toMatchObject([{ id: "AR-1", replies: [{ author: "cal", body: "on purpose" }] }]);
   });
 });
 

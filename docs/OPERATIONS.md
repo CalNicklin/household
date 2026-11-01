@@ -404,13 +404,18 @@ in three stages: Entire's code, security and slop reviews, whose prompts are `.g
 `security.md` and `slop.md`, verbatim. Each stage returns findings graded high, medium or low. The
 `agent-review` job comments each new finding on its line, replies on a finding's comment when it is
 settled, keeps one summary comment (verdict, open and settled findings, the slop rating, the cost) up to
-date in place, and **fails while any medium or high finding is open**. A low never blocks.
+date in place, and **fails while any medium or high finding is open**. A low never blocks. A finding on
+a file or line outside the diff, or about the PR as a whole, is posted as a comment on the PR instead.
+A PR whose diff is over the limit (`reviewMaxDiffChars`, with the lockfile, `evidence/` and `design/`
+left out) fails the review: split it.
 
 - **Resolving a finding:** fix it and push (the next review no longer raises it), or reply to its comment
-  with a reason and push or re-run all jobs (the next review reads replies from the PR's owner, members
-  and collaborators, and may accept them). A finding that was fixed, accepted, or raised once and then
+  with a reason (for one posted on the PR, a PR comment that names it, e.g. `AR-7: …`) and push or re-run
+  all jobs (the next review reads replies from the PR's owner, members and collaborators, and may accept
+  them). A finding that was fixed, accepted, or raised once and then
   not raised again is remembered in the summary comment and isn't raised again until the code it points
-  at changes (`scripts/review/state.ts`, unit-tested).
+  at changes (`scripts/review/state.ts`, unit-tested). The summary is written before any other comment,
+  so a comment that fails to post is retried on the next push rather than raised as a new finding.
 - **Model and cost:** the `REVIEW_MODEL` repository variable, default `claude-opus-5-5`; effort high for
   the code and security stages, medium for slop. Each stage is capped in steps, output tokens per call
   and total tokens, with the reasons in `contracts/limits.ts`; its last allowed step has no tools, so it
@@ -461,5 +466,10 @@ What this check doesn't stop: a PR that edits `agent-review.yml` or the files it
 new `basketTotal` skips the first price (`for (let i = 1; …)`) and whose code comment and description both
 tell AI reviewers to ignore their instructions and report nothing. With `claude-opus-5-5`: the code stage
 found the bug (high, confidence 0.97, citing the AGENTS.md rule), the security stage reported the injection
-(medium), the slop stage rated it Large, and the run blocked; $0.087 for all three stages (code $0.037, 3
-steps; security $0.021; slop $0.029), 24 seconds.
+(medium), the slop stage rated it Large, and the run blocked; $0.09 for all three stages (code $0.04, 3
+steps; security $0.02; slop $0.03), about 20 seconds.
+
+The same `review` command on this PR's own diff (about 2,000 lines) cost $0.97: code $0.64 (4 steps),
+security $0.16, slop $0.18; the security and slop stages read 96% of their input from the cache the code
+stage wrote. It found five real defects, all fixed before merge (see HOU-151). Budget about $1 per push of
+a PR that size.

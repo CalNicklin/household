@@ -1,7 +1,7 @@
 import { appendFileSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { parseArgs } from "node:util";
-import { ModelProvider, ReviewStage } from "@household/contracts";
+import { blockingSeverities, ModelProvider, ReviewStage } from "@household/contracts";
 import { z } from "zod";
 import { languageModel } from "../server/agent/model.ts";
 import { commentableLines, diffBase, prDiff } from "./review/diff.ts";
@@ -47,7 +47,7 @@ const github = () => new GitHub(process.env["GITHUB_API_URL"] ?? "https://api.gi
 const headTrees = () => new GitTrees(need("checkout"), diffBase(need("checkout"), need("base"), need("head")), need("head"));
 const prNumber = () => z.coerce.number().int().min(1).parse(need("pr"));
 
-const zPriorFile = z.object({ state: zReviewState, replies: z.array(z.tuple([z.number().int(), z.array(z.object({ author: z.string(), body: z.string() }))])) });
+const zPriorFile = z.object({ state: zReviewState, replies: z.array(z.tuple([z.string(), z.array(z.object({ author: z.string(), body: z.string() }))])) });
 const zAnswersFile = z.object({
   sha: z.string(),
   base: z.string(),
@@ -122,15 +122,19 @@ async function postCommand(): Promise<void> {
     sha: trees.head,
     base: trees.base,
     model: file.model,
-    stages: file.stages.map((s) => ({ stage: s.stage, costMicros: s.costMicros, steps: s.steps, signal: s.answer.signal })),
+    stages: file.stages.map((s) => ({ stage: s.stage, costMicros: s.costMicros, steps: s.steps })),
     slop: { rating: slop?.rating ?? null, rationale: slop?.rationale ?? null },
   };
-  await publish(gh, pr, before, merged, run, commentableLines(diff));
-  const blocking = merged.open.filter((f) => f.severity !== "low");
+  const { failures } = await publish(gh, pr, before, merged, run, commentableLines(diff));
+  for (const failure of failures) process.stdout.write(`::warning title=Agent review comment::${annotation(failure)}\n`);
+  const blocking = merged.open.filter((f) => blockingSeverities.includes(f.severity));
   summary(`### agent-review: ${merged.blocking ? `✗ ${blocking.length} open medium or high` : "✓ nothing blocks"} (${merged.open.length} open, ${merged.raised.length} new, ${merged.settled.length} settled on this push)`);
-  for (const f of blocking) process.stdout.write(`::error title=${f.id} ${f.severity} (${f.stage})::${f.file === "" ? "" : `${f.file}${f.line === null ? "" : `:${f.line}`} `}${f.summary.split("\n")[0]?.replaceAll(/[\r%]/g, "") ?? ""}\n`);
+  for (const f of blocking) process.stdout.write(`::error title=${f.id} ${f.severity} (${f.stage})::${annotation(`${f.file === "" ? "" : `${f.file}${f.line === null ? "" : `:${f.line}`} `}${f.summary}`)}\n`);
   if (merged.blocking) process.exit(1);
 }
+
+/** One line of an annotation: the first line only, with the characters workflow commands give meaning to escaped. */
+const annotation = (s: string) => (s.split("\n")[0] ?? "").replaceAll("%", "%25").replaceAll("\r", "%0D").replaceAll(":", "%3A");
 
 const commands: Record<string, () => Promise<void>> = { review: reviewCommand, prior: priorCommand, post: postCommand };
 const command = commands[positionals[0] ?? ""];

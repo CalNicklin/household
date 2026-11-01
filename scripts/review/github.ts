@@ -1,4 +1,4 @@
-import { Limits, type ReviewStage, ReviewStatus, type SlopRating } from "@household/contracts";
+import { blockingSeverities, Limits, type ReviewStage, ReviewStatus, type SlopRating } from "@household/contracts";
 import { z } from "zod";
 import { emptyState, type Merged, type Reply, type ReviewState, type StoredFinding, zReviewState } from "./state.ts";
 
@@ -8,14 +8,16 @@ import { emptyState, type Merged, type Reply, type ReviewState, type StoredFindi
  */
 const BOT = "github-actions[bot]";
 const SUMMARY = "<!-- agent-review -->";
-const STATE = /<!-- agent-review-state:([A-Za-z0-9+/=]+) -->/;
+/** The summary's state is its last line; anything model-written above it is sanitised, so can't carry a marker. */
+const STATE = /\n<!-- agent-review-state:([A-Za-z0-9+/=]+) -->$/;
 const FINDING = /<!-- agent-review:(AR-\d{1,5}) -->/;
+const MENTION = /\bAR-\d{1,5}\b/g;
 /** Replies count only from people who can push here (a fork's author can still comment on a public repo). */
 const TRUSTED = new Set(["OWNER", "MEMBER", "COLLABORATOR"]);
 
 const zUser = z.object({ login: z.string() });
-const zIssueComment = z.object({ id: z.number().int(), body: z.string().nullable().default(""), user: zUser.nullable() });
-const zReviewComment = zIssueComment.extend({ in_reply_to_id: z.number().int().optional(), author_association: z.string() });
+const zIssueComment = z.object({ id: z.number().int(), body: z.string().nullable().default(""), user: zUser.nullable(), author_association: z.string() });
+const zReviewComment = zIssueComment.extend({ in_reply_to_id: z.number().int().optional() });
 
 export class GitHub {
   private readonly api: string;
@@ -63,9 +65,23 @@ class GitHubError extends Error {
   }
 }
 
-export type Prior = { state: ReviewState; summaryId: number | null; replies: Map<number, Reply[]> };
+/** The finding id a comment of ours is about, if it is one. */
+const ours = (body: string | null, login: string | undefined) => (login === BOT ? FINDING.exec(body ?? "")?.[1] : undefined);
 
-/** The last run's state (from its summary comment) and the replies on each finding's comment. */
+export type Prior = {
+  state: ReviewState;
+  summaryId: number | null;
+  /** Replies to each finding, by its id: on its comment's thread, or in a PR comment that names it. */
+  replies: Map<string, Reply[]>;
+  /** Findings that already have a comment (inline or on the PR), and the inline thread of each that has one. */
+  posted: Set<string>;
+  threads: Map<string, number>;
+};
+
+/**
+ * The last run's state (from its summary comment), the comments it posted, and the replies to them
+ * from people who can push here.
+ */
 export async function readPrior(gh: GitHub, pr: number): Promise<Prior> {
   const comments = await gh.all(zIssueComment, `/issues/${pr}/comments`);
   const summary = comments.findLast((c) => c.user?.login === BOT && (c.body ?? "").startsWith(SUMMARY));
@@ -76,15 +92,29 @@ export async function readPrior(gh: GitHub, pr: number): Promise<Prior> {
     if (parsed.success) state = parsed.data;
   }
   const reviewComments = await gh.all(zReviewComment, `/pulls/${pr}/comments`);
-  const ours = new Set(reviewComments.filter((c) => c.user?.login === BOT && FINDING.test(c.body ?? "")).map((c) => c.id));
-  const replies = new Map<number, Reply[]>();
-  for (const c of reviewComments) {
-    if (c.in_reply_to_id === undefined || !ours.has(c.in_reply_to_id) || c.user === null || c.user.login === BOT || !TRUSTED.has(c.author_association)) continue;
-    const list = replies.get(c.in_reply_to_id) ?? [];
-    list.push({ author: c.user.login, body: (c.body ?? "").slice(0, Limits.reviewMaxTextChars.value) });
-    replies.set(c.in_reply_to_id, list);
+  const posted = new Set<string>();
+  const threads = new Map<string, number>();
+  for (const c of comments) {
+    const id = ours(c.body, c.user?.login);
+    if (id !== undefined) posted.add(id);
   }
-  return { state, summaryId: summary?.id ?? null, replies };
+  for (const c of reviewComments) {
+    const id = ours(c.body, c.user?.login);
+    if (id === undefined) continue;
+    posted.add(id);
+    threads.set(id, c.id);
+  }
+  const byThread = new Map([...threads].map(([id, comment]) => [comment, id]));
+  const replies = new Map<string, Reply[]>();
+  const trusted = (c: z.infer<typeof zIssueComment>) => c.user !== null && c.user.login !== BOT && TRUSTED.has(c.author_association);
+  const add = (id: string, c: z.infer<typeof zIssueComment>) => replies.set(id, [...(replies.get(id) ?? []), { author: c.user?.login ?? "", body: (c.body ?? "").slice(0, Limits.reviewMaxTextChars.value) }]);
+  for (const c of reviewComments) {
+    const id = c.in_reply_to_id === undefined ? undefined : byThread.get(c.in_reply_to_id);
+    if (id !== undefined && trusted(c)) add(id, c);
+  }
+  // A comment on the PR itself that names a finding (e.g. "AR-7: …") answers it: the way to reply to one with no line.
+  for (const c of comments) if (trusted(c)) for (const id of new Set((c.body ?? "").match(MENTION))) add(id, c);
+  return { state, summaryId: summary?.id ?? null, replies, posted, threads };
 }
 
 function safeJson(s: string): unknown {
@@ -104,9 +134,9 @@ export function sanitise(s: string): string {
 }
 
 const oneLine = (s: string) => sanitise(s.split("\n")[0] ?? "").replaceAll("|", "\\|");
-const where = (f: Pick<StoredFinding, "file" | "line">) => (f.file === "" ? "the PR" : `\`${f.file.replaceAll("`", "")}${f.line === null ? "" : `:${f.line}`}\``);
+const where = (f: Pick<StoredFinding, "file" | "line">) => (f.file === "" ? "the PR" : `\`${sanitise(f.file).replaceAll("`", "").replaceAll("|", "\\|")}${f.line === null ? "" : `:${f.line}`}\``);
 
-function findingBody(f: StoredFinding): string {
+function findingBody(f: StoredFinding, onPr: boolean): string {
   return [
     `**${f.id} · ${f.severity} · ${f.stage}**`,
     "",
@@ -114,7 +144,8 @@ function findingBody(f: StoredFinding): string {
     "",
     `**When:** ${sanitise(f.failure_scenario)}`,
     "",
-    `<sub>${f.severity === "low" ? "A low never blocks; fix it or reply with the reason you won't." : "Blocks `agent-review` while open."} Fix it and push, or reply here with a reason; the next run reads the reply.</sub>`,
+    ...(onPr ? [`**Where:** ${where(f)} (not a line of this diff)`, ""] : []),
+    `<sub>${f.severity === "low" ? "A low never blocks; fix it or reply with the reason you won't." : "Blocks `agent-review` while open."} Fix it and push, or ${onPr ? `answer with a comment on this PR that names ${f.id}` : "reply here"} with a reason; the next run reads it.</sub>`,
     `<!-- agent-review:${f.id} -->`,
   ].join("\n");
 }
@@ -123,7 +154,7 @@ export type RunSummary = {
   sha: string;
   base: string;
   model: string;
-  stages: { stage: ReviewStage; costMicros: number; steps: number; signal: boolean }[];
+  stages: { stage: ReviewStage; costMicros: number; steps: number }[];
   slop: { rating: SlopRating | null; rationale: string | null };
 };
 
@@ -154,10 +185,9 @@ export function summaryBody(merged: Merged, run: RunSummary): string {
 const row = (f: StoredFinding, last: string) => `| ${f.id} | ${f.stage} | ${f.severity} | ${where(f)} | ${oneLine(f.summary)} | ${last} |`;
 
 function renderSummary(state: ReviewState, run: RunSummary, tables: boolean): string {
-  const merged = { state };
-  const open = merged.state.findings.filter((f) => f.status === ReviewStatus.open);
-  const settled = merged.state.findings.filter((f) => f.status !== ReviewStatus.open);
-  const blocking = open.filter((f) => f.severity !== "low").length;
+  const open = state.findings.filter((f) => f.status === ReviewStatus.open);
+  const settled = state.findings.filter((f) => f.status !== ReviewStatus.open);
+  const blocking = open.filter((f) => blockingSeverities.includes(f.severity)).length;
   const total = run.stages.reduce((s, x) => s + x.costMicros, 0);
   const lines = [
     SUMMARY,
@@ -170,12 +200,12 @@ function renderSummary(state: ReviewState, run: RunSummary, tables: boolean): st
   ];
   if (open.length === 0) lines.push("No open findings.");
   else if (!tables) lines.push(`### Open (${open.length})`, "", "Too many to list here; each has its own comment.");
-  else lines.push(`### Open (${open.length})`, "", "| | Stage | Severity | Where | Finding | |", "|---|---|---|---|---|---|", ...open.map((f) => row(f, f.commentId === null ? "not on a diff line" : "")));
+  else lines.push(`### Open (${open.length})`, "", "| | Stage | Severity | Where | Finding | |", "|---|---|---|---|---|---|", ...open.map((f) => row(f, f.commentId === null ? "on the PR, not a diff line" : "")));
   if (settled.length > 0 && tables) lines.push("", `<details><summary>Settled (${settled.length})</summary>`, "", "| | Stage | Severity | Where | Finding | Outcome |", "|---|---|---|---|---|---|", ...settled.map((f) => row(f, `${f.status}: ${oneLine(f.reason ?? "")}`)), "", "</details>");
   lines.push(
     "",
-    "<sub>Each open finding has a comment on its line. Fix it and push, or reply to that comment with a reason and then push or re-run all jobs of the `agent-review` workflow. A finding that is settled (fixed, accepted, or not raised again) is not raised again unless its code changes.</sub>",
-    `<!-- agent-review-state:${Buffer.from(JSON.stringify(merged.state)).toString("base64")} -->`,
+    "<sub>Each open finding has a comment: on its line, or on the PR when it isn't a line of this diff. Fix it and push, or reply to that comment with a reason (for one on the PR, a PR comment that names it, e.g. `AR-7: …`), then push or re-run all jobs of the `agent-review` workflow. A finding that is settled (fixed, accepted, or not raised again) is not raised again unless its code changes.</sub>",
+    `<!-- agent-review-state:${Buffer.from(JSON.stringify(state)).toString("base64")} -->`,
   );
   return lines.join("\n");
 }
@@ -183,31 +213,53 @@ function renderSummary(state: ReviewState, run: RunSummary, tables: boolean): st
 const zCreated = z.object({ id: z.number().int() });
 
 /**
- * Posts what changed on this push: a comment on each new finding's line (or its file when the line
- * isn't in the diff), a reply on each settled finding's comment, and the summary, edited in place.
- * Returns the state with the new comments' ids, as the summary stores it.
+ * Posts what changed on this push. The summary (and with it the state) is written first, so nothing
+ * that fails afterwards can make the next run raise the same findings again. Then each open finding
+ * without a comment gets one: on its line, else on its file, else on the PR (answered by a PR comment
+ * that names it). Each settled finding with a thread gets a reply. Then the summary again, with the
+ * threads. A comment or reply that fails is reported, not fatal: the check is decided by the findings.
  */
-export async function publish(gh: GitHub, pr: number, prior: Prior, merged: Merged, run: RunSummary, commentable: Map<string, Set<number>>): Promise<ReviewState> {
-  const ids = new Map<string, number>();
-  for (const f of merged.raised) {
-    const lines = commentable.get(f.file);
-    if (lines === undefined) continue;
-    const anchor = f.line !== null && lines.has(f.line) ? { line: f.line, side: "RIGHT" } : { subject_type: "file" };
+export async function publish(gh: GitHub, pr: number, prior: Prior, merged: Merged, run: RunSummary, commentable: Map<string, Set<number>>): Promise<{ state: ReviewState; failures: string[] }> {
+  const threads = new Map(prior.threads);
+  const withThreads = (): Merged => ({ ...merged, state: { ...merged.state, findings: merged.state.findings.map((f) => ({ ...f, commentId: threads.get(f.id) ?? f.commentId })) } });
+  const upsert = async (id: number | null) => {
+    const body = summaryBody(withThreads(), run);
+    return id === null ? (await gh.send(zCreated, "POST", `/issues/${pr}/comments`, { body })).id : (await gh.send(zCreated, "PATCH", `/issues/comments/${id}`, { body })).id;
+  };
+  const summaryId = await upsert(prior.summaryId);
+
+  const failures: string[] = [];
+  const attempt = async (what: string, act: () => Promise<void>) => {
     try {
-      ids.set(f.id, (await gh.send(zCreated, "POST", `/pulls/${pr}/comments`, { commit_id: run.sha, path: f.file, body: findingBody(f), ...anchor })).id);
+      await act();
     } catch (e) {
-      // GitHub refuses a line it doesn't consider part of the diff; the finding stays in the summary.
-      if (!(e instanceof GitHubError && e.status === 422)) throw e;
+      failures.push(`${what}: ${e instanceof Error ? e.message : String(e)}`);
     }
+  };
+  for (const f of merged.open.filter((x) => !prior.posted.has(x.id))) {
+    await attempt(`comment for ${f.id}`, async () => {
+      const lines = commentable.get(f.file);
+      if (lines !== undefined) {
+        const anchor = f.line !== null && lines.has(f.line) ? { line: f.line, side: "RIGHT" } : { subject_type: "file" };
+        try {
+          threads.set(f.id, (await gh.send(zCreated, "POST", `/pulls/${pr}/comments`, { commit_id: run.sha, path: f.file, body: findingBody(f, false), ...anchor })).id);
+          return;
+        } catch (e) {
+          // GitHub refuses a line it doesn't consider part of the diff: the finding goes on the PR instead.
+          if (!(e instanceof GitHubError && e.status === 422)) throw e;
+        }
+      }
+      await gh.send(zCreated, "POST", `/issues/${pr}/comments`, { body: findingBody(f, true) });
+    });
   }
   for (const f of merged.settled) {
-    if (f.commentId === null) continue;
+    const thread = threads.get(f.id);
+    if (thread === undefined) continue;
     const reason = f.reason === null ? "" : ` ${sanitise(f.reason)}`;
-    await gh.send(zCreated, "POST", `/pulls/${pr}/comments/${f.commentId}/replies`, { body: `**${f.id} ${f.status}** at \`${run.sha.slice(0, 7)}\`.${reason}` });
+    await attempt(`reply on ${f.id}`, async () => {
+      await gh.send(zCreated, "POST", `/pulls/${pr}/comments/${thread}/replies`, { body: `**${f.id} ${f.status}** at \`${run.sha.slice(0, 7)}\`.${reason}` });
+    });
   }
-  const state: ReviewState = { ...merged.state, findings: merged.state.findings.map((f) => (ids.has(f.id) ? { ...f, commentId: ids.get(f.id) ?? null } : f)) };
-  const body = summaryBody({ ...merged, state }, run);
-  if (prior.summaryId === null) await gh.send(zCreated, "POST", `/issues/${pr}/comments`, { body });
-  else await gh.send(zCreated, "PATCH", `/issues/comments/${prior.summaryId}`, { body });
-  return state;
+  await upsert(summaryId);
+  return { state: withThreads().state, failures };
 }

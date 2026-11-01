@@ -1,11 +1,10 @@
 import { createHash } from "node:crypto";
-import type {
-  ReviewSeverity} from "@household/contracts";
 import {
   blockingSeverities,
   Limits,
   type ReviewFinding,
   ReviewOutcome,
+  type ReviewSeverity,
   ReviewStage,
   ReviewStatus,
   zReviewFinding,
@@ -14,6 +13,7 @@ import {
   zReviewStatus,
 } from "@household/contracts";
 import { z } from "zod";
+import { SHA } from "./diff.ts";
 
 /**
  * HOU-151: the review's memory between pushes, and the one rule that decides the check. Plain code, no
@@ -41,7 +41,7 @@ export type StageAnswer = z.infer<typeof zStageAnswer>;
 /** The three stages' answers for one push. */
 export type Answers = Record<ReviewStage, StageAnswer>;
 
-const zSha = z.string().regex(/^[0-9a-f]{7,40}$/);
+const zSha = z.string().regex(SHA);
 const zStored = zReviewFinding.extend({
   id: z.string().regex(/^AR-\d{1,5}$/),
   status: zReviewStatus,
@@ -109,7 +109,8 @@ export function normalise(stage: ReviewStage, f: StageAnswer["findings"][number]
   const parsed = zReviewFinding.safeParse({
     stage,
     severity: f.severity,
-    file: file.startsWith("/") || file.split("/").includes("..") ? "" : file,
+    // A path, nothing else: no markup, quoting or control characters can ride along into a comment.
+    file: file.startsWith("/") || file.split("/").includes("..") || /[<>`|\\\p{Cc}]/u.test(file) ? "" : file,
     line: f.line !== null && f.line >= 1 ? f.line : null,
     summary: cap(f.summary),
     failure_scenario: cap(f.failure_scenario),
@@ -131,6 +132,17 @@ export type Merged = {
 
 const near = (a: Pick<ReviewFinding, "stage" | "file" | "line">, b: Pick<ReviewFinding, "stage" | "file" | "line">) =>
   a.stage === b.stage && a.file === b.file && (a.line === null || b.line === null ? a.line === b.line : Math.abs(a.line - b.line) <= NEAR_LINES);
+
+/**
+ * A new finding restates a remembered one of its stage when it is near one still open, or anchored on
+ * exactly the code of one accepted or dropped. A fixed finding is only restated by name (`repeats`), so a
+ * new defect next to a fix is still raised.
+ */
+function restates(f: ReviewFinding, window: string, k: StoredFinding): boolean {
+  if (k.status === ReviewStatus.open) return near(k, f);
+  if (k.status === ReviewStatus.fixed) return false;
+  return k.stage === f.stage && k.file === f.file && k.window === window;
+}
 
 /**
  * The check's rule. Earlier settled findings whose code changed are forgotten (they may be raised
@@ -164,10 +176,11 @@ export function merge(prior: ReviewState, answers: Answers, head: { sha: string;
       .filter((f) => f.repeats === null || !findings.some((k) => k.id === f.repeats))
       .map((f) => normalise(stage, f))
       .filter((f): f is ReviewFinding => f !== null)
-      .filter((f) => !findings.some((k) => near(k, f)) && !raised.some((r) => near(r, f)))
-      .sort((a, b) => severityRank[a.severity] - severityRank[b.severity])
+      .map((f) => ({ f, window: windowOf(f, read, diff) }))
+      .filter(({ f, window }) => !findings.some((k) => restates(f, window, k)) && !raised.some((r) => near(r, f)))
+      .sort((a, b) => severityRank[a.f.severity] - severityRank[b.f.severity])
       .slice(0, Limits.reviewMaxFindings.value);
-    for (const f of fresh) raised.push({ ...f, id: `AR-${nextId++}`, status: ReviewStatus.open, sha, window: windowOf(f, read, diff), commentId: null, reason: null, settledOn: null });
+    for (const { f, window } of fresh) raised.push({ ...f, id: `AR-${nextId++}`, status: ReviewStatus.open, sha, window, commentId: null, reason: null, settledOn: null });
   }
   const all = [...findings, ...raised];
   const open = all.filter((f) => f.status === ReviewStatus.open);
@@ -175,10 +188,10 @@ export function merge(prior: ReviewState, answers: Answers, head: { sha: string;
 }
 
 /** Earlier findings as a stage sees them: its own open ones (with replies) to judge, and the settled ones not to raise again. */
-export function priorFor(stage: ReviewStage, state: ReviewState, replies: ReadonlyMap<number, readonly Reply[]>) {
+export function priorFor(stage: ReviewStage, state: ReviewState, replies: ReadonlyMap<string, readonly Reply[]>) {
   const mine = state.findings.filter((f) => f.stage === stage);
   return {
-    open: mine.filter((f) => f.status === ReviewStatus.open).map((f) => ({ ...pick(f), replies: f.commentId === null ? [] : (replies.get(f.commentId) ?? []) })),
+    open: mine.filter((f) => f.status === ReviewStatus.open).map((f) => ({ ...pick(f), replies: replies.get(f.id) ?? [] })),
     settled: mine.filter((f) => f.status !== ReviewStatus.open).map((f) => ({ ...pick(f), status: f.status, reason: f.reason })),
   };
 }
