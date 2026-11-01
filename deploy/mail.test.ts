@@ -71,7 +71,7 @@ describe("the mail receiver on the VPS", () => {
   });
 
   it("[PRV-6] household-email prints only the confirmation code, and the deploy user can't run it", () => {
-    expect(read("household-email.sh")).toContain("household_compose exec -T mail node mail/last-confirmation.ts");
+    expect(read("household-email.sh")).toContain("household_compose exec -T --user house mail node mail/last-confirmation.ts");
     expect(read("install.sh")).toMatch(/^echo 'household ALL=\(root\) NOPASSWD: \/usr\/local\/sbin\/household-deploy, \/usr\/local\/sbin\/household-preview' > "\$rule"$/m);
     expect(read("install.sh")).toMatch(/for c in deploy setup backup restore preview email; do/);
   });

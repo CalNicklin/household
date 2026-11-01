@@ -44,7 +44,8 @@ let queue: Promise<unknown> = Promise.resolve();
 
 /** The answer to DATA: null for 250, or the refusal. Never throws. */
 async function take(options: ReceiverOptions, stream: SMTPServerDataStream, session: SMTPServerSession): Promise<SmtpError | null> {
-  const raw = await readMessage(stream).catch(() => null);
+  const raw = await readMessage(stream).catch(() => undefined);
+  if (raw === undefined) return smtpError(451, "4.3.0 try again later");
   if (raw === null) {
     log("mail-refused-size");
     return smtpError(552, "5.3.4 message too big");

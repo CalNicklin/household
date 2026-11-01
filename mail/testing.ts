@@ -16,9 +16,14 @@ function dkimKey() {
 
 export type Signer = { domain: string; selector: string; privateKey: string };
 
-/** The world's DNS for the fixtures. `googleIps` is what Google's SPF covers (real: 209.85.128.0/17). */
-export function fixtureWorld(googleIps = "ip4:209.85.128.0/17") {
-  const keys = { gmail: dkimKey(), google: dkimKey(), shop: dkimKey(), evil: dkimKey() };
+type Keys = Record<"gmail" | "google" | "shop" | "evil", { privateKey: string; record: string }>;
+
+/**
+ * The world's DNS for the fixtures. `googleIps` is what Google's SPF covers (real: 209.85.128.0/17).
+ * `keys` from another process's world (its `keys`) share its signatures and records.
+ */
+export function fixtureWorld(googleIps = "ip4:209.85.128.0/17", given?: Keys) {
+  const keys: Keys = given ?? { gmail: dkimKey(), google: dkimKey(), shop: dkimKey(), evil: dkimKey() };
   const records: Records = {
     "gmail.com/TXT": ["v=spf1 redirect=_spf.google.com"],
     "_spf.google.com/TXT": [`v=spf1 ${googleIps} ~all`],
@@ -44,7 +49,7 @@ export function fixtureWorld(googleIps = "ip4:209.85.128.0/17") {
     shop: { domain: "screwfix.com", selector: "sf1", privateKey: keys.shop.privateKey },
     evil: { domain: "evil.test", selector: "s1", privateKey: keys.evil.privateKey },
   } satisfies Record<string, Signer>;
-  return { resolver, signer };
+  return { resolver, signer, keys };
 }
 
 export async function signed(message: string, by: Signer): Promise<string> {

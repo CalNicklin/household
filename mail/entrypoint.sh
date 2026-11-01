@@ -2,7 +2,7 @@
 # HOU-150: the mail receiver's entrypoint (deploy/compose.mail.yml). It starts as root with no
 # capabilities but SETUID and SETGID, only so it can read Caddy's certificate for MAIL_DOMAIN (Caddy
 # keeps its keys root-only, mounted here read-only). It copies that one certificate and key into the
-# container's own memory-backed /run/mail-tls, checks for a renewal every hour, and runs the receiver
+# container's own memory-backed /run/mail-tls, checks for a new one every ten minutes, and runs the receiver
 # itself as the image's unprivileged `house` user, which never sees the rest of Caddy's data.
 set -eu
 case "${MAIL_DOMAIN:-}" in
@@ -18,5 +18,5 @@ copy_certificate() {
   install -m 644 "$crt" "$tls/cert.pem.new" && mv "$tls/cert.pem.new" "$tls/cert.pem"
 }
 copy_certificate
-( while sleep 3600; do copy_certificate; done ) &
+( while sleep 600; do copy_certificate; done ) &
 exec setpriv --reuid="$(id -u house)" --regid="$(id -g house)" --clear-groups --inh-caps=-all node mail/main.ts
