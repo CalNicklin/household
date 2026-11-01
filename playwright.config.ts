@@ -1,5 +1,5 @@
 import { defineConfig, devices } from "@playwright/test";
-import { READY_PORT, stack, STACKS } from "./e2e/stacks.ts";
+import { READY_PORT, STACKS } from "./e2e/stacks.ts";
 
 /**
  * FB-3: journeys against the real app and the practice household, headless, in CI. FB-2: one worker
@@ -10,7 +10,8 @@ export default defineConfig({
   workers: STACKS,
   fullyParallel: true,
   reporter: [["./e2e/reporter.ts"], ["list"]],
-  use: { baseURL: `http://localhost:${stack(0).server}`, trace: "retain-on-failure", screenshot: "only-on-failure" },
+  // baseURL comes from each worker's own stack (e2e/fixtures.ts).
+  use: { trace: "retain-on-failure", screenshot: "only-on-failure" },
   projects: [
     { name: "ipad", use: { ...devices["iPad (gen 7) landscape"], viewport: { width: 1180, height: 820 }, browserName: "chromium" } },
   ],

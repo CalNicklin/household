@@ -14,3 +14,5 @@ backups
 .env.*
 !.env.example
 .secrets
+# The CH-11 test (server/adapters/registry.test.ts) briefly copies server/adapters here while pnpm check runs.
+server/.adapters-copy-*

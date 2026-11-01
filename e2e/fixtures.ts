@@ -63,9 +63,12 @@ export function ownStack(): Stack {
   return stack(base.info().parallelIndex);
 }
 
-/** FB-2: `page`, `request` and new contexts resolve relative URLs against this worker's own server. */
+/**
+ * FB-2: `page`, `request` and new contexts resolve relative URLs against this worker's own server.
+ * The config sets no baseURL; this is the only place it comes from.
+ */
 export const test = base.extend({
-  baseURL: async ({ baseURL: configured }, use, info) => use(configured === undefined ? undefined : `http://localhost:${stack(info.parallelIndex).server}`),
+  baseURL: async ({ baseURL: _unset }, use, info) => use(`http://localhost:${stack(info.parallelIndex).server}`),
 });
 export { expect };
 

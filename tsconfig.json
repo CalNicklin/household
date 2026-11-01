@@ -20,5 +20,5 @@
     "types": ["node"]
   },
   "include": ["contracts", "server", "helper", "web", "e2e", "tools", "practice", "scripts", "*.ts"],
-  "exclude": ["node_modules", "**/dist", "web/.output", "**/routeTree.gen.ts"]
+  "exclude": ["node_modules", "**/dist", "web/.output", "**/routeTree.gen.ts", "server/.adapters-copy-*"]
 }
