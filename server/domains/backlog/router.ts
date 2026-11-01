@@ -51,11 +51,15 @@ export function backlogRouter(db: BacklogDb) {
         const author = actingPerson(ctx.actor);
         if (author === null) forbid("PRV-1: a backlog item must be written by a person");
         if (ctx.actor.kind === ActorKind.agent && ctx.actor.message !== input.sourceMessage) forbid("PRV-1: a job can only capture the message it is handling");
-        const existing = await db.query.items.findFirst({ where: eq(schema.items.sourceMessage, input.sourceMessage) });
+        // One message can capture several jobs; a retried job (whose model may word them differently)
+        // finds each again by its position, so nothing is written twice (HOU-148).
+        const index = input.index ?? 0;
+        const key = index === 0 ? input.sourceMessage : `${input.sourceMessage}#${index}`;
+        const existing = await db.query.items.findFirst({ where: eq(schema.items.sourceMessage, key) });
         if (existing !== undefined) return toItem(existing);
         const [row] = await db
           .insert(schema.items)
-          .values({ text: input.text, tags: [...new Set(input.tags)], createdBy: author, createdVia: input.createdVia, sourceMessage: input.sourceMessage, createdAt: ctx.now })
+          .values({ text: input.text, tags: [...new Set(input.tags)], createdBy: author, createdVia: input.createdVia, sourceMessage: key, createdAt: ctx.now })
           .returning();
         if (row === undefined) throw new Error("insert failed");
         ctx.publish("backlog");

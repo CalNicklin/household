@@ -1,4 +1,4 @@
-import { ActionKind, BlockType, DayPart, type LocalDate, LongTool, ModeKind, NotificationStatus, RhythmSource } from "@household/contracts";
+import { ActionKind, BlockType, DayPart, type LocalDate, LongTool, ModeKind, NotificationStatus, RhythmSource, ShoppingStatus } from "@household/contracts";
 import { START_REF_PREFIX } from "../planner/first-day.ts";
 import { addLocalDays, localDate, localHour, weekdayOf } from "../time.ts";
 import type { JobScope } from "./scope.ts";
@@ -13,6 +13,10 @@ export async function subjectFor(scope: JobScope, ref: string, date: LocalDate):
   if (ref.startsWith("backlog:")) {
     const item = await api.backlog.get({ id: ref.slice("backlog:".length) });
     if (item !== null) return item.text;
+  }
+  if (ref.startsWith("shopping:")) {
+    const request = await api.shopping.get({ id: ref.slice("shopping:".length) });
+    if (request !== null) return request.item;
   }
   for (const d of [date, addLocalDays(date, -1)]) {
     const plan = await api.plans.latest({ date: d });
@@ -49,6 +53,14 @@ export async function respond(scope: JobScope, ref: string, action: ActionKind, 
   const date = localDate(now, tz);
   const person = scope.person;
   if (person === null) return "I don't know who that was.";
+  // HOU-148: decide about a shopping dismissal before recording anything. A second tap (or a job that
+  // runs again) finds it already dismissed; a request still in play takes the ordinary "not today".
+  let dismissShopping = false;
+  if (ref.startsWith("shopping:") && action === ActionKind.notToday) {
+    const request = await scope.api.shopping.get({ id: ref.slice("shopping:".length) });
+    if (request?.status === ShoppingStatus.dismissed) return "That's already dismissed.";
+    dismissShopping = request?.status === ShoppingStatus.failed || request?.status === ShoppingStatus.saved;
+  }
   await scope.api.plans.respond({ ref, action, channel: scope.channel, date, value });
   const subject = await subjectFor(scope, ref, date);
 
@@ -99,6 +111,13 @@ export async function respond(scope: JobScope, ref: string, action: ActionKind, 
   if (ref.startsWith("wellbeing:") && action === ActionKind.notHelpful) {
     scope.effects.remember.push("Said wellbeing suggestions were not helpful.");
     return "Understood. I'll keep those to myself for a month.";
+  }
+  // HOU-148: a shopping request that went nowhere, dismissed with one tap; today is replanned so it
+  // leaves the home screen too (HOME-4, PRO-9).
+  if (dismissShopping) {
+    await scope.api.shopping.dismiss({ id: ref.slice("shopping:".length) });
+    if (!scope.effects.replan.includes(date)) scope.effects.replan.push(date);
+    return "Okay, dismissed.";
   }
   if (ref.startsWith("shopping:") && action === ActionKind.answer && value !== null) {
     scope.effects.long.push({ tool: LongTool.shop, requestId: ref.slice("shopping:".length), sku: value });

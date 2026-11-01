@@ -1,0 +1,30 @@
+{
+  "about": "HOU-148: what a person says to the house, and the tool calls they would expect. QA-6 (HOU-86) grows this into the scored eval. `expect` lists every acceptable sequence of tool calls, in order.",
+  "phrases": [
+    { "text": "get the canon printer working and connected to laptop so we can print loads of photos up to A3", "expect": [["capture"]], "note": "Cal's first real message; one job, never two shop items" },
+    { "text": "what should I prioritise today?", "expect": [["what_now"]] },
+    { "text": "if I do one thing what should it be", "expect": [["what_now"]] },
+    { "text": "we're out of oat milk and bread", "expect": [["shop"]] },
+    { "text": "add batteries to the shopping list", "expect": [["add_to_list"]] },
+    { "text": "fix the gate and paint the shed", "expect": [["capture"], ["capture", "capture"]] },
+    { "text": "book the car in for MOT", "expect": [["capture"]] },
+    { "text": "buy a new kettle", "expect": [["capture"]] },
+    { "text": "we need nappies and wipes", "expect": [["shop"]] },
+    { "text": "need to sort out the boiler service", "expect": [["capture"]] },
+    { "text": "remind me to ring the dentist", "expect": [["capture"]] },
+    { "text": "set up the new wifi router in the loft", "expect": [["capture"]] },
+    { "text": "get the bike fixed before the weekend", "expect": [["capture"]] },
+    { "text": "get the Dyson repaired", "expect": [["capture"]] },
+    { "text": "replace the bathroom light bulb", "expect": [["capture"]] },
+    { "text": "order a new shelf for the kids' room", "expect": [["capture"]] },
+    { "text": "can you put bananas in the next shop", "expect": [["shop"]] },
+    { "text": "we're running low on washing up liquid", "expect": [["shop"]] },
+    { "text": "need eggs, cheese and tomatoes", "expect": [["shop"]] },
+    { "text": "add wrapping paper to the presents list", "expect": [["add_to_list"]] },
+    { "text": "slow day today", "expect": [["set_mode"]] },
+    { "text": "we're away today", "expect": [["set_mode"]] },
+    { "text": "we're away this weekend", "expect": [["set_mode"], []], "note": "set_mode starts now, so saying it should be set on the day is as good as setting it" },
+    { "text": "Jess is doing Thursday", "expect": [["sitter_booked"]] },
+    { "text": "what's on today?", "expect": [["today"]] }
+  ]
+}

@@ -8,7 +8,7 @@ import { type Effects, emptyEffects } from "./scope.ts";
 /** What a long step leaves behind: ordinary effects for the shared path, and what to report to its job. */
 type LongStepResult = { effects: Effects; report: LongStepReport };
 
-const STATUS = { added: ShoppingStatus.added, "needs-choice": ShoppingStatus.needsChoice, failed: ShoppingStatus.failed } as const satisfies Record<HelperResult["kind"], ShoppingStatus>;
+const STATUS = { added: ShoppingStatus.added, "needs-choice": ShoppingStatus.needsChoice, failed: ShoppingStatus.failed, "not-connected": ShoppingStatus.saved } as const satisfies Record<HelperResult["kind"], ShoppingStatus>;
 
 /** PLT-10: the part of a child workflow's ID that tells two long steps of one job apart. */
 export function longStepKey(step: LongStep): string {
