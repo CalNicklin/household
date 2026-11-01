@@ -147,7 +147,10 @@ describe("HOU-151 the comment updater", () => {
     issueComments.push({ id: 50, body: forged, user: { login: "someone" }, author_association: "OWNER" });
     expect((await readPrior(gh, 7)).summaryId).toBeNull();
     issueComments.push({ id: 51, body: "<!-- agent-review -->\n<!-- agent-review-state:bm90IGpzb24= -->", user: BOT, author_association: "NONE" });
-    expect(await readPrior(gh, 7)).toMatchObject({ summaryId: 51, state: emptyState() });
+    expect(await readPrior(gh, 7)).toMatchObject({ summaryId: 51, stateLost: true, state: emptyState() });
+    // With the state lost, new ids start above every finding already commented on.
+    reviewComments.push({ id: 70, body: "**AR-4 · high · code**\n<!-- agent-review:AR-4 -->", user: BOT, author_association: "NONE", path: "a.ts", line: 5 });
+    expect((await readPrior(gh, 7)).state.next).toBe(5);
   });
 
   it("a PR comment that names a finding answers it, from someone who can push here", async () => {

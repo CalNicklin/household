@@ -71,6 +71,8 @@ const ours = (body: string | null, login: string | undefined) => (login === BOT 
 export type Prior = {
   state: ReviewState;
   summaryId: number | null;
+  /** True when a summary exists but its state couldn't be read: the findings it held are forgotten. */
+  stateLost: boolean;
   /** Replies to each finding, by its id: on its comment's thread, or in a PR comment that names it. */
   replies: Map<string, Reply[]>;
   /** Findings that already have a comment (inline or on the PR), and the inline thread of each that has one. */
@@ -87,10 +89,8 @@ export async function readPrior(gh: GitHub, pr: number): Promise<Prior> {
   const summary = comments.findLast((c) => c.user?.login === BOT && (c.body ?? "").startsWith(SUMMARY));
   const encoded = STATE.exec(summary?.body ?? "")?.[1];
   let state = emptyState();
-  if (encoded !== undefined) {
-    const parsed = zReviewState.safeParse(safeJson(Buffer.from(encoded, "base64").toString("utf8")));
-    if (parsed.success) state = parsed.data;
-  }
+  const parsed = encoded === undefined ? undefined : zReviewState.safeParse(safeJson(Buffer.from(encoded, "base64").toString("utf8")));
+  if (parsed?.success === true) state = parsed.data;
   const reviewComments = await gh.all(zReviewComment, `/pulls/${pr}/comments`);
   const posted = new Set<string>();
   const threads = new Map<string, number>();
@@ -114,7 +114,10 @@ export async function readPrior(gh: GitHub, pr: number): Promise<Prior> {
   }
   // A comment on the PR itself that names a finding (e.g. "AR-7: …") answers it: the way to reply to one with no line.
   for (const c of comments) if (trusted(c)) for (const id of new Set((c.body ?? "").match(MENTION))) add(id, c);
-  return { state, summaryId: summary?.id ?? null, replies, posted, threads };
+  // Ids are never reused, even when the state is lost: a new AR-1 would inherit the old one's comment and replies.
+  const highest = Math.max(0, ...[...posted].map((id) => Number(id.slice(3))));
+  if (highest >= state.next) state = { ...state, next: highest + 1 };
+  return { state, summaryId: summary?.id ?? null, stateLost: summary !== undefined && parsed?.success !== true, replies, posted, threads };
 }
 
 function safeJson(s: string): unknown {

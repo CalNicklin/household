@@ -121,6 +121,7 @@ async function postCommand(): Promise<void> {
   const answers: Answers = { code: answerOf(ReviewStage.code), security: answerOf(ReviewStage.security), slop: answerOf(ReviewStage.slop) };
   const diff = prDiff(trees.repo, trees.base, trees.head);
   const before = await readPrior(gh, pr);
+  if (before.stateLost) process.stdout.write("::warning title=Agent review::The summary comment's state couldn't be read; earlier findings are forgotten and may be raised again.\n");
   // Merging these answers into any other state would settle findings the stages never saw (e.g. after
   // "Re-run failed jobs", or a cancelled run's late post).
   if (digest(before.state) !== file.prior) throw new Error("the findings changed since this review read them: re-run all jobs of the agent-review workflow");
