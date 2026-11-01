@@ -51,3 +51,17 @@ describe("AUT-1 through the real tool", () => {
     expect(scope.effects.shopping[0]?.sku).toBeNull();
   });
 });
+
+describe("MOM-6 through the real tool", () => {
+  test("[MOM-6] handing something over names the person it went to and guesses no pronoun for them", async () => {
+    const item = (await h.rt.system("t").backlog.list())[0];
+    if (item === undefined) throw new Error("practice backlog is empty");
+    const scope = jobScope(h.rt, "job-hand-over", "msg-hand-over", "priya", "app");
+    const execute = houseTools(scope).hand_over.execute;
+    if (execute === undefined) throw new Error("hand_over has no execute");
+    const output = await execute({ ref: `backlog:${item.id}`, to: "Tom" }, {});
+    expect(output).toMatchObject({ say: "Okay, Tom has it now, with one message about it." });
+    expect(JSON.stringify(output)).not.toMatch(/\b(he|she|him|her|his|hers|they|them|their)\b/i);
+    expect(scope.effects.notify.map((n) => n.person)).toEqual(["tom"]);
+  });
+});

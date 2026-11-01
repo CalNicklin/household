@@ -128,7 +128,7 @@ export function houseTools(scope: JobScope) {
         countsTowardsBudget: true,
       });
       replanToday();
-      return { say: `Okay, it's with ${to.name} now. I've sent them one message.` };
+      return { say: `Okay, ${to.name} has it now, with one message about it.` };
     }),
   });
 
