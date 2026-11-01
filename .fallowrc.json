@@ -127,6 +127,12 @@
         ]
       },
       {
+        "name": "domain-lists",
+        "patterns": [
+          "server/domains/lists/**"
+        ]
+      },
+      {
         "name": "rules",
         "patterns": [
           "server/rules/**"
@@ -306,6 +312,13 @@
         ]
       },
       {
+        "from": "domain-lists",
+        "allow": [
+          "contracts",
+          "infra"
+        ]
+      },
+      {
         "from": "rules",
         "allow": [
           "contracts",
@@ -440,7 +453,8 @@
           "domain-wellbeing",
           "domain-jobs",
           "domain-health",
-          "domain-shopping"
+          "domain-shopping",
+          "domain-lists"
         ]
       },
       {
@@ -483,6 +497,7 @@
           "domain-jobs",
           "domain-health",
           "domain-shopping",
+          "domain-lists",
           "rules",
           "planner",
           "agent",

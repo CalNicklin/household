@@ -5,7 +5,6 @@ import {
   InMemoryEpisodicMemory,
   MemoryObjectStore,
   PracticeCalendar,
-  PracticeLists,
   PracticeMessenger,
   PracticeShoppingHelper,
   PracticeTranscriber,
@@ -126,12 +125,8 @@ export function realPorts(env: Env, clock: Clock, options: RealPortsOptions): { 
     transcriber = new AiSdkTranscriber(options.transcriptionModel);
   }
 
-  // CAP-6: we do not yet know which shared lists app the household uses, so there is no real
-  // adapter; the practice lists stand in until that is decided.
-  missing.push("lists");
-
   return {
-    ports: { clock, calendar, weather: new OpenMeteoWeather(), messenger, lists: new PracticeLists(), objects, memory, shopping, transcriber },
+    ports: { clock, calendar, weather: new OpenMeteoWeather(), messenger, objects, memory, shopping, transcriber },
     missing,
   };
 }

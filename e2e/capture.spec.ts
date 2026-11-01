@@ -53,15 +53,6 @@ test("[CAP-5] three 'not now's park an item until you bring it back", async ({ p
   await evidence(page, "CAP-5-parked");
 });
 
-test("[CAP-6] the shared lists app stays as it is: we add to it and read it", async ({ page }) => {
-  await login(page);
-  await say(page, "add wrapping paper to the christmas presents list");
-  await page.goto("/shop");
-  await expect(page.getByText("wrapping paper")).toBeVisible();
-  await expect(page.getByText("Lego for Noah")).toBeVisible();
-  await evidence(page, "CAP-6-lists");
-});
-
 test("[CAP-7][CAP-8][PRO-10] chores, nursery days, term dates and closures show on the right day", async ({ page }) => {
   await login(page);
   await expect(page.getByText(/Ivy and Noah/)).toBeVisible();

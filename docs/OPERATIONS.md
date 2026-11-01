@@ -23,6 +23,26 @@ app refuses to start in real mode while any secret is still a practice default (
 Hindsight (episodic memory, PLT-6) is the optional `memory` profile: `docker compose --profile memory up -d`
 and `HINDSIGHT_URL=http://hindsight:8888`. Without it the app keeps episodic memory in-process.
 
+## Bring Family Lists over (once)
+
+Shopping and simple lists live in the app (CAP-6). To copy the lists from Family Lists' Supabase
+(lists and items, keeping their order, ticks and emoji), run once on the server, after the app has
+started at least once:
+
+```bash
+FAMILY_LISTS_DATABASE_URL='postgresql://…' pnpm lists:import --dry-run   # only counts what is there
+FAMILY_LISTS_DATABASE_URL='postgresql://…' pnpm lists:import             # copies it
+```
+
+| Variable | What it is |
+| --- | --- |
+| `FAMILY_LISTS_DATABASE_URL` | Family Lists' Postgres connection string (Supabase dashboard → Connect; add `?sslmode=require`). A role that can only `SELECT` on `lists` and `items` is enough. |
+| `DATABASE_URL`, `DB_PREFIX` and the rest of `.env` | Where to copy to: this house, exactly as `pnpm start` reads them. |
+
+Set the connection string in the shell for that one command; never put it in `.env`, the repo or a
+chat. The script reads Family Lists in a read-only transaction and never writes to it, prints only
+counts, and refuses to run if the house already has any list, so it cannot copy twice.
+
 ## Back up and restore
 
 ```bash

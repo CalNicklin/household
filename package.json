@@ -21,6 +21,7 @@
     "build:web": "cd web && vite build",
     "dev:web": "cd web && vite dev",
     "person": "node scripts/person.ts",
+    "lists:import": "node scripts/import-family-lists.ts",
     "check:full": "node scripts/check.ts --full",
     "env:init": "node scripts/env-init.ts"
   },

@@ -1,4 +1,4 @@
-import { Channel, DeliveryChannel, Domain, Limits, Urgency } from "@household/contracts";
+import { Channel, DeliveryChannel, Domain, Limits, ListItemSource, Urgency } from "@household/contracts";
 import { closePool, databaseName, dropDatabases, ensureDatabase, migrateDomain } from "../server/db/index.ts";
 import { hashPassword } from "../server/domains/household/router.ts";
 import type { Env } from "../server/env.ts";
@@ -9,6 +9,7 @@ const H = schemas.household;
 const B = schemas.backlog;
 const P = schemas.parcels;
 const C = schemas.calendar;
+const L = schemas.lists;
 
 /** Create (or reuse) every domain database for a prefix and run its migrations. */
 export async function migrateAll(env: Env, template?: (d: Domain) => string): Promise<void> {
@@ -21,7 +22,7 @@ export async function migrateAll(env: Env, template?: (d: Domain) => string): Pr
   }
 }
 
-/** FB-6: people, a week of calendar (via the practice Google), twenty backlog items, three parcels. */
+/** FB-6: people, a week of calendar (via the practice Google), twenty backlog items, three parcels, the shared lists. */
 export async function seedPractice(env: Env, now: Date = new Date(data.PRACTICE_START)): Promise<void> {
   const dbs = connectAll(env);
   try {
@@ -85,6 +86,12 @@ export async function seedPractice(env: Env, now: Date = new Date(data.PRACTICE_
         syncId: sync?.id ?? null,
       })),
     );
+    // CAP-6: the shared lists live in the lists domain; the house only ever adds to them.
+    for (const [position, l] of data.lists.entries()) {
+      const [list] = await dbs.lists.insert(L.lists).values({ name: l.name, emoji: l.emoji, position, createdAt: now }).returning();
+      if (list === undefined) throw new Error("seed: list insert failed");
+      await dbs.lists.insert(L.items).values(l.items.map((i, n) => ({ listId: list.id, text: i.text, checked: i.checked, position: n, createdBy: i.createdBy, source: ListItemSource.person, createdAt: now })));
+    }
     await dbs.parcels.insert(P.arrivals).values(data.parcels.map((p, i) => ({ ...p, sourceKey: `seed-parcel-${i}`, createdAt: now })));
   } finally {
     await Promise.all(Object.values(dbs).map((db) => closePool(db.$client)));

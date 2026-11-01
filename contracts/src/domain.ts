@@ -12,6 +12,7 @@ import {
   zDeliveryChannel,
   zJobStatus,
   zLearningEventKind,
+  zListItemSource,
   zModeKind,
   zModelProvider,
   zNurseryEventKind,
@@ -332,3 +333,30 @@ export const zWeeklyReport = z.object({
   costMicros: z.number().int(),
 });
 export type WeeklyReport = z.infer<typeof zWeeklyReport>;
+
+// ── lists ────────────────────────────────────────────────────────────────────
+
+/** CAP-6: one item on a shared list. Ticked items stay on the list, struck through. */
+export const zListItem = z.object({
+  id: z.string(),
+  listId: z.string(),
+  text: z.string(),
+  checked: z.boolean(),
+  position: z.number().int(),
+  /** The person who wrote it, or who said it to the house; null when it came over from Family Lists. */
+  createdBy: z.string().nullable(),
+  source: zListItemSource,
+  createdAt: zIsoDateTime,
+});
+export type ListItem = z.infer<typeof zListItem>;
+
+/** CAP-6: a shared list (shopping, presents, a packing list), with its items in order. */
+export const zList = z.object({
+  id: z.string(),
+  name: z.string(),
+  emoji: z.string(),
+  position: z.number().int(),
+  createdAt: zIsoDateTime,
+  items: z.array(zListItem),
+});
+export type List = z.infer<typeof zList>;
