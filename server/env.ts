@@ -25,6 +25,8 @@ const zEnv = z.object({
   CALENDAR_WEBHOOK_TOKEN: z.string().default("practice-calendar-token"),
   GOOGLE_CALENDAR_ID: z.string().optional(),
   GOOGLE_ACCESS_TOKEN_FILE: z.string().optional(),
+  /** Google Calendar API v3; only tests point it elsewhere (a stand-in Google). */
+  GOOGLE_CALENDAR_API: z.string().default("https://www.googleapis.com/calendar/v3"),
   MCP_TOKEN: z.string().default("practice-mcp-token"),
   HINDSIGHT_URL: z.string().optional(),
   S3_ENDPOINT: z.string().optional(),
