@@ -7,7 +7,8 @@ import { spawn, spawnSync } from "node:child_process";
  *
  * The steps run in three lanes at once, because none needs another lane's output: the static checks,
  * the unit tests (their own databases, random ports), and the web build followed by the journeys
- * (the e2e databases, ports 3101–3103). Each step's output is printed in one piece when it ends.
+ * (one stack per Playwright worker: its own e2e databases and ports, see e2e/stacks.ts). Each step's
+ * output is printed in one piece when it ends.
  */
 const full = process.argv.includes("--full");
 const started = Date.now();
