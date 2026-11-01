@@ -1,5 +1,5 @@
 import { DBOS } from "@dbos-inc/dbos-sdk";
-import type { LocalDate, LongStep } from "@household/contracts";
+import { type LocalDate, type LongStep, zLongStep, zLongStepReport } from "@household/contracts";
 import { longStepKey, runLongStep } from "../agent/long-steps.ts";
 import type { Effects } from "../agent/scope.ts";
 import { messageSitter, notify } from "../notify/notify.ts";
@@ -46,9 +46,14 @@ export async function applyEffects(jobId: string, effects: Effects, person: stri
  */
 async function longToolCallImpl(step: LongStep, parentJob: string, person: string | null): Promise<void> {
   const rt = jobRuntime();
-  const { effects, report } = await DBOS.runStep(async () => runLongStep(rt, step, person), { name: step.tool });
-  const usage = await applyEffects(parentJob, effects, person, `${step.tool}:${report.key}`);
-  await DBOS.send(parentJob, report, step.tool);
+  // The step and its report cross DBOS's serialised boundary; both are checked against their contracts.
+  const checked = zLongStep.parse(step);
+  const { effects, report } = await DBOS.runStep(async () => {
+    const r = await runLongStep(rt, checked, person);
+    return { effects: r.effects, report: zLongStepReport.parse(r.report) };
+  }, { name: checked.tool });
+  const usage = await applyEffects(parentJob, effects, person, `${checked.tool}:${report.key}`);
+  await DBOS.send(parentJob, report, checked.tool);
   if (usage.inputTokens === 0 && usage.outputTokens === 0 && usage.costMicros === 0) return;
   // QA-8 / QA-10: the parent writes its own totals when it finishes, so add ours after that. A job that
   // failed still recorded its totals, so its error is not this workflow's.
@@ -57,7 +62,9 @@ async function longToolCallImpl(step: LongStep, parentJob: string, person: strin
   } catch {
     // The parent's error is on its own job row.
   }
-  await DBOS.runStep(async () => rt.system("QA-8").jobs.addJobUsage({ id: parentJob, ...usage }), { name: "usage" });
+  // Keyed by this workflow, so a usage step that re-runs after a crash adds nothing the second time.
+  const source = DBOS.workflowID ?? `${parentJob}:${checked.tool}:${report.key}`;
+  await DBOS.runStep(async () => rt.system("QA-8").jobs.addJobUsage({ id: parentJob, source, ...usage }), { name: "usage" });
 }
 
 const longToolCall = DBOS.registerWorkflow(longToolCallImpl, { name: "longToolCall" });

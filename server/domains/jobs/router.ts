@@ -119,16 +119,30 @@ export function jobsRouter(db: JobsDb) {
       const { id, ...rest } = input;
       await db.update(schema.jobs).set(rest).where(eq(schema.jobs.id, id));
     }),
-    /** QA-8 / QA-10: adds to a job's totals rather than replacing them, so a child workflow can report after the job finished. */
-    addJobUsage: systemProcedure.input(zJobUsageInput).mutation(async ({ input }) => {
-      await db
-        .update(schema.jobs)
-        .set({
-          inputTokens: sql`${schema.jobs.inputTokens} + ${input.inputTokens}`,
-          outputTokens: sql`${schema.jobs.outputTokens} + ${input.outputTokens}`,
-          costMicros: sql`${schema.jobs.costMicros} + ${input.costMicros}`,
-        })
-        .where(eq(schema.jobs.id, input.id));
+    /**
+     * QA-8 / QA-10: adds to a job's totals rather than replacing them, so a child workflow can report after
+     * the job finished. Once per source, atomically: a re-run step adds nothing the second time.
+     */
+    addJobUsage: systemProcedure.input(zJobUsageInput).mutation(async ({ ctx, input }) => {
+      await db.transaction(async (tx) => {
+        // A job purged with its message (PRV-5) has no totals left to add to.
+        const job = await tx.select({ id: schema.jobs.id }).from(schema.jobs).where(eq(schema.jobs.id, input.id)).for("update");
+        if (job.length === 0) return;
+        const added = await tx
+          .insert(schema.jobUsage)
+          .values({ jobId: input.id, source: input.source, inputTokens: input.inputTokens, outputTokens: input.outputTokens, costMicros: input.costMicros, createdAt: ctx.now })
+          .onConflictDoNothing()
+          .returning({ id: schema.jobUsage.id });
+        if (added.length === 0) return;
+        await tx
+          .update(schema.jobs)
+          .set({
+            inputTokens: sql`${schema.jobs.inputTokens} + ${input.inputTokens}`,
+            outputTokens: sql`${schema.jobs.outputTokens} + ${input.outputTokens}`,
+            costMicros: sql`${schema.jobs.costMicros} + ${input.costMicros}`,
+          })
+          .where(eq(schema.jobs.id, input.id));
+      });
     }),
     job: readProcedure.input(zIdInput).output(zJob.nullable()).query(async ({ input }) => {
       const row = await db.query.jobs.findFirst({ where: eq(schema.jobs.id, input.id) });

@@ -27,19 +27,22 @@ export const zAcceptMessageInput = zInboundMessage;
 export const zAcceptMessageOutput = z.object({ messageId: z.string(), duplicate: z.boolean() });
 export const zJobStartInput = z.object({ id: z.string(), messageId: z.string(), provider: zModelProvider, model: z.string() });
 export const zJobFinishInput = zJob.pick({ id: true, intent: true, status: true, inputTokens: true, outputTokens: true, costMicros: true, durationMs: true, toolCalls: true, error: true });
-/** QA-8 / QA-10: model usage a job's child workflow (a long step's replan) adds after the job has finished. */
-export const zJobUsageInput = zJob.pick({ id: true, inputTokens: true, outputTokens: true, costMicros: true });
+/**
+ * QA-8 / QA-10: model usage a job's child workflow (a long step's replan) adds after the job has finished.
+ * `source` is the child workflow's ID: one source adds once, however often its step re-runs.
+ */
+export const zJobUsageInput = zJob.pick({ id: true, inputTokens: true, outputTokens: true, costMicros: true }).extend({ source: z.string() });
 /**
  * PLT-10: what a tool hands its long step. One variant per `LongTool`; the job starts a child workflow
  * for each and never waits on it.
  */
-const zLongStep = z.discriminatedUnion("tool", [
+export const zLongStep = z.discriminatedUnion("tool", [
   /** AUT-1 / AUT-3: add one shopping request through the sealed helper; `sku` is the answer to the question. */
   z.object({ tool: z.literal(LongTool.shop), requestId: z.string(), sku: z.string().nullable() }),
 ]);
 export type LongStep = z.infer<typeof zLongStep>;
 /** PLT-10: what a long step reports back to the job that started it. */
-const zLongStepReport = z.object({ tool: zLongTool, key: z.string(), outcome: z.string(), runId: z.string().nullable() });
+export const zLongStepReport = z.object({ tool: zLongTool, key: z.string(), outcome: z.string(), runId: z.string().nullable() });
 export type LongStepReport = z.infer<typeof zLongStepReport>;
 export const zDropInput = z.object({ channel: zChannel, address: z.string(), reason: z.string() });
 export const zEnqueueNotificationInput = zNotifyInput.extend({ channel: zDeliveryChannel, status: zNotificationStatus, jobId: z.string().nullable() });
