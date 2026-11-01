@@ -1,8 +1,4 @@
-import { practicePorts } from "../practice/fakes.ts";
-import { migrateAll } from "../practice/seed.ts";
 import { loadEnv } from "../server/env.ts";
-import { realPorts } from "../server/integrations/index.ts";
-import { createRuntime } from "../server/runtime.ts";
 import { FAMILY_LISTS_ENV, readFamilyLists, redacted } from "./family-lists/read.ts";
 
 /**
@@ -18,6 +14,9 @@ import { FAMILY_LISTS_ENV, readFamilyLists, redacted } from "./family-lists/read
  * them), says which, and refuses if any list is already there. Without `--practice` it refuses to write
  * into the practice household, so a run that missed the house's settings cannot land there by default.
  * The connection string is read from the environment only; it is never printed.
+ *
+ * The runtime is loaded only once there is something to write, and the real integrations only for the
+ * real house: loading them takes over a second, so the read, the dry run and the refusals stay quick.
  */
 const source = process.env[FAMILY_LISTS_ENV];
 if (source === undefined || source === "") {
@@ -39,8 +38,11 @@ try {
     console.error(JSON.stringify({ event: "family-lists-import-refused", reason: "these settings are the practice household (PRACTICE is not false); run it where the app runs (docs/OPERATIONS.md), or pass --practice to copy into the practice household on purpose" }));
     process.exit(2);
   }
+  const [{ migrateAll }, { createRuntime }] = await Promise.all([import("../practice/seed.ts"), import("../server/runtime.ts")]);
   await migrateAll(env);
-  const ports = env.PRACTICE ? practicePorts() : realPorts(env, { now: () => new Date() }, { timeZone: "Europe/London", personForEmail: () => null }).ports;
+  const ports = env.PRACTICE
+    ? (await import("../practice/fakes.ts")).practicePorts()
+    : (await import("../server/integrations/index.ts")).realPorts(env, { now: () => new Date() }, { timeZone: "Europe/London", personForEmail: () => null }).ports;
   const rt = await createRuntime(env, ports);
   try {
     const imported = await rt.system("family-lists import").lists.importLists(snapshot);
