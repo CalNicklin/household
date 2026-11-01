@@ -47,7 +47,8 @@ export function houseTools(scope: JobScope) {
         scope.effects.shopping.push({ requestId: request.id, sku: null });
         ids.push(request.id);
       }
-      return { requests: ids, say: `I'll put ${input.items.join(" and ")} in the next shop.` };
+      // Nothing is in the basket yet: the helper adds it afterwards, or asks if there's no exact match (AUT-3).
+      return { requests: ids, added: false, say: `I'll put ${input.items.join(" and ")} in the next shop. The home screen will show which product once it's in.` };
     }),
   });
 
