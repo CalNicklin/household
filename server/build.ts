@@ -19,7 +19,7 @@ function files(entry: string, out: string[]): void {
   }
 }
 
-let cached: string | null = null;
+const cached = new Map<string, string>();
 
 /**
  * HOU-154: one short id per build, the same on every process that runs the same code. A deploy changes
@@ -27,7 +27,8 @@ let cached: string | null = null;
  * by an older build is redone once. Reading the files themselves needs nothing from the build pipeline.
  */
 export function buildId(webDist: string): string {
-  if (cached !== null) return cached;
+  const known = cached.get(webDist);
+  if (known !== undefined) return known;
   const hash = createHash("sha256");
   const all: string[] = [];
   for (const source of [...SOURCES, webDist]) files(source, all);
@@ -39,6 +40,7 @@ export function buildId(webDist: string): string {
       // A file that went away mid-walk (a web build in progress) is left out.
     }
   }
-  cached = hash.digest("hex").slice(0, 16);
-  return cached;
+  const id = hash.digest("hex").slice(0, 16);
+  cached.set(webDist, id);
+  return id;
 }

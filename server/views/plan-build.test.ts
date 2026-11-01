@@ -73,14 +73,17 @@ describe("a deploy shows on the next reload (HOU-154)", () => {
     writeFileSync(path.join(dist, "sw.js"), 'const BUILD = "__BUILD__";');
     writeFileSync(path.join(dist, "_shell.html"), "<html><head><title>Household</title></head><body></body></html>");
     const served = createApp({ ...h.rt, env: { ...h.rt.env, WEB_DIST: dist } }, []);
+    // The id is the served app's own: another web build is another id.
+    const id = buildId(dist);
+    expect(id).not.toBe(build());
     const sw = await served.request("/sw.js");
     expect(sw.status).toBe(200);
     expect(sw.headers.get("cache-control")).toBe("no-cache");
-    expect(await sw.text()).toBe(`const BUILD = "${build()}";`);
+    expect(await sw.text()).toBe(`const BUILD = "${id}";`);
     const cookie = await loginCookie(served);
     const page = await served.request("/", { headers: { cookie } });
     expect(page.headers.get("cache-control")).toBe("no-cache");
-    expect(await page.text()).toContain(`<meta name="household-build" content="${build()}">`);
+    expect(await page.text()).toContain(`<meta name="household-build" content="${id}">`);
     // An older build's chunk that is gone is not found, never the page under the chunk's name.
     expect((await served.request("/assets/gone-0123abcd.js", { headers: { cookie } })).status).toBe(404);
   });
