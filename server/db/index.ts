@@ -22,6 +22,24 @@ export function connectDomain<S extends Record<string, unknown>>(baseUrl: string
   return drizzle(pool, { schema });
 }
 
+/**
+ * Close a pool and wait until every connection has actually gone. pg-pool's end() resolves as soon
+ * as it has asked each connection to close; a database dropped WITH (FORCE) in that moment kills one
+ * mid-close, and its client throws an unhandled "terminating connection" (57P01).
+ */
+export async function closePool(pool: Pool): Promise<void> {
+  const gone = new Promise<void>((resolve) => {
+    let open = pool.totalCount;
+    if (open === 0) resolve();
+    pool.on("remove", () => {
+      open -= 1;
+      if (open === 0) resolve();
+    });
+  });
+  await pool.end();
+  await gone;
+}
+
 export async function ensureDatabase(baseUrl: string, name: string, template?: string): Promise<void> {
   const client = new Client({ connectionString: baseUrl });
   await client.connect();

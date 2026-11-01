@@ -5,24 +5,10 @@ import { gatherFacts, oneThingCandidates } from "../planner/gather.ts";
 import { adultsOf, contextLine, eventsOn } from "../rules/day.ts";
 import { parseOrder } from "../rules/orders.ts";
 import { guessTags } from "../rules/tags.ts";
-import { addLocalDays, clock, localDate, longDate, nextLocalMidnight, weekdayOf } from "../time.ts";
+import { dayIn } from "../rules/when.ts";
+import { addLocalDays, clock, localDate, longDate, nextLocalMidnight } from "../time.ts";
 import { respond, subjectFor } from "./respond.ts";
 import type { JobScope } from "./scope.ts";
-
-const DAYS = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"] as const;
-const SHORT = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"] as const;
-
-function dateFor(word: string, today: string): string {
-  const w = word.toLowerCase();
-  if (w === "tonight" || w === "today") return today;
-  if (w === "tomorrow") return addLocalDays(today, 1);
-  const i = DAYS.findIndex((d) => d === w);
-  for (let n = 0; n < 7; n++) {
-    const d = addLocalDays(today, n);
-    if (SHORT[i] === weekdayOf(d)) return d;
-  }
-  return today;
-}
 
 /** The household's tools. Each runs as the agent actor for this job's person (PRV-1 is enforced by the routers). */
 export function houseTools(scope: JobScope) {
@@ -159,13 +145,15 @@ export function houseTools(scope: JobScope) {
   const sitterBooked = createTool({
     id: "sitter_booked",
     description: "A named babysitter is booked for a day (e.g. 'Hannah's doing Thursday').",
-    inputSchema: z.object({ sitter: z.string(), when: z.string() }),
+    inputSchema: z.object({ sitter: z.string(), when: z.string().describe("The day, as they said it: 'Tuesday', 'tomorrow', or a date like 'Tuesday 3 November'.") }),
     execute: record("sitter_booked", async (input: { sitter: string; when: string }) => {
-      const date = dateFor(input.when, today());
+      const date = dayIn(input.when, today());
+      // PRO-2: never guess the day; a booking on the wrong day leaves the real night uncovered.
+      if (date === null) return { booked: false, say: `Which day is ${input.sitter} doing? I couldn't tell from "${input.when}".` };
       const booking = await api.household.recordSitterBooking({ sitter: input.sitter, date });
       scope.effects.closeRefs.push({ ref: `sitter:${date}`, status: "done" });
       replanToday();
-      return { say: `Great, ${booking.sitter} is down for ${longDate(date)}.` };
+      return { booked: true, say: `Great, ${booking.sitter} is down for ${longDate(date)}.` };
     }),
   });
 

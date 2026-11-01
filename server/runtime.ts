@@ -1,5 +1,5 @@
 import { ActorKind, Domain } from "@household/contracts";
-import { connectDomain, type DomainDb } from "./db/index.ts";
+import { closePool, connectDomain, type DomainDb } from "./db/index.ts";
 import * as backlog from "./domains/backlog/schema.ts";
 import { backlogRouter } from "./domains/backlog/router.ts";
 import * as calendar from "./domains/calendar/schema.ts";
@@ -93,7 +93,7 @@ export async function createRuntime(env: Env, ports: Ports): Promise<Runtime> {
     as,
     system: (reason) => as({ kind: ActorKind.system, reason }),
     close: async () => {
-      await Promise.all(Object.values(dbs).map((db) => db.$client.end()));
+      await Promise.all(Object.values(dbs).map((db) => closePool(db.$client)));
     },
   };
 }

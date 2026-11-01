@@ -1,5 +1,5 @@
 import { Channel, DeliveryChannel, Domain, Limits, Urgency } from "@household/contracts";
-import { databaseName, dropDatabases, ensureDatabase, migrateDomain } from "../server/db/index.ts";
+import { closePool, databaseName, dropDatabases, ensureDatabase, migrateDomain } from "../server/db/index.ts";
 import { hashPassword } from "../server/domains/household/router.ts";
 import type { Env } from "../server/env.ts";
 import { connectAll, schemas } from "../server/runtime.ts";
@@ -17,7 +17,7 @@ export async function migrateAll(env: Env, template?: (d: Domain) => string): Pr
   try {
     if (template === undefined) for (const domain of Object.values(Domain)) await migrateDomain(dbs[domain], domain);
   } finally {
-    await Promise.all(Object.values(dbs).map((db) => db.$client.end()));
+    await Promise.all(Object.values(dbs).map((db) => closePool(db.$client)));
   }
 }
 
@@ -87,7 +87,7 @@ export async function seedPractice(env: Env, now: Date = new Date(data.PRACTICE_
     );
     await dbs.parcels.insert(P.arrivals).values(data.parcels.map((p, i) => ({ ...p, sourceKey: `seed-parcel-${i}`, createdAt: now })));
   } finally {
-    await Promise.all(Object.values(dbs).map((db) => db.$client.end()));
+    await Promise.all(Object.values(dbs).map((db) => closePool(db.$client)));
   }
 }
 
@@ -106,7 +106,7 @@ export async function truncateAndSeed(env: Env, now: Date): Promise<void> {
       if (tables.rows.length > 0) await dbs[domain].$client.query(`truncate ${tables.rows.map((t) => `"${t.tablename}"`).join(", ")} cascade`);
     }
   } finally {
-    await Promise.all(Object.values(dbs).map((db) => db.$client.end()));
+    await Promise.all(Object.values(dbs).map((db) => closePool(db.$client)));
   }
   await seedPractice(env, now);
 }
