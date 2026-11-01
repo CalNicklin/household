@@ -52,7 +52,13 @@ export async function ensureWatch(rt: Runtime): Promise<WatchOutcome> {
   if (current !== null && current.calendarId === push.calendarId && current.address === address && new Date(current.expiresAt).getTime() - now.getTime() > WATCH_RENEW_BEFORE_MS) return { action: "kept", expiresAt: current.expiresAt };
   const id = randomUUID();
   const opened = await push.open({ id, address, token: rt.env.CALENDAR_WEBHOOK_TOKEN });
-  await api.calendar.recordWatch({ channelId: id, calendarId: push.calendarId, resourceId: opened.resourceId, address, expiresAt: opened.expiresAt, openedAt: now.toISOString() });
+  try {
+    await api.calendar.recordWatch({ channelId: id, calendarId: push.calendarId, resourceId: opened.resourceId, address, expiresAt: opened.expiresAt, openedAt: now.toISOString() });
+  } catch (error) {
+    // A channel the house has no record of would never be renewed or closed: close it now (best effort).
+    await push.close({ id, resourceId: opened.resourceId }).catch(() => undefined);
+    throw error;
+  }
   if (current !== null) {
     // Best effort: an old channel that can't be closed ends by itself at its expiry, and its
     // notifications only cause a sync that finds nothing new.

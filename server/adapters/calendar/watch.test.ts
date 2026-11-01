@@ -146,6 +146,20 @@ describe("Google Calendar on the real adapter (HOU-147)", () => {
     expect(JSON.parse(posts().at(-1)?.body.toString() ?? "{}")).toEqual({ id: before.channelId, resourceId: before.resourceId });
   });
 
+  test("[CH-6] a channel the house couldn't record is closed again, and the one in use is unchanged", async () => {
+    const before = await rt.system("test").calendar.watch();
+    const failing = { ...rt, system: (reason: string) => {
+      const api = rt.system(reason);
+      return { ...api, calendar: { ...api.calendar, watch: async () => null, recordWatch: async () => Promise.reject(new Error("db down")) } } as typeof api;
+    } };
+    await expect(ensureWatch(failing)).rejects.toThrow("db down");
+    const [open, stop] = posts().slice(-2);
+    const opened = z.object({ id: z.string() }).parse(JSON.parse(open?.body.toString() ?? "{}"));
+    expect(stop?.path).toBe("/channels/stop");
+    expect(JSON.parse(stop?.body.toString() ?? "{}")).toEqual({ id: opened.id, resourceId: `res-${opened.id}` });
+    expect(await rt.system("test").calendar.watch()).toEqual(before);
+  });
+
   test("[CH-6] the practice household has no push, so it opens nothing", async () => {
     expect(await ensureWatch(h.rt)).toEqual({ action: "no-push" });
   });
