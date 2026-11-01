@@ -9,14 +9,22 @@ import { evidence, expect, login, reset, say, test } from "./fixtures.ts";
  */
 test.beforeEach(async ({ request }) => reset(request));
 
-// limit: deletedEverywhereMs
-const sent = { timeout: Limits.deletedEverywhereMs.value };
+/**
+ * FB-2: each page runs on Playwright's clock, so a test skips the five-second Undo window instead of
+ * waiting it out; time otherwise flows as normal.
+ */
+async function letUndoLapse(page: Page) {
+  // limit: undoWindowMs
+  await page.clock.fastForward(Limits.undoWindowMs.value);
+  await expect(toast(page)).toHaveCount(0);
+}
 // limit: liveUpdateBudgetMs
 const live = { timeout: Limits.liveUpdateBudgetMs.value };
 
 async function phoneOf(browser: Browser, person = "priya"): Promise<Page> {
   const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
   const phone = await ctx.newPage();
+  await phone.clock.install();
   await login(phone, person);
   return phone;
 }
@@ -45,6 +53,7 @@ async function deleteRow(page: Page, text: string) {
 }
 
 test("[PRV-1] a person deletes a backlog item anyone wrote, with Undo, on the iPad and the phone", async ({ page, browser }) => {
+  await page.clock.install();
   await login(page);
   await page.goto("/backlog");
   const tom = await phoneOf(browser, "tom");
@@ -60,7 +69,7 @@ test("[PRV-1] a person deletes a backlog item anyone wrote, with Undo, on the iP
 
   // Deleted and left: gone for good, and from Tom's phone too.
   await deleteRow(page, "Clear the gutters");
-  await expect(toast(page)).toHaveCount(0, sent);
+  await letUndoLapse(page);
   await expect(row(tom, "Clear the gutters")).toHaveCount(0, live);
   await page.reload();
   await expect(page.getByText("Service the bike", { exact: true })).toBeVisible();
@@ -73,7 +82,7 @@ test("[PRV-1] a person deletes a backlog item anyone wrote, with Undo, on the iP
   await evidence(phone, "HOU-158-backlog-undo-phone", { fullPage: false });
   await undo(phone, "Deleted “Paint the shed door”", row(phone, "Paint the shed door"));
   await deleteRow(phone, "Paint the shed door");
-  await expect(toast(phone)).toHaveCount(0, sent);
+  await letUndoLapse(phone);
   await expect(row(page, "Paint the shed door")).toHaveCount(0, live);
 });
 
@@ -81,6 +90,7 @@ const list = (p: Page, name: string) => p.getByRole("region", { name, exact: tru
 const item = (p: Page, text: string) => list(p, "Shopping").getByRole("button", { name: text, exact: true });
 
 test("[PRV-1][CAP-6] a person deletes a list item, and a whole list after a confirm, with Undo, on the iPad and the phone", async ({ page, browser }) => {
+  await page.clock.install();
   await login(page);
   await page.goto("/lists");
   const phone = await phoneOf(browser);
@@ -94,7 +104,7 @@ test("[PRV-1][CAP-6] a person deletes a list item, and a whole list after a conf
   await page.reload();
   await expect(item(page, "kitchen roll")).toBeVisible();
   await list(page, "Shopping").getByRole("button", { name: "Delete kitchen roll" }).click();
-  await expect(toast(page)).toHaveCount(0, sent);
+  await letUndoLapse(page);
   await expect(item(phone, "kitchen roll")).toHaveCount(0, live);
 
   // Phone: an item, undone, then a whole list after a confirm, undone, then deleted for good.
@@ -109,12 +119,13 @@ test("[PRV-1][CAP-6] a person deletes a list item, and a whole list after a conf
   await list(phone, "Christmas presents").getByRole("button", { name: "Actions for Christmas presents" }).click();
   await phone.getByRole("menuitem", { name: "Delete list" }).click();
   await phone.getByRole("alertdialog").getByRole("button", { name: "Delete list" }).click();
-  await expect(toast(phone)).toHaveCount(0, sent);
+  await letUndoLapse(phone);
   await expect(list(page, "Christmas presents")).toHaveCount(0, live);
   await expect(item(page, "bin bags")).toBeVisible();
 });
 
 test("[PRV-1][AUT-1] a person deletes a shop request that went nowhere, with Undo, on the iPad and the phone", async ({ page, browser }) => {
+  await page.clock.install();
   await login(page);
   await say(page, "we're out of saffron");
   await page.goto("/shop");
@@ -131,7 +142,7 @@ test("[PRV-1][AUT-1] a person deletes a shop request that went nowhere, with Und
   await phone.goto("/shop");
   await deleteRow(phone, "saffron");
   await evidence(phone, "HOU-158-shop-undo-phone", { fullPage: false });
-  await expect(toast(phone)).toHaveCount(0, sent);
+  await letUndoLapse(phone);
   await expect(row(page, "saffron")).toHaveCount(0, live);
   await phone.reload();
   await expect(phone.getByRole("heading", { name: "Asked for" })).toBeVisible();
@@ -139,13 +150,15 @@ test("[PRV-1][AUT-1] a person deletes a shop request that went nowhere, with Und
 });
 
 test("[PRV-1] a delete that does not go through comes back, and the screen says so", async ({ page }) => {
+  await page.clock.install();
   await login(page);
   await page.goto("/lists");
   await page.route("**/api/trpc/removeListItem**", (route) => route.fulfill({ status: 500, body: "{}" }));
   await list(page, "Shopping").getByRole("button", { name: "Delete kitchen roll" }).click();
   await expect(item(page, "kitchen roll")).toHaveCount(0);
-  // limit: deletedEverywhereMs
-  await expect(toast(page)).toContainText("Couldn't delete that — it's back", { timeout: Limits.deletedEverywhereMs.value });
+  // limit: undoWindowMs
+  await page.clock.fastForward(Limits.undoWindowMs.value);
+  await expect(toast(page)).toContainText("Couldn't delete that — it's back");
   await expect(toast(page).getByRole("button", { name: "Undo" })).toHaveCount(0);
   await expect(item(page, "kitchen roll")).toBeVisible();
 });

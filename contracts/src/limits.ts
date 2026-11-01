@@ -45,7 +45,6 @@ export const Limits = {
   captureBudgetMs: { value: 5000, reason: "VERIFICATION", note: "CAP-1: appears for both of us within five seconds." },
   shoppingBudgetMs: { value: 600_000, reason: "VERIFICATION", note: "AUT-1: within ten minutes it is in our supermarket basket." },
   undoWindowMs: { value: 5000, reason: "VERIFICATION", note: "PRV-1 / HOU-158: a person's own delete can be taken back for a few seconds before it is sent; five is the usual undo-toast length." },
-  deletedEverywhereMs: { value: 7000, reason: "VERIFICATION", note: "PRV-1 / MOM-3: once the five-second Undo window (undoWindowMs) ends, other screens show the delete within two seconds." },
   calendarRefreshMs: { value: 60_000, reason: "VERIFICATION", note: "HOME-1: updates within a minute of a calendar change." },
   reviewMaxSteps: { value: 30, reason: "OWASP_LLM06", note: "HOU-151: model calls (read-only tool rounds) one review stage may make; the last one has no tools and must answer." },
   reviewMaxOutputTokens: { value: 32_000, reason: "OWASP_LLM10", note: "HOU-151: output (thinking included) per model call in a review stage." },
