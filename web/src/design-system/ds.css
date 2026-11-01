@@ -646,7 +646,16 @@ a:hover {
   border-color: var(--color-suggestion-accent);
 }
 
+/* HOU-159: the mic's one line under the composer, and what you said in the conversation: small, muted. */
 .ds-composer__note,
+.ds-conversation__said {
+  margin: 0;
+  padding: 0 var(--space-card-x);
+  font-size: var(--size-body-small);
+  color: var(--color-muted);
+  line-height: 1.4;
+}
+
 /* HOU-159: today's conversation with the house, above the composer. Small and calm; the newest answer is the big one. */
 .ds-conversation {
   display: flex;
@@ -675,14 +684,6 @@ a:hover {
   display: flex;
   flex-direction: column;
   gap: 4px;
-}
-
-.ds-conversation__said {
-  margin: 0;
-  padding: 0 var(--space-card-x);
-  font-size: var(--size-body-small);
-  color: var(--color-muted);
-  line-height: 1.4;
 }
 
 .ds-conversation__house {

@@ -232,7 +232,14 @@ export function Conversation({ exchanges, total, open, onOpen, onClose }: { exch
       {latest === undefined ? null : (
         <>
           {latest.said === null ? null : <Said text={latest.said} />}
-          {latest.house === null ? null : <Answer heading={latest.house.heading} title={latest.house.title} detail={latest.house.detail} onDismiss={onClose} />}
+          {latest.house === null ? (
+            // Nothing from the house to put the hide button on: the conversation still folds away.
+            <button type="button" className="ds-conversation__toggle" aria-expanded={true} onClick={onClose}>
+              Hide today's conversation
+            </button>
+          ) : (
+            <Answer heading={latest.house.heading} title={latest.house.title} detail={latest.house.detail} onDismiss={onClose} />
+          )}
         </>
       )}
     </section>
