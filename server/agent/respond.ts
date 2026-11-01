@@ -1,0 +1,112 @@
+import { ActionKind, BlockType, DayPart, type LocalDate, ModeKind, NotificationStatus, RhythmSource } from "@household/contracts";
+import { addLocalDays, localDate, localHour, weekdayOf } from "../time.ts";
+import type { JobScope } from "./scope.ts";
+
+export function dayPartOf(hour: number): DayPart {
+  return hour < 12 ? DayPart.morning : hour < 17 ? DayPart.afternoon : DayPart.evening;
+}
+
+/** What a ref is about, in words: the block title on today's plan, the backlog item, or the ref. */
+export async function subjectFor(scope: JobScope, ref: string, date: LocalDate): Promise<string> {
+  const api = scope.rt.system("subject");
+  if (ref.startsWith("backlog:")) {
+    const item = await api.backlog.get({ id: ref.slice("backlog:".length) });
+    if (item !== null) return item.text;
+  }
+  for (const d of [date, addLocalDays(date, -1)]) {
+    const plan = await api.plans.latest({ date: d });
+    for (const b of plan?.blocks ?? []) {
+      if (!("ref" in b) || b.ref !== ref) continue;
+      if (b.type === BlockType.arrival) return `${b.shop} delivery`;
+      if ("title" in b) return b.title;
+    }
+    const pick = plan?.blocks.find((b) => b.type === BlockType.mode);
+    if (pick?.type === BlockType.mode && pick.pick?.ref === ref) return pick.pick.title;
+  }
+  const note = (await api.jobs.notifications({ statuses: Object.values(NotificationStatus) })).find((n) => n.key === ref);
+  if (note !== undefined) return note.message;
+  if (ref.startsWith("washing:")) return "Hang the washing out";
+  return ref;
+}
+
+async function weatherNow(scope: JobScope, now: Date): Promise<string> {
+  const settings = await scope.rt.system("weather").household.settings();
+  const date = localDate(now, scope.rt.timeZone);
+  const hours = await scope.rt.ports.weather.hourly(date, settings.latitude, settings.longitude, scope.rt.timeZone);
+  const h = hours.find((x) => Number(x.hour.slice(11, 13)) === localHour(now, scope.rt.timeZone)) ?? hours[0];
+  if (h === undefined) return "unknown";
+  return `${h.precipitationProbability < 40 ? "dry" : "wet"} ${Math.round(h.temperatureC)}°`;
+}
+
+/**
+ * Done, Not today, Snooze, hand-over, accept or answer — however it arrived (HOME-4/5, CH-8).
+ * Nothing becomes overdue: a response hides the thing and is remembered, that's all.
+ */
+export async function respond(scope: JobScope, ref: string, action: ActionKind, value: string | null): Promise<string> {
+  const now = scope.rt.ports.clock.now();
+  const tz = scope.rt.timeZone;
+  const date = localDate(now, tz);
+  const person = scope.person;
+  if (person === null) return "I don't know who that was.";
+  await scope.api.plans.respond({ ref, action, channel: scope.channel, date, value });
+  const subject = await subjectFor(scope, ref, date);
+
+  const learnable: readonly ActionKind[] = [ActionKind.accept, ActionKind.notToday, ActionKind.snooze, ActionKind.handOver, ActionKind.done];
+  if (learnable.includes(action)) {
+    const mode = await scope.rt.system("mode").household.activeMode();
+    const hour = localHour(now, tz);
+    await scope.api.learning.record({
+      kind: action === ActionKind.notToday ? ActionKind.notToday : action === ActionKind.accept ? ActionKind.accept : action === ActionKind.snooze ? ActionKind.snooze : action === ActionKind.handOver ? ActionKind.handOver : ActionKind.done,
+      subject,
+      ref,
+      person,
+      date,
+      dayPart: dayPartOf(hour),
+      weekday: weekdayOf(date),
+      hour,
+      weather: await weatherNow(scope, now),
+      dayMode: mode?.mode ?? ModeKind.normal,
+      at: now.toISOString(),
+    });
+  }
+  scope.effects.closeRefs.push({ ref, status: action === ActionKind.done ? "done" : "dismissed" });
+
+  if (ref.startsWith("backlog:")) {
+    const id = ref.slice("backlog:".length);
+    if (action === ActionKind.notToday) {
+      const item = await scope.api.backlog.notNow({ id });
+      scope.effects.remember.push(`Said not now to "${subject}" on a ${weekdayOf(date)} ${dayPartOf(localHour(now, tz))}.`);
+      return item.status === "parked" ? `Okay. That's three times, so "${subject}" is parked until you bring it back.` : "Okay, not now.";
+    }
+    if (action === ActionKind.done) {
+      await scope.api.backlog.markDone({ id });
+      return `Nice. "${subject}" is off the list.`;
+    }
+    if (action === ActionKind.accept) return `Pencilled in: ${subject}.`;
+  }
+  if (ref.startsWith("question:") && action === ActionKind.answer && value !== null) {
+    const q = await scope.api.learning.answer({ id: ref.slice("question:".length), answer: value });
+    const days = Number(value);
+    if (q.topic === "chore-rhythm" && Number.isFinite(days) && days > 0) await scope.api.learning.upsertRhythm({ subject: q.subject, everyDays: days, usualWeekday: null, source: RhythmSource.answered });
+    return "Thanks, noted.";
+  }
+  if (ref.startsWith("wellbeing:") && action === ActionKind.notHelpful) {
+    scope.effects.remember.push("Said wellbeing suggestions were not helpful.");
+    return "Understood. I'll keep those to myself for a month.";
+  }
+  if (ref.startsWith("shopping:") && action === ActionKind.answer && value !== null) {
+    scope.effects.shopping.push({ requestId: ref.slice("shopping:".length), sku: value });
+    return "Adding that one.";
+  }
+  if (ref.startsWith("sitter:") && action === ActionKind.accept && value !== null) {
+    scope.effects.sitterAsk.push({ sitter: value, date: ref.slice("sitter:".length), from: person });
+    return `I've asked ${value}.`;
+  }
+  if (action === ActionKind.snooze) return "Moved to tomorrow.";
+  if (action === ActionKind.notToday) {
+    scope.effects.remember.push(`Dismissed "${subject}" on a ${weekdayOf(date)} ${dayPartOf(localHour(now, tz))}.`);
+    return "Okay, not today.";
+  }
+  if (action === ActionKind.done) return "Done.";
+  return "Noted.";
+}

@@ -1,0 +1,32 @@
+import { BacklogStatus, BacklogTag, Channel } from "@household/contracts";
+import { relations } from "drizzle-orm";
+import { boolean, integer, pgTable, text } from "drizzle-orm/pg-core";
+import { at, createdAt, id, values } from "../../db/columns.ts";
+
+/** CAP-2: no due date, no priority. Only tags. */
+export const items = pgTable("items", {
+  id: id(),
+  text: text("text").notNull(),
+  tags: text("tags", { enum: values(BacklogTag) }).array().notNull().default([]),
+  confirmedTags: boolean("confirmed_tags").notNull().default(false),
+  status: text("status", { enum: values(BacklogStatus) }).notNull().default(BacklogStatus.active),
+  notNowCount: integer("not_now_count").notNull().default(0),
+  createdBy: text("created_by").notNull(),
+  createdVia: text("created_via", { enum: values(Channel) }).notNull(),
+  sourceMessage: text("source_message").notNull(),
+  createdAt: createdAt(),
+  doneAt: at("done_at"),
+});
+
+/** Every "not now" against an item, for CAP-5. */
+export const notNows = pgTable("not_nows", {
+  id: id(),
+  itemId: text("item_id").notNull().references(() => items.id, { onDelete: "cascade" }),
+  person: text("person").notNull(),
+  createdAt: createdAt(),
+});
+
+export const itemsRelations = relations(items, ({ many }) => ({ notNows: many(notNows) }));
+export const notNowsRelations = relations(notNows, ({ one }) => ({
+  item: one(items, { fields: [notNows.itemId], references: [items.id] }),
+}));

@@ -1,0 +1,94 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": [
+    "typescript",
+    "unicorn",
+    "oxc",
+    "import",
+    "react",
+    "vitest",
+    "promise",
+    "node"
+  ],
+  "jsPlugins": [
+    "./tools/oxlint-plugin/index.js"
+  ],
+  "categories": {
+    "correctness": "error",
+    "suspicious": "error",
+    "perf": "error"
+  },
+  "rules": {
+    "typescript/no-explicit-any": "error",
+    "typescript/no-non-null-assertion": "error",
+    "typescript/switch-exhaustiveness-check": "error",
+    "typescript/no-floating-promises": "error",
+    "typescript/consistent-type-imports": "error",
+    "import/no-default-export": "error",
+    "import/no-cycle": "error",
+    "sort-imports": [
+      "error",
+      {
+        "ignoreCase": true,
+        "ignoreDeclarationSort": true
+      }
+    ],
+    "no-unused-vars": "error",
+    "eqeqeq": "error",
+    "household/cited-limits": "error",
+    "unicorn/no-array-sort": "off",
+    "unicorn/no-array-reverse": "off",
+    "react/react-in-jsx-scope": "off",
+    "react/jsx-filename-extension": "off",
+    "import/no-unassigned-import": "off",
+    "react-perf/jsx-no-new-object-as-prop": "off",
+    "react-perf/jsx-no-new-function-as-prop": "off",
+    "react-perf/jsx-no-new-array-as-prop": "off",
+    "oxc/no-map-spread": "off",
+    "no-await-in-loop": "off",
+    "consistent-return": "off",
+    "vitest/valid-expect": [
+      "error",
+      {
+        "maxArgs": 2
+      }
+    ]
+  },
+  "overrides": [
+    {
+      "files": [
+        "**/drizzle.config.ts",
+        "vite.config.ts",
+        "web/vite.config.ts",
+        "vitest.config.ts",
+        "playwright.config.ts",
+        "tools/oxlint-plugin/index.js",
+        "**/*.d.ts",
+        "e2e/reporter.ts",
+        "tools/reporters/*.ts",
+        "server/testing/global-setup.ts"
+      ],
+      "rules": {
+        "import/no-default-export": "off"
+      }
+    },
+    {
+      "files": [
+        "contracts/src/limits.ts",
+        "tools/oxlint-plugin/**"
+      ],
+      "rules": {
+        "household/cited-limits": "off"
+      }
+    }
+  ],
+  "ignorePatterns": [
+    "node_modules",
+    "**/dist",
+    "web/.output",
+    "**/routeTree.gen.ts",
+    "design/**",
+    ".data/**",
+    "**/migrations/**"
+  ]
+}

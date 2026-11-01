@@ -1,0 +1,131 @@
+import { ActorKind, zLoginInput } from "@household/contracts";
+import { fetchRequestHandler } from "@trpc/server/adapters/fetch";
+import { Hono } from "hono";
+import { streamSSE } from "hono/streaming";
+import { existsSync, readFileSync } from "node:fs";
+import path from "node:path";
+import { type Adapter, type HttpEnv } from "../adapters/registry.ts";
+import type { Runtime } from "../runtime.ts";
+import { viewsRouter } from "../views/router.ts";
+import { clearCookie, personFromCookie, sessionCookie } from "./session.ts";
+
+const PUBLIC_FILES = /^\/(assets\/|manifest\.webmanifest|sw\.js|icon|favicon|robots\.txt)/;
+
+/**
+ * PRV-6: nothing is reachable without a login. Public routes are the login itself, the static
+ * shell's assets, and adapter webhooks that check their own shared secret.
+ */
+export function createApp(rt: Runtime, adapters: Adapter[], extra?: (app: Hono<HttpEnv>) => void): Hono<HttpEnv> {
+  const app = new Hono<HttpEnv>();
+  const secure = rt.env.PUBLIC_URL.startsWith("https://");
+  const views = viewsRouter(rt);
+
+  app.get("/healthz", (c) => c.text("ok"));
+
+  app.post("/api/login", async (c) => {
+    const input = zLoginInput.parse(await c.req.json());
+    const person = await rt.system("login").household.login(input);
+    if (person === null) return c.json({ ok: false }, 401);
+    c.header("Set-Cookie", sessionCookie(person, rt.env.SESSION_SECRET, rt.ports.clock.now(), secure));
+    return c.json({ ok: true, person });
+  });
+  app.post("/api/logout", (c) => {
+    c.header("Set-Cookie", clearCookie());
+    return c.json({ ok: true });
+  });
+
+  for (const a of adapters) a.routes?.(app, rt);
+
+  app.use("*", async (c, next) => {
+    const p = c.req.path;
+    if (p === "/login" || PUBLIC_FILES.test(p)) return next();
+    const person = personFromCookie(c.req.header("cookie"), rt.env.SESSION_SECRET, rt.ports.clock.now());
+    if (person === null) {
+      if (p.startsWith("/api/") || p.startsWith("/mcp")) return c.json({ error: "login required" }, 401);
+      return c.redirect(`/login?next=${encodeURIComponent(p)}`);
+    }
+    c.set("person", person);
+    return next();
+  });
+
+  app.all("/api/trpc/*", (c) =>
+    fetchRequestHandler({
+      endpoint: "/api/trpc",
+      req: c.req.raw,
+      router: views,
+      createContext: () => ({ actor: { kind: ActorKind.person, person: c.get("person") }, now: rt.ports.clock.now(), publish: (t) => rt.bus.publish(t) }),
+    }),
+  );
+
+  /** PLT-11 / MOM-3 / CH-10: the app listens for changes and refetches; it never polls the agent. */
+  app.get("/api/live", (c) =>
+    streamSSE(c, async (stream) => {
+      const queue: string[] = [];
+      let wake: (() => void) | null = null;
+      const unsubscribe = rt.bus.subscribe((e) => {
+        queue.push(e.topic);
+        wake?.();
+      });
+      stream.onAbort(() => {
+        unsubscribe();
+        wake?.();
+      });
+      await stream.writeSSE({ event: "hello", data: "{}" });
+      while (!stream.aborted) {
+        const topic = queue.shift();
+        if (topic !== undefined) {
+          await stream.writeSSE({ event: "change", data: JSON.stringify({ topic }) });
+          continue;
+        }
+        await new Promise<void>((resolve) => {
+          wake = resolve;
+          setTimeout(resolve, 25_000);
+        });
+        wake = null;
+        if (queue.length === 0) await stream.writeSSE({ event: "ping", data: "{}" });
+      }
+    }),
+  );
+
+  /** PLT-7: screenshots and documents, decrypted on the way out, only for a logged-in person. */
+  app.get("/api/objects/*", async (c) => {
+    const key = decodeURIComponent(c.req.path.slice("/api/objects/".length));
+    const object = await rt.ports.objects.get(key);
+    if (object === null) return c.notFound();
+    return new Response(Buffer.from(object.body), { headers: { "content-type": object.contentType, "cache-control": "private, max-age=3600" } });
+  });
+
+  for (const a of adapters) a.privateRoutes?.(app, rt);
+  extra?.(app);
+
+  const dist = path.resolve(rt.env.WEB_DIST);
+  app.get("*", (c) => {
+    const file = path.join(dist, c.req.path);
+    if (file.startsWith(dist) && c.req.path !== "/" && existsSync(file) && !file.endsWith("/")) {
+      const type = contentType(file);
+      return new Response(readFileSync(file), { headers: { "content-type": type } });
+    }
+    const shell = path.join(dist, "_shell.html");
+    const index = existsSync(shell) ? shell : path.join(dist, "index.html");
+    if (!existsSync(index)) return c.text("web app not built: run pnpm --dir web build", 503);
+    return c.html(readFileSync(index, "utf8"));
+  });
+
+  return app;
+}
+
+function contentType(file: string): string {
+  const ext = path.extname(file);
+  const types: Record<string, string> = {
+    ".js": "text/javascript",
+    ".css": "text/css",
+    ".html": "text/html",
+    ".json": "application/json",
+    ".webmanifest": "application/manifest+json",
+    ".png": "image/png",
+    ".svg": "image/svg+xml",
+    ".ico": "image/x-icon",
+    ".woff2": "font/woff2",
+  };
+  return types[ext] ?? "application/octet-stream";
+}

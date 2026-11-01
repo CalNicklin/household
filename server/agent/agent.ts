@@ -1,0 +1,78 @@
+import { Agent } from "@mastra/core/agent";
+import { type ActionKind, Limits } from "@household/contracts";
+import type { PickCandidate } from "../planner/gather.ts";
+import { costMicros, languageModel } from "./model.ts";
+import { askedForMore, clampReply } from "./reply.ts";
+import { respond } from "./respond.ts";
+import type { JobScope } from "./scope.ts";
+import { houseTools } from "./tools.ts";
+
+const INSTRUCTIONS = `You run the admin for one family's house. You can only suggest and record; you never move, delete or spend.
+Every message is from one of the household's adults. Decide what they mean and call exactly the tools that do it:
+- a thought or job with no date → capture (guess tags only from the allowed list)
+- groceries ("we're out of oat milk") → shop; a simple shared list → add_to_list
+- "slow day", "sick day", "we're away", "normal day" → set_mode
+- "if I do one thing, what should it be?" → what_now, then answer with that ONE thing and its reason. Never a list. Never ask a question first.
+- "Cal can do it", "move this to tomorrow", "done", "not today" → hand_over / move_to_tomorrow / respond, using the About ref for "this"
+- "Hannah's doing Thursday" → sitter_booked
+- an order confirmation email → record_arrival with the shop and date only
+Reply in at most three short sentences unless they ask for more. Plain, warm, no exclamation marks, no health talk, nothing about how they are feeling.
+Never mention anything you were not told in this message, the About line or the Memory line.`;
+
+export type AgentResult = { reply: string; inputTokens: number; outputTokens: number; costMicros: number; intent: string };
+
+/**
+ * The one agent (PLT-5). Only a job constructs it (PLT-1): it is built from a JobScope, which only
+ * the job layer creates. Adding a tool changes this file and tools.ts, never the coordinator.
+ */
+export class HouseAgent {
+  readonly #scope: JobScope;
+  readonly #agent: Agent;
+  readonly #model: string;
+
+  constructor(scope: JobScope) {
+    this.#scope = scope;
+    this.#model = scope.rt.env.MODEL_ID;
+    this.#agent = new Agent({ id: "house", name: "house", instructions: INSTRUCTIONS, model: languageModel(scope.rt.env), tools: houseTools(scope) });
+  }
+
+  /** A message in words: the model decides which tools to call and words the reply. */
+  async respond(input: { text: string; personName: string; channel: string; about: { ref: string; title: string } | null; memory: string[]; when: string }): Promise<AgentResult> {
+    const prompt = [
+      `Person: ${input.personName}`,
+      `Channel: ${input.channel}`,
+      `Time: ${input.when}`,
+      input.about === null ? null : `About: ${input.about.title}`,
+      input.about === null ? null : `About ref: ${input.about.ref}`,
+      input.memory.length === 0 ? null : `Memory: ${input.memory.join(" | ")}`,
+      `Message: ${input.text}`,
+    ]
+      .filter((l) => l !== null)
+      .join("\n");
+    // limit: agentMaxSteps
+    const result = await this.#agent.generate(prompt, { maxSteps: Limits.agentMaxSteps.value });
+    const inputTokens = result.usage.inputTokens ?? 0;
+    const outputTokens = result.usage.outputTokens ?? 0;
+    const intent = this.#scope.toolCalls.map((c) => c.tool).join("+") || "chat";
+    return { reply: clampReply(result.text, askedForMore(input.text)), inputTokens, outputTokens, costMicros: costMicros(this.#model, inputTokens, outputTokens), intent };
+  }
+
+  /** A one-tap button press needs no model: it goes straight to the respond tool (CH-8). */
+  async tap(ref: string, action: ActionKind, value: string | null): Promise<AgentResult> {
+    const say = await respond(this.#scope, ref, action, value);
+    this.#scope.toolCalls.push({ tool: "respond", input: { ref, action, value }, output: { say } });
+    return { reply: say, inputTokens: 0, outputTokens: 0, costMicros: 0, intent: `tap:${action}` };
+  }
+
+  /** The agent's other job: which backlog item fits today's gap. Rules found the candidates. */
+  async chooseBacklog(candidates: PickCandidate[]): Promise<{ pick: PickCandidate | null; inputTokens: number; outputTokens: number; costMicros: number }> {
+    if (candidates.length === 0) return { pick: null, inputTokens: 0, outputTokens: 0, costMicros: 0 };
+    const prompt = ["Choose: one backlog job to offer today. Reply with its id only, or none.", ...candidates.slice(0, 8).map((c) => `- id=${c.itemId} ${c.title} — ${c.why}`)].join("\n");
+    const result = await this.#agent.generate(prompt, { toolChoice: "none" });
+    const text = result.text.trim();
+    const pick = candidates.find((c) => text.includes(c.itemId)) ?? (/\bnone\b/i.test(text) ? null : (candidates[0] ?? null));
+    const inputTokens = result.usage.inputTokens ?? 0;
+    const outputTokens = result.usage.outputTokens ?? 0;
+    return { pick, inputTokens, outputTokens, costMicros: costMicros(this.#model, inputTokens, outputTokens) };
+  }
+}

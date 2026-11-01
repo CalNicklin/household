@@ -1,0 +1,6 @@
+packages:
+  - contracts
+onlyBuiltDependencies:
+  - esbuild
+  - embedded-postgres
+  - "@embedded-postgres/linux-x64"

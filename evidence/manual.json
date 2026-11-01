@@ -1,0 +1,7 @@
+{
+  "PLT-8": "Tried once on 31 Oct 2026: `docker compose up` brought up Postgres, SeaweedFS, the practice supermarket, the sealed helper and the app (healthy); scripts/backup.sh, `docker compose down -v`, scripts/restore.sh, and the data came back. Record in docs/OPERATIONS.md.",
+  "FB-1": "`pnpm dev` starts Postgres (local or embedded), the practice supermarket, the server with watch and Vite; scripts/hmr-probe.ts measured a design-system change in the browser in 103 ms.",
+  "QA-1": "All 125 lines are issues in the Linear project \"Household Coordinator — Verifications\" (team HOU), each titled with its ID and labelled `verification`, created by scripts/linear-sync.ts on 31 Oct 2026; each proven line carries its evidence as a comment, each untrue line says why.",
+  "QA-2": "scripts/linear-sync.ts added blocks/blocked-by relations from every (gate) line to the lines after it in its section, up to the next gate (CODE-12 gates only CODE-13..15). Checked: HOME-1 blocks HOME-2..11; HOME-2 is blocked by HOME-1.",
+  "FB-2": "Measured in GitHub Actions on PR #2 at 2f7a2e1 (run 41296959891): `pnpm check` passed in 108.8 s (static checks, unit tests 108.0 s and web build + journeys 103.6 s run as three lanes at once). check.ts fails itself above 180 s; earlier CI runs took 246 s and 195.7 s before the fixes."
+}

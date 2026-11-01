@@ -1,0 +1,9 @@
+{
+  "QA-3": "Paper frames do not exist and there is no Paper MCP server here. The shared token set is design/tokens.json (kept in step with the CSS by a test); the canvas screens were rebuilt as code from the exported HTML instead.",
+  "QA-4": "CI enforces it: scripts/check-entire.ts fails any commit without an Entire-Checkpoint trailer, and it passes on PR #2. Not fully true: commits made in cloud sessions get the trailer, but their checkpoints can't be pushed from there (the session can push only its own branch; HTTP 403), so those links resolve only inside that session's container. The bootstrap commit's checkpoint (4f0d6e91b646) is on GitHub.",
+  "QA-5": "The environment required all work on one branch (claude/hopeful-pascal-0esy7d), not one branch and PR per Linear issue. The PR template and branch convention are in place for the next issues.",
+  "QA-6": "The scoring is wired into pnpm check (server/learning/eval.test.ts against practice/days/baseline.json), but there are 0 recorded real days; it needs at least 20 from the real house (node scripts/record-day.ts each evening).",
+  "LRN-9": "The recording format, export script and replay scoring exist; no real days have been recorded yet.",
+  "FB-4": "Journeys were performed headless with Playwright against a local practice stack; screenshots are saved in evidence/screenshots and named in each Linear evidence comment. There is no deployed preview to perform them on (FB-5) and no computer use in this environment.",
+  "FB-5": "No preview hosting is configured. Each preview would be `docker compose up` with PRACTICE=true (the practice household is the default); it needs a server and a deploy hook."
+}

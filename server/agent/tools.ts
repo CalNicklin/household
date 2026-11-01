@@ -1,0 +1,215 @@
+import { createTool } from "@mastra/core/tools";
+import { ActionKind, type BacklogTag, type ModeKind as Mode, ModeKind, Urgency, zActionKind, zBacklogTag } from "@household/contracts";
+import { z } from "zod";
+import { gatherFacts, oneThingCandidates } from "../planner/gather.ts";
+import { adultsOf, contextLine, eventsOn } from "../rules/day.ts";
+import { parseOrder } from "../rules/orders.ts";
+import { guessTags } from "../rules/tags.ts";
+import { addLocalDays, clock, localDate, longDate, nextLocalMidnight, weekdayOf } from "../time.ts";
+import { respond, subjectFor } from "./respond.ts";
+import type { JobScope } from "./scope.ts";
+
+const DAYS = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"] as const;
+const SHORT = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"] as const;
+
+function dateFor(word: string, today: string): string {
+  const w = word.toLowerCase();
+  if (w === "tonight" || w === "today") return today;
+  if (w === "tomorrow") return addLocalDays(today, 1);
+  const i = DAYS.findIndex((d) => d === w);
+  for (let n = 0; n < 7; n++) {
+    const d = addLocalDays(today, n);
+    if (SHORT[i] === weekdayOf(d)) return d;
+  }
+  return today;
+}
+
+/** The household's tools. Each runs as the agent actor for this job's person (PRV-1 is enforced by the routers). */
+export function houseTools(scope: JobScope) {
+  const { rt, api } = scope;
+  const tz = rt.timeZone;
+  const today = () => localDate(rt.ports.clock.now(), tz);
+  const record = <I, O>(tool: string, fn: (input: I) => Promise<O>) => async (input: I): Promise<O> => {
+    const output = await fn(input);
+    scope.toolCalls.push({ tool, input, output });
+    return output;
+  };
+  const replanToday = () => {
+    if (!scope.effects.replan.includes(today())) scope.effects.replan.push(today());
+  };
+
+  const capture = createTool({
+    id: "capture",
+    description: "Put a thought on the shared backlog: a job with no date. Guess tags for what it needs.",
+    inputSchema: z.object({ text: z.string().min(1), tags: z.array(zBacklogTag).optional() }),
+    execute: record("capture", async (input: { text: string; tags?: BacklogTag[] | undefined }) => {
+      const hints = await rt.system("tags").household.tagHints();
+      const tags = input.tags !== undefined && input.tags.length > 0 ? input.tags : guessTags(input.text, hints);
+      const item = await api.backlog.create({ text: input.text, tags, createdVia: scope.channel, sourceMessage: scope.messageId });
+      return { id: item.id, tags: item.tags, say: `Added to the backlog: ${item.text}.` };
+    }),
+  });
+
+  const shop = createTool({
+    id: "shop",
+    description: "Groceries someone mentioned. They go in the next supermarket shop (the helper adds them).",
+    inputSchema: z.object({ items: z.array(z.string().min(1)).min(1) }),
+    execute: record("shop", async (input: { items: string[] }) => {
+      const ids: string[] = [];
+      for (const item of input.items) {
+        const request = await api.shopping.request({ item, sourceMessage: `${scope.messageId}:${item}` });
+        scope.effects.shopping.push({ requestId: request.id, sku: null });
+        ids.push(request.id);
+      }
+      return { requests: ids, say: `I'll put ${input.items.join(" and ")} in the next shop.` };
+    }),
+  });
+
+  const addToList = createTool({
+    id: "add_to_list",
+    description: "Add to one of the household's shared lists in their lists app (not groceries).",
+    inputSchema: z.object({ list: z.string(), item: z.string() }),
+    execute: record("add_to_list", async (input: { list: string; item: string }) => {
+      const lists = await rt.ports.lists.lists();
+      const match = lists.find((l) => l.name.toLowerCase() === input.list.toLowerCase()) ?? lists.find((l) => l.name.toLowerCase().includes(input.list.toLowerCase()));
+      if (match === undefined) return { say: `There's no ${input.list} list in your lists app.` };
+      await rt.ports.lists.add(match.name, input.item);
+      return { say: `Added ${input.item} to ${match.name}.` };
+    }),
+  });
+
+  const setMode = createTool({
+    id: "set_mode",
+    description: "Set the house's day: slow, sick, away or normal. Applies to the whole house until midnight unless extended.",
+    inputSchema: z.object({ mode: z.enum(ModeKind), extend: z.string().nullable().optional() }),
+    execute: record("set_mode", async (input: { mode: Mode; extend?: string | null | undefined }) => {
+      const now = rt.ports.clock.now();
+      const midnight = nextLocalMidnight(now, tz);
+      const endsAt = input.mode === ModeKind.normal ? now : input.extend === "tomorrow" ? new Date(midnight.getTime() + 86_400_000) : midnight;
+      await api.household.setMode({ mode: input.mode, endsAt: endsAt.toISOString() });
+      replanToday();
+      if (input.extend === "tomorrow") scope.effects.replan.push(addLocalDays(today(), 1));
+      const until = input.extend === "tomorrow" ? "the end of tomorrow" : "midnight";
+      return { say: input.mode === ModeKind.normal ? "Back to a normal day." : `${input.mode === ModeKind.sick ? "Sick" : input.mode === ModeKind.away ? "Away" : "Slow"} day until ${until}. I've made today smaller.` };
+    }),
+  });
+
+  const whatNow = createTool({
+    id: "what_now",
+    description: "The one thing worth doing now, with its reason. Use it for 'if I do one thing, what should it be?'. Answer with that one thing; never a list, never a question.",
+    inputSchema: z.object({}),
+    execute: record("what_now", async () => {
+      const date = today();
+      const facts = await gatherFacts(rt, date, 2);
+      const closed = new Set((await api.plans.responsesOn({ date })).map((r) => r.ref));
+      const [best] = await oneThingCandidates(rt, facts, date, rt.ports.clock.now(), closed, scope.person);
+      if (best === undefined) return { ref: null, say: "Nothing needs doing. Have a rest." };
+      return { ref: best.ref, title: best.title, why: best.why, say: `${best.title}. ${best.why}` };
+    }),
+  });
+
+  const respondTool = createTool({
+    id: "respond",
+    description: "Done, not today, snooze or accept on something on the screen, by its ref.",
+    inputSchema: z.object({ ref: z.string(), action: zActionKind, value: z.string().nullable().optional() }),
+    execute: record("respond", async (input: { ref: string; action: ActionKind; value?: string | null | undefined }) => ({ say: await respond(scope, input.ref, input.action, input.value ?? null) })),
+  });
+
+  const handOver = createTool({
+    id: "hand_over",
+    description: "Give the thing being talked about to the other adult. They get one message about it.",
+    inputSchema: z.object({ ref: z.string().nullable(), to: z.string() }),
+    execute: record("hand_over", async (input: { ref: string | null; to: string }) => {
+      if (input.ref === null) return { say: "Tap the thing you mean first, then tell me who's doing it." };
+      const people = await rt.system("hand-over").household.people();
+      const to = adultsOf(people).find((p) => p.name.toLowerCase() === input.to.toLowerCase() || p.id === input.to.toLowerCase());
+      if (to === undefined || to.id === scope.person) return { say: `I can only hand things to ${adultsOf(people).filter((p) => p.id !== scope.person).map((p) => p.name).join(" or ")}.` };
+      const date = today();
+      const title = await subjectFor(scope, input.ref, date);
+      await api.plans.handOver({ ref: input.ref, title, to: to.id });
+      scope.effects.closeRefs.push({ ref: input.ref, status: "dismissed" });
+      const from = people.find((p) => p.id === scope.person)?.name ?? "Someone";
+      scope.effects.notify.push({
+        person: to.id,
+        message: `${from} handed this to you: ${title}`,
+        urgency: Urgency.urgent,
+        actions: [
+          { kind: ActionKind.done, label: "Done", ref: input.ref },
+          { kind: ActionKind.notToday, label: "Not today", ref: input.ref },
+        ],
+        key: `handover:${input.ref}:${date}`,
+        countsTowardsBudget: true,
+      });
+      replanToday();
+      return { say: `Okay, it's with ${to.name} now. I've sent them one message.` };
+    }),
+  });
+
+  const moveToTomorrow = createTool({
+    id: "move_to_tomorrow",
+    description: "Move the thing being talked about to tomorrow (a snooze). Works on whatever was tapped, so 'this' needs no explanation.",
+    inputSchema: z.object({ ref: z.string().nullable() }),
+    execute: record("move_to_tomorrow", async (input: { ref: string | null }) => {
+      if (input.ref === null) return { say: "Tap the thing you mean first." };
+      await respond(scope, input.ref, ActionKind.snooze, addLocalDays(today(), 1));
+      return { say: `Moved "${await subjectFor(scope, input.ref, today())}" to tomorrow.` };
+    }),
+  });
+
+  const sitterBooked = createTool({
+    id: "sitter_booked",
+    description: "A named babysitter is booked for a day (e.g. 'Hannah's doing Thursday').",
+    inputSchema: z.object({ sitter: z.string(), when: z.string() }),
+    execute: record("sitter_booked", async (input: { sitter: string; when: string }) => {
+      const date = dateFor(input.when, today());
+      const booking = await api.household.recordSitterBooking({ sitter: input.sitter, date });
+      scope.effects.closeRefs.push({ ref: `sitter:${date}`, status: "done" });
+      replanToday();
+      return { say: `Great, ${booking.sitter} is down for ${longDate(date)}.` };
+    }),
+  });
+
+  const recordArrival = createTool({
+    id: "record_arrival",
+    description: "An order confirmation email: record the shop and expected day (and whether someone must be in). Keep nothing else.",
+    inputSchema: z.object({ email: z.string().optional(), shop: z.string().optional(), expectedDate: z.string().optional(), window: z.string().nullable().optional(), needsSomeoneIn: z.boolean().optional() }),
+    execute: record("record_arrival", async (input: { email?: string | undefined; shop?: string | undefined; expectedDate?: string | undefined; window?: string | null | undefined; needsSomeoneIn?: boolean | undefined }) => {
+      const parsed = input.email === undefined ? null : parseOrder(input.email, today());
+      const shopName = input.shop ?? parsed?.shop;
+      const expectedDate = input.expectedDate ?? parsed?.expectedDate;
+      if (shopName === undefined || expectedDate === undefined) return { recorded: false, say: "" };
+      const arrival = await api.parcels.record({ shop: shopName, expectedDate, window: input.window ?? parsed?.window ?? null, needsSomeoneIn: input.needsSomeoneIn ?? parsed?.needsSomeoneIn ?? false, person: scope.person, sourceKey: scope.messageId });
+      for (const d of [arrival.expectedDate, addLocalDays(arrival.expectedDate, -1)]) if (!scope.effects.replan.includes(d)) scope.effects.replan.push(d);
+      return { recorded: true, shop: arrival.shop, expectedDate: arrival.expectedDate, say: `${arrival.shop} is arriving ${longDate(arrival.expectedDate)}.` };
+    }),
+  });
+
+  const todayTool = createTool({
+    id: "today",
+    description: "What today looks like: the context line and what's next on the calendar.",
+    inputSchema: z.object({}),
+    execute: record("today", async () => {
+      const date = today();
+      const facts = await gatherFacts(rt, date, 1);
+      const now = rt.ports.clock.now();
+      const next = eventsOn(facts, date).find((e) => new Date(e.start) > now);
+      const nextText = next === undefined ? "Nothing else on the calendar today." : `Next: ${next.title} at ${clock(next.start, tz)}.`;
+      return { say: `${contextLine(facts, date, now)}. ${nextText}` };
+    }),
+  });
+
+  return {
+    capture,
+    shop,
+    add_to_list: addToList,
+    set_mode: setMode,
+    what_now: whatNow,
+    respond: respondTool,
+    hand_over: handOver,
+    move_to_tomorrow: moveToTomorrow,
+    sitter_booked: sitterBooked,
+    record_arrival: recordArrival,
+    today: todayTool,
+  };
+}
+

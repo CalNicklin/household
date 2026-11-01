@@ -1,0 +1,45 @@
+# CODE-11: CI installs, then runs `pnpm check` and nothing else. FB-2 is measured here: check fails
+# itself if it takes longer than three minutes.
+name: ci
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          # Throwaway database for the run: trust auth, so there is no password to leak.
+          POSTGRES_HOST_AUTH_METHOD: trust
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 2s --health-retries 30
+    env:
+      CI: "true"
+      DATABASE_URL: postgres://postgres@localhost:5432/postgres
+      # FB-2: this Postgres is thrown away after the run, so the test setup lets it skip flushing to disk.
+      THROWAWAY_DATABASE: "true"
+      FALLOW_BASE: origin/${{ github.base_ref || 'main' }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm check
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: evidence
+          path: |
+            evidence/
+            test-results/
