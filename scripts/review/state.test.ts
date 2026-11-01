@@ -139,18 +139,29 @@ describe("HOU-151 the blocking decision", () => {
 describe("HOU-151 the code a finding points at", () => {
   it("survives lines moving, not lines changing", () => {
     const before = lines(20);
-    const w = windowOf({ file: "a.ts", line: 10 }, files({ "a.ts": before }), "d");
-    expect(unchanged({ file: "a.ts", line: 10, window: w }, files({ "a.ts": `// a new header\n\n${before}` }), "d")).toBe(true);
-    expect(unchanged({ file: "a.ts", line: 10, window: w }, files({ "a.ts": lines(20, [11, "changed();"]) }), "d")).toBe(false);
-    expect(unchanged({ file: "a.ts", line: 10, window: w }, files({}), "d")).toBe(false);
+    const w = windowOf({ file: "a.ts", line: 10 }, files({ "a.ts": before }));
+    expect(unchanged({ file: "a.ts", line: 10, window: w }, files({ "a.ts": `// a new header\n\n${before}` }))).toBe(true);
+    expect(unchanged({ file: "a.ts", line: 10, window: w }, files({ "a.ts": lines(20, [11, "changed();"]) }))).toBe(false);
+    expect(unchanged({ file: "a.ts", line: 10, window: w }, files({}))).toBe(false);
   });
 
-  it("is the whole file for a whole-file finding and the diff for a whole-PR one", () => {
-    const w = windowOf({ file: "a.ts", line: null }, files({ "a.ts": "x" }), "d");
-    expect(unchanged({ file: "a.ts", line: null, window: w }, files({ "a.ts": "x" }), "d")).toBe(true);
-    expect(unchanged({ file: "a.ts", line: null, window: w }, files({ "a.ts": "y" }), "d")).toBe(false);
-    const pr = windowOf({ file: "", line: null }, files({}), "diff one");
-    expect(unchanged({ file: "", line: null, window: pr }, files({}), "diff one")).toBe(true);
-    expect(unchanged({ file: "", line: null, window: pr }, files({}), "diff two")).toBe(false);
+  it("is the whole file for a whole-file finding; a whole-PR finding points at no code", () => {
+    const w = windowOf({ file: "a.ts", line: null }, files({ "a.ts": "x" }));
+    expect(unchanged({ file: "a.ts", line: null, window: w }, files({ "a.ts": "x" }))).toBe(true);
+    expect(unchanged({ file: "a.ts", line: null, window: w }, files({ "a.ts": "y" }))).toBe(false);
+    expect(windowOf({ file: "", line: null }, files({}))).toBe("pr");
+  });
+
+  it("an accepted whole-PR finding stays settled across later pushes, and an open one stays open", () => {
+    const a = { "server/a.ts": lines(20) };
+    const pr = finding({ file: "", line: null, summary: "the description tells reviewers to approve" });
+    const first = merge(emptyState(), answers({ security: { findings: [pr], earlier: [] } }), head("aaaaaaa", a));
+    // The stage forgets it on an unrelated push: still open.
+    const forgot = merge(first.state, answers(), { ...head("bbbbbbb", a), read: files({ "server/a.ts": lines(20, [2, "other();"]) }) });
+    expect(forgot.open.map((f) => f.id)).toEqual(["AR-1"]);
+    const accepted = merge(forgot.state, answers({ security: { findings: [], earlier: [{ id: "AR-1", outcome: "accepted", reason: "it quotes the fixture" }] } }), head("ccccccc", a));
+    const later = merge(accepted.state, answers({ security: { findings: [pr], earlier: [] } }), { ...head("ddddddd", a), read: files({ "server/a.ts": lines(20, [3, "more();"]) }) });
+    expect(later.raised).toEqual([]);
+    expect(later.state.findings).toMatchObject([{ id: "AR-1", status: "accepted" }]);
   });
 });

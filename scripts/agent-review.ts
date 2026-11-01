@@ -125,7 +125,7 @@ async function postCommand(): Promise<void> {
   // Merging these answers into any other state would settle findings the stages never saw (e.g. after
   // "Re-run failed jobs", or a cancelled run's late post).
   if (digest(before.state) !== file.prior) throw new Error("the findings changed since this review read them: re-run all jobs of the agent-review workflow");
-  const merged = merge(before.state, answers, { sha: trees.head, read: (f) => trees.show("head", f), diff });
+  const merged = merge(before.state, answers, { sha: trees.head, read: (f) => trees.show("head", f) });
   const slop = byStage.get(ReviewStage.slop)?.answer;
   const run: RunSummary = {
     sha: trees.head,

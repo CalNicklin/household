@@ -74,7 +74,7 @@ export function basketTotal(prices: readonly number[], percent: number): number 
   const [security, slop] = await Promise.all([run(ReviewStage.security), run(ReviewStage.slop)]);
   const results: StageResult[] = [code, security, slop];
   const answers: Answers = { code: toStageAnswer(code.answer), security: toStageAnswer(security.answer), slop: toStageAnswer(slop.answer) };
-  const merged = merge(emptyState(), answers, { sha: head, read: (f) => trees.show("head", f), diff });
+  const merged = merge(emptyState(), answers, { sha: head, read: (f) => trees.show("head", f) });
 
   const total = totalCost(results);
   for (const r of results) {

@@ -75,11 +75,12 @@ const normaliseLines = (text: string) =>
     .join("\n");
 
 /**
- * The code a finding points at, as a hash: of the lines around it (whitespace-trimmed), of the whole
- * file for a whole-file finding, or of the diff for a finding about the PR as a whole.
+ * The code a finding points at, as a hash: of the lines around it (whitespace-trimmed), or of the whole
+ * file for a whole-file finding. A finding about the PR as a whole points at no code, so its anchor
+ * never changes: it stays open, or settled, for the life of the PR (every push changes the diff).
  */
-export function windowOf(finding: Pick<ReviewFinding, "file" | "line">, read: ReadHead, diff: string): string {
-  if (finding.file === "") return `diff:${sha256(diff)}`;
+export function windowOf(finding: Pick<ReviewFinding, "file" | "line">, read: ReadHead): string {
+  if (finding.file === "") return "pr";
   const text = read(finding.file);
   if (text === null) return "missing";
   if (finding.line === null) return `file:${sha256(normaliseLines(text))}`;
@@ -89,9 +90,9 @@ export function windowOf(finding: Pick<ReviewFinding, "file" | "line">, read: Re
 }
 
 /** True while the code a finding points at is still there, unchanged, anywhere in its file. */
-export function unchanged(stored: Pick<StoredFinding, "file" | "line" | "window">, read: ReadHead, diff: string): boolean {
+export function unchanged(stored: Pick<StoredFinding, "file" | "line" | "window">, read: ReadHead): boolean {
   const m = /^lines:(\d+):([0-9a-f]{64})$/.exec(stored.window);
-  if (m === null) return windowOf(stored, read, diff) === stored.window;
+  if (m === null) return windowOf(stored, read) === stored.window;
   const text = read(stored.file);
   if (text === null) return false;
   const lines = normaliseLines(text).split("\n");
@@ -148,20 +149,20 @@ function restates(f: ReviewFinding, window: string, k: StoredFinding): boolean {
  * accepted or still open as its stage says; one the stage doesn't mention is fixed if its code changed
  * and stays open if not (failing closed: a model that forgets a finding doesn't clear it). New findings get the next ids. It blocks while any open finding is medium or high.
  */
-export function merge(prior: ReviewState, answers: Answers, head: { sha: string; read: ReadHead; diff: string }): Merged {
-  const { sha, read, diff } = head;
-  const kept = prior.findings.filter((f) => f.status === ReviewStatus.open || unchanged(f, read, diff));
+export function merge(prior: ReviewState, answers: Answers, head: { sha: string; read: ReadHead }): Merged {
+  const { sha, read } = head;
+  const kept = prior.findings.filter((f) => f.status === ReviewStatus.open || unchanged(f, read));
   const settled: StoredFinding[] = [];
   const findings = kept.map((f): StoredFinding => {
     if (f.status !== ReviewStatus.open) return f;
     const said = answers[f.stage].earlier.find((e) => e.id === f.id);
-    const changed = !unchanged(f, read, diff);
+    const changed = !unchanged(f, read);
     let next: StoredFinding;
     if (said?.outcome === ReviewOutcome.accepted) next = { ...f, status: ReviewStatus.accepted, reason: short(said.reason) || "accepted", settledOn: sha };
     else if (said?.outcome === ReviewOutcome.fixed || (said === undefined && changed)) next = { ...f, status: ReviewStatus.fixed, reason: (said === undefined ? "" : short(said.reason)) || "no longer raised after the code changed", settledOn: sha };
     else return f;
     // A settled finding remembers the code as it is now, so it stays settled until that changes.
-    next = { ...next, window: windowOf(next, read, diff) };
+    next = { ...next, window: windowOf(next, read) };
     settled.push(next);
     return next;
   });
@@ -173,7 +174,7 @@ export function merge(prior: ReviewState, answers: Answers, head: { sha: string;
       .filter((f) => f.repeats === null || !findings.some((k) => k.id === f.repeats))
       .map((f) => normalise(stage, f))
       .filter((f): f is ReviewFinding => f !== null)
-      .map((f) => ({ f, window: windowOf(f, read, diff) }))
+      .map((f) => ({ f, window: windowOf(f, read) }))
       .filter(({ f, window }) => !findings.some((k) => restates(f, window, k)))
       .sort((a, b) => severityRank[a.f.severity] - severityRank[b.f.severity])
       .slice(0, Limits.reviewMaxFindings.value);
