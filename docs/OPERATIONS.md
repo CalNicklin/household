@@ -257,8 +257,10 @@ password manager), then restore.
 ### Where an image that can't build shows up
 
 `pnpm check` never builds the image (CODE-11). The `preview` workflow does, on every push to a PR from this
-repository, exactly as `deploy` does on main, with or without the preview secrets (without them it only
-builds). A build that fails is a red `preview / image` job on the PR.
+repository, with the same action, builder and build inputs as `deploy`, with or without the preview
+secrets (without them it only builds). It builds the PR's head, not its merge with main, so a clash with
+newer main can still first show on main's deploy. A head that can't build is a red `preview / image` job
+on the PR.
 
 HOU-145 was the first image built on GitHub, and it failed where every local build had passed: the SPA
 prerender starts a `vite preview` server and fetches the shell from it. On `localhost` the server bound

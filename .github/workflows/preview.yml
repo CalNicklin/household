@@ -4,8 +4,8 @@
 # `preview <n> sha256:<digest>` over SSH as the `household` user with the preview key, which can only run
 # household-preview. When the PR closes it asks for `preview-stop <n>`. It comments the URL and the
 # practice logins on the PR. Never for a PR from a fork. Until the secrets are added it still builds the
-# image (HOU-145: an image that can't build shows as a failed `image` job on the PR, before main's deploy
-# finds out), but pushes and deploys nothing.
+# image (HOU-145: an image whose head can't build shows as a failed `image` job on the PR, before it
+# reaches main), but pushes and deploys nothing.
 name: preview
 on:
   pull_request:
@@ -39,7 +39,8 @@ jobs:
             echo "::notice title=Preview skipped::Add HOUSEHOLD_PREVIEW_SSH_KEY, HOUSEHOLD_SSH_HOST and HOUSEHOLD_SSH_KNOWN_HOSTS (docs/OPERATIONS.md) to get a preview per PR."
           fi
 
-  # Built exactly as deploy.yml builds the house's image (same action, builder, context and Dockerfile).
+  # Built the way deploy.yml builds the house's image (same action, builder and build inputs), from the PR's
+  # head where deploy.yml builds main.
   image:
     needs: ready
     if: github.event.action != 'closed'
