@@ -1,6 +1,7 @@
+import { TelegramUpdateType } from "@household/contracts";
 import { z } from "zod";
 import type { MessengerTransport, OutboundButton } from "../ports.ts";
-import { defaultFetch, expectOk, type Fetch } from "./http.ts";
+import { defaultFetch, expectOk, type Fetch, IntegrationError } from "./http.ts";
 
 /** Telegram's documented limit on callback_data (Bot API, InlineKeyboardButton). */
 const CALLBACK_DATA_MAX_BYTES = 64;
@@ -53,6 +54,21 @@ export function parseTelegramUpdate(raw: unknown): TelegramUpdate | null {
   return null;
 }
 
+/** What Telegram says about the bot's webhook (Bot API, WebhookInfo): only the parts worth showing. */
+const zWebhookInfo = z.object({
+  ok: z.literal(true),
+  result: z.object({
+    url: z.string(),
+    pending_update_count: z.number(),
+    last_error_date: z.number().optional(),
+    last_error_message: z.string().optional(),
+    allowed_updates: z.array(z.string()).optional(),
+  }),
+});
+export type TelegramWebhookInfo = z.infer<typeof zWebhookInfo>["result"];
+const zMe = z.object({ ok: z.literal(true), result: z.object({ username: z.string() }) });
+const zAnswer = z.object({ ok: z.boolean(), description: z.string().optional() });
+
 const zSendResult = z.object({ ok: z.literal(true), result: z.object({ message_id: z.number() }) });
 const zFileResult = z.object({ ok: z.literal(true), result: z.object({ file_path: z.string() }) });
 
@@ -78,6 +94,43 @@ export class TelegramTransport implements MessengerTransport {
     });
     await expectOk(response, `Telegram ${method}`);
     return response.json();
+  }
+
+  /**
+   * Like #call, but a refusal keeps Telegram's own reason (e.g. "bad webhook: ..."), for the person
+   * connecting the bot on the server. Telegram's reasons never contain the token; the caller still
+   * redacts what it prints.
+   */
+  async #ask(method: string, body: unknown): Promise<unknown> {
+    const response = await this.#fetch(`${this.#apiBase}/bot${this.#token}/${method}`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    const answer: unknown = await response.json().catch(() => ({ ok: false }));
+    const parsed = zAnswer.safeParse(answer);
+    if (!response.ok || !parsed.success || !parsed.data.ok) {
+      const reason = parsed.success && parsed.data.description !== undefined ? `: ${parsed.data.description}` : "";
+      throw new IntegrationError(`Telegram ${method} failed with HTTP ${response.status}${reason}`, response.status);
+    }
+    return answer;
+  }
+
+  /** The bot's @username, so the person connecting it knows which bot to message. */
+  async username(): Promise<string> {
+    return zMe.parse(await this.#ask("getMe", {})).result.username;
+  }
+
+  /**
+   * Points the bot's webhook at the house (CH-2), with the secret Telegram must send back in
+   * `x-telegram-bot-api-secret-token` (PRV-6), for only the update types the adapter handles.
+   */
+  async setWebhook(url: string, secretToken: string): Promise<void> {
+    await this.#ask("setWebhook", { url, secret_token: secretToken, allowed_updates: Object.values(TelegramUpdateType) });
+  }
+
+  async webhookInfo(): Promise<TelegramWebhookInfo> {
+    return zWebhookInfo.parse(await this.#ask("getWebhookInfo", {})).result;
   }
 
   async send(address: string, text: string, buttons: OutboundButton[]): Promise<{ externalId: string }> {

@@ -1,4 +1,4 @@
-import type { WeekView } from "@household/contracts";
+import { Section, type WeekView } from "@household/contracts";
 import { compose } from "../planner/compose.ts";
 import { gatherFacts, otherAdultOf } from "../planner/gather.ts";
 import { allRules } from "../rules/nudges.ts";
@@ -17,10 +17,11 @@ export async function weekView(rt: Runtime, _person: string): Promise<WeekView> 
     const date = addLocalDays(today, i);
     const saved = await api.plans.latest({ date });
     const closed = new Set((await api.plans.responsesOn({ date })).map((r) => r.ref));
+    // HOU-149: "Getting started" is about the home screen, not a day, so Week never shows it.
     const blocks =
       saved?.blocks ??
-      compose({ date, now, facts, rules: allRules(facts, date, now).items, closed, pick: null, oneThing: null, question: null, screenNotes: [], shopping: [], avoid: new Set(), otherAdult: otherAdultOf(facts) });
-    days.push({ date, label: longDate(date), blocks: applyResponses(blocks, closed).filter((b) => b.type !== "composer" && b.type !== "context") });
+      compose({ date, now, facts, rules: allRules(facts, date, now).items, closed, pick: null, oneThing: null, question: null, screenNotes: [], shopping: [], avoid: new Set(), otherAdult: otherAdultOf(facts), fill: null });
+    days.push({ date, label: longDate(date), blocks: applyResponses(blocks, closed).filter((b) => b.type !== "composer" && b.type !== "context" && b.section !== Section.start) });
   }
   return { days };
 }

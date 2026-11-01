@@ -1,4 +1,5 @@
 import { LongTool } from "@household/contracts";
+import { z } from "zod";
 import { afterAll, beforeAll, describe, expect, test } from "vitest";
 import { testHousehold, type TestHousehold } from "../testing/household.ts";
 import { jobScope } from "./scope.ts";
@@ -63,5 +64,46 @@ describe("MOM-6 through the real tool", () => {
     expect(output).toMatchObject({ say: "Okay, Tom has it now, with one message about it." });
     expect(JSON.stringify(output)).not.toMatch(/\b(he|she|him|her|his|hers|they|them|their)\b/i);
     expect(scope.effects.notify.map((n) => n.person)).toEqual(["tom"]);
+  });
+});
+
+const idOf = (output: unknown) => z.object({ id: z.string() }).parse(output).id;
+
+describe("CAP-1 through the real tool", () => {
+  test("[CAP-1] one message that lists two jobs captures both; a retried job, even worded differently, writes each once", async () => {
+    const scope = jobScope(h.rt, "job-two-jobs", "msg-two-jobs", "priya", "app");
+    const execute = houseTools(scope).capture.execute;
+    if (execute === undefined) throw new Error("capture has no execute");
+    const gate = idOf(await execute({ text: "Fix the gate" }, {}));
+    const shed = await execute({ text: "Paint the shed" }, {});
+    expect(shed).toMatchObject({ say: "Added to the backlog: Paint the shed." });
+    expect(idOf(shed)).not.toBe(gate);
+    // DBOS re-runs the agent step: a fresh scope for the same message, and the model words it anew.
+    const retry = jobScope(h.rt, "job-two-jobs", "msg-two-jobs", "priya", "app");
+    const again = houseTools(retry).capture.execute;
+    if (again === undefined) throw new Error("capture has no execute");
+    expect(idOf(await again({ text: "Fix the garden gate" }, {}))).toBe(gate);
+    expect(idOf(await again({ text: "Paint the shed, please" }, {}))).toBe(idOf(shed));
+    const mine = (await h.rt.system("t").backlog.list()).filter((i) => i.text === "Fix the gate" || i.text === "Paint the shed");
+    expect(mine.map((i) => i.text).sort()).toEqual(["Fix the gate", "Paint the shed"]);
+  });
+});
+
+describe("CAP-1 through the real tool, captures in parallel", () => {
+  test("[CAP-1] two captures the model makes at once for one message both reach the Backlog", async () => {
+    const scope = jobScope(h.rt, "job-parallel", "msg-parallel", "priya", "app");
+    const execute = houseTools(scope).capture.execute;
+    if (execute === undefined) throw new Error("capture has no execute");
+    const [a, b] = await Promise.all([execute({ text: "Oil the hinges" }, {}), execute({ text: "Sweep the path" }, {})]);
+    expect(idOf(a)).not.toBe(idOf(b));
+    const texts = (await h.rt.system("t").backlog.list()).map((i) => i.text);
+    expect(texts).toEqual(expect.arrayContaining(["Oil the hinges", "Sweep the path"]));
+    // A retry of the same job finds both again and writes nothing new.
+    const before = (await h.rt.system("t").backlog.list()).length;
+    const retry = houseTools(jobScope(h.rt, "job-parallel", "msg-parallel", "priya", "app")).capture.execute;
+    if (retry === undefined) throw new Error("capture has no execute");
+    const again = [idOf(await retry({ text: "Oil the hinges" }, {})), idOf(await retry({ text: "Sweep the path" }, {}))];
+    expect(again.sort()).toEqual([idOf(a), idOf(b)].sort());
+    expect((await h.rt.system("t").backlog.list()).length).toBe(before);
   });
 });

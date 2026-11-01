@@ -1,8 +1,12 @@
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { PracticeCalendar, PracticeMessenger } from "../../practice/fakes.ts";
 import { loadEnv } from "../env.ts";
-import { GoogleCalendarSource } from "./google-calendar.ts";
-import { realPorts } from "./index.ts";
+import { fakeServer, json } from "./fake-http.ts";
+import { GoogleCalendarPush, GoogleCalendarSource } from "./google-calendar.ts";
+import { googleTokenFromFile, realPorts } from "./index.ts";
 import { HindsightMemory } from "./hindsight-memory.ts";
 import { S3ObjectStore } from "./s3-object-store.ts";
 import { NoShoppingHelper } from "./shopping-helper.ts";
@@ -16,6 +20,7 @@ describe("real ports", () => {
   it("[QA-9] with nothing configured, every credentialed port falls back to the practice household and says so", () => {
     const { ports, missing } = realPorts(loadEnv({}), clock, options);
     expect(ports.calendar).toBeInstanceOf(PracticeCalendar);
+    expect(ports.calendarPush).toBeUndefined();
     expect(ports.messenger).toBeInstanceOf(PracticeMessenger);
     expect(ports.weather).toBeInstanceOf(OpenMeteoWeather);
     expect(missing).toEqual(expect.arrayContaining(["calendar", "messenger", "objects", "memory", "shopping", "transcriber"]));
@@ -42,6 +47,7 @@ describe("real ports", () => {
     });
     const { ports, missing } = realPorts(env, clock, options);
     expect(ports.calendar).toBeInstanceOf(GoogleCalendarSource);
+    expect(ports.calendarPush).toBeInstanceOf(GoogleCalendarPush);
     expect(ports.messenger).toBeInstanceOf(TelegramTransport);
     expect(ports.memory).toBeInstanceOf(HindsightMemory);
     expect(ports.objects).toBeInstanceOf(S3ObjectStore);
@@ -49,14 +55,42 @@ describe("real ports", () => {
     expect(missing).not.toContain("lists");
   });
 
-  it("[PLT-8] the real house with no shopping helper runs, and says nothing was added instead of using a practice basket", async () => {
+  it("[PLT-8] the real house with no shopping helper runs, and saves each request (nothing looked for) instead of using a practice basket", async () => {
     const real = { PRACTICE: "false", SESSION_SECRET: "s", STORAGE_KEY: "ab".repeat(32), TELEGRAM_WEBHOOK_SECRET: "t", EMAIL_WEBHOOK_SECRET: "e", CALENDAR_WEBHOOK_TOKEN: "c", MCP_TOKEN: "m", HELPER_TOKEN: "h" };
     const { ports, missing } = realPorts(loadEnv(real), clock, options);
     expect(ports.shopping).toBeInstanceOf(NoShoppingHelper);
     expect(missing).toContain("shopping (no helper: nothing is added)");
+    expect(ports.shopping.connected).toBe(false);
     const result = await ports.shopping.addItem("oat milk");
-    expect(result.kind).toBe("failed");
-    expect(result.kind === "failed" ? result.reason : "").toContain("not connected");
+    expect(result.kind).toBe("not-connected");
+    expect(result.kind === "not-connected" ? result.reason : "").toContain("not connected");
     expect(await ports.shopping.basket()).toEqual({ items: [], deliveryDate: null, changeUrl: "" });
+  });
+
+  it("[PLT-9] the real house on the default practice model says so at start; with a real provider it does not", () => {
+    const real = { PRACTICE: "false", SESSION_SECRET: "s", STORAGE_KEY: "ab".repeat(32), TELEGRAM_WEBHOOK_SECRET: "t", EMAIL_WEBHOOK_SECRET: "e", CALENDAR_WEBHOOK_TOKEN: "c", MCP_TOKEN: "m", HELPER_TOKEN: "h" };
+    expect(realPorts(loadEnv(real), clock, options).missing).toContain("model (MODEL_PROVIDER is practice: messages are read by the practice model's patterns)");
+    expect(realPorts(loadEnv({ ...real, MODEL_PROVIDER: "anthropic", MODEL_ID: "claude-opus-5-5" }), clock, options).missing.some((m) => m.startsWith("model"))).toBe(false);
+  });
+
+  it("[HOU-147] after Google refuses the refresh token, a newly copied google.json is read without a restart", async () => {
+    const google = await fakeServer((req, res) => {
+      const form = new URLSearchParams(req.body.toString());
+      if (form.get("refresh_token") === "old") json(res, 400, { error: "invalid_grant" });
+      else json(res, 200, { access_token: "new-access", expires_in: 3600 });
+    });
+    const dir = mkdtempSync(path.join(tmpdir(), "google-file-"));
+    const file = path.join(dir, "google.json");
+    const write = (refresh: string) => writeFileSync(file, JSON.stringify({ client_id: "c", client_secret: "s", refresh_token: refresh, token_url: `${google.url}/token` }));
+    try {
+      write("old");
+      const get = googleTokenFromFile(file, clock);
+      await expect(get()).rejects.toThrow(/HTTP 400/);
+      write("new");
+      expect(await get()).toBe("new-access");
+    } finally {
+      await google.close();
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });

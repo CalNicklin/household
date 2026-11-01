@@ -112,10 +112,17 @@ a:hover {
   max-width: 840px;
 }
 
+/* HOU-149: the composer and the house's answer stay in view however long the page is ("always present"). */
 .ds-footer {
+  position: sticky;
+  bottom: 0;
+  z-index: 1;
   display: flex;
   flex-direction: column;
   gap: var(--space-stack);
+  margin-top: auto;
+  padding: var(--space-stack) 0 max(var(--space-stack), env(safe-area-inset-bottom));
+  background: var(--color-ground);
 }
 
 .ds-grid3 {
@@ -619,15 +626,52 @@ a:hover {
   font-weight: var(--weight-semibold);
 }
 
-.ds-reply {
-  align-self: flex-start;
-  background: var(--color-surface);
+/* The house's answer (MOM-2): planner-made, so the suggestion green; big, calm type. */
+.ds-answer {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  background: var(--color-suggestion-bg);
   border-radius: var(--radius-card);
-  padding: 12px 18px;
-  font-size: var(--size-body-small);
+  padding: 12px var(--space-card-x) var(--space-card-y);
+}
+
+.ds-answer__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-tight);
+  min-height: var(--size-target-tap);
+}
+
+.ds-answer__eyebrow {
+  font-size: var(--size-label);
+  font-weight: var(--weight-bold);
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+  color: var(--color-suggestion-accent);
+}
+
+.ds-answer__title {
+  margin: 0;
+  font-size: var(--size-focus-title);
+  font-weight: var(--weight-bold);
+  letter-spacing: var(--tracking-title-small);
+  line-height: 1.2;
+}
+
+.ds-answer__why {
+  margin: 0;
+  font-size: var(--size-body);
+  color: var(--color-suggestion-text);
+  line-height: 1.5;
+}
+
+.ds-answer__text {
+  margin: 0;
+  font-size: var(--size-item);
+  font-weight: var(--weight-medium);
   line-height: 1.4;
-  max-width: 760px;
-  border-left: 3px solid var(--color-suggestion-accent);
 }
 
 /* ── Forms (settings) ───────────────────────────────────────────────────── */
@@ -1105,6 +1149,15 @@ a:hover {
   }
   .ds-composer {
     padding: 6px 6px 6px 18px;
+  }
+  .ds-answer {
+    padding: 8px 18px 16px;
+  }
+  .ds-answer__title {
+    font-size: var(--size-mode-title);
+  }
+  .ds-answer__text {
+    font-size: var(--size-body);
   }
   .ds-composer__input {
     font-size: 16px;

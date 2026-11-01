@@ -23,7 +23,8 @@
     "person": "node scripts/person.ts",
     "check:full": "node scripts/check.ts --full",
     "env:init": "node scripts/env-init.ts",
-    "house:setup": "node scripts/house-setup.ts"
+    "house:setup": "node scripts/house-setup.ts",
+    "google:connect": "node scripts/google-connect.ts"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "4.0.94",

@@ -15,6 +15,17 @@ export interface CalendarSource {
   changes(syncToken: string | null): Promise<{ upserts: ExternalEvent[]; deletedExternalIds: string[]; nextSyncToken: string | null }>;
 }
 
+/**
+ * CH-6: Google's push notifications for the calendar. A channel is a subscription, not an event:
+ * opening or closing one changes nothing in the calendar (PRV-1).
+ */
+export interface CalendarPush {
+  /** The calendar this pushes for. */
+  readonly calendarId: string;
+  open(channel: { id: string; address: string; token: string }): Promise<{ resourceId: string; expiresAt: string }>;
+  close(channel: { id: string; resourceId: string }): Promise<void>;
+}
+
 export type HourlyForecast = { hour: string; precipitationProbability: number; temperatureC: number };
 
 export interface WeatherSource {
@@ -47,9 +58,13 @@ export interface EpisodicMemory {
 export type HelperResult =
   | { kind: "added"; product: ProductOption; log: string[]; screenshots: { name: string; png: Uint8Array }[] }
   | { kind: "needs-choice"; options: ProductOption[]; log: string[]; screenshots: { name: string; png: Uint8Array }[] }
-  | { kind: "failed"; reason: string; log: string[]; screenshots: { name: string; png: Uint8Array }[] };
+  | { kind: "failed"; reason: string; log: string[]; screenshots: { name: string; png: Uint8Array }[] }
+  /** No helper is running, so nothing was looked for: the request is kept for when one is. */
+  | { kind: "not-connected"; reason: string; log: string[]; screenshots: { name: string; png: Uint8Array }[] };
 
 export interface ShoppingHelper {
+  /** False when no helper is running and nothing can be looked for yet. */
+  readonly connected: boolean;
   addItem(item: string): Promise<HelperResult>;
   addProduct(sku: string): Promise<HelperResult>;
   basket(): Promise<{ items: { sku: string; name: string; quantity: number }[]; deliveryDate: LocalDate | null; changeUrl: string }>;
@@ -62,6 +77,8 @@ export interface Transcriber {
 export type Ports = {
   clock: Clock;
   calendar: CalendarSource;
+  /** Only the real Google Calendar has push; the practice calendar is edited through the same webhook path. */
+  calendarPush?: CalendarPush;
   weather: WeatherSource;
   messenger: MessengerTransport;
   objects: ObjectStore;

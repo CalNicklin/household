@@ -1,13 +1,14 @@
 /** Router inputs (CODE-5). Outputs are the records in domain.ts and blocks.ts. */
 import { z } from "zod";
 import { zBlock } from "./blocks.ts";
-import { zArrival, zCalendarEvent, zJob, zLearningEvent, zListItem, zNurseryEvent, zPersonSettings, zProductOption, zQuestion, zRhythm, zRuleSpec } from "./domain.ts";
+import { zArrival, zCalendarEvent, zJob, zLearningEvent, zListItem, zNurseryEvent, zPersonSettings, zProductOption, zQuestion, zRhythm, zRuleSpec, zTelegramUserId } from "./domain.ts";
 import { LongTool, zActionKind, zBacklogTag, zChannel, zDeliveryChannel, zListWriteOutcome, zLongTool, zModeKind, zModelProvider, zNotificationStatus, zShoppingStatus, zTimerKind } from "./enums.ts";
 import { zInboundMessage, zNotifyInput } from "./message.ts";
 
 export const zIdInput = z.object({ id: z.string() });
 export const zPersonInput = z.object({ person: z.string() });
-export const zBacklogCreateInput = z.object({ text: z.string().min(1), tags: z.array(zBacklogTag), createdVia: zChannel, sourceMessage: z.string() });
+/** `index`: which capture of its message this is (0 = the first), so a retried job finds each item again (HOU-148). */
+export const zBacklogCreateInput = z.object({ text: z.string().min(1), tags: z.array(zBacklogTag), createdVia: zChannel, sourceMessage: z.string(), index: z.number().int().min(0).optional() });
 export const zBacklogSetTagsInput = z.object({ id: z.string(), tags: z.array(zBacklogTag) });
 export const zPersonExport = z.record(z.string(), z.unknown());
 
@@ -45,6 +46,13 @@ export type LongStep = z.infer<typeof zLongStep>;
 export const zLongStepReport = z.object({ tool: zLongTool, key: z.string(), outcome: z.string(), runId: z.string().nullable() });
 export type LongStepReport = z.infer<typeof zLongStepReport>;
 export const zDropInput = z.object({ channel: zChannel, address: z.string(), reason: z.string() });
+/** CH-3: who was dropped on a channel, newest first, so an adult can find their own ID (never any message text). */
+export const zDroppedSendersInput = z.object({ channel: zChannel });
+export const zDroppedSender = z.object({ address: z.string(), lastAt: z.iso.datetime({ offset: true }), times: z.number().int() });
+export type DroppedSender = z.infer<typeof zDroppedSender>;
+/** CH-3: an adult's Telegram user ID, set (or replaced) on the server after setup. */
+export const zSetTelegramIdInput = z.object({ person: z.string(), telegram: zTelegramUserId });
+export const zSetTelegramIdResult = z.object({ person: z.string(), telegram: z.string(), replaced: z.array(z.string()) });
 export const zEnqueueNotificationInput = zNotifyInput.extend({ channel: zDeliveryChannel, status: zNotificationStatus, jobId: z.string().nullable() });
 export const zMarkNotificationInput = z.object({ id: z.string(), status: zNotificationStatus, externalId: z.string().optional() });
 export const zNotificationsForInput = z.object({ person: z.string().optional(), statuses: z.array(zNotificationStatus) });

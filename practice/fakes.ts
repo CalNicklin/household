@@ -44,9 +44,13 @@ export class PracticeCalendar implements CalendarSource {
   constructor() {
     this.reset();
   }
-  reset(): void {
+  /** HOU-149: no events at all, as a brand-new house's Google Calendar would look before anyone adds one. */
+  clear(): void {
     this.#events.clear();
     this.#version = 0;
+  }
+  reset(): void {
+    this.clear();
     for (const e of calendar) this.upsert({ externalId: e.externalId, title: e.title, start: e.start, end: e.end, attendees: e.attendees, soloWithKids: e.soloWithKids ?? null, away: e.away ?? [], work: e.work ?? false, allDay: e.allDay ?? false });
   }
   upsert(event: ExternalEvent): void {
@@ -144,6 +148,7 @@ const toOption = (p: (typeof supermarket.catalogue)[number]): ProductOption => (
 
 /** The practice supermarket's matching rules, used in-process by unit tests. */
 export class PracticeShoppingHelper implements ShoppingHelper {
+  readonly connected = true;
   readonly basketItems = new Map<string, number>(supermarket.basket.map((b) => [b.sku, b.quantity]));
   #find(item: string): { exact: ProductOption | null; options: ProductOption[] } {
     const q = item.toLowerCase().trim();

@@ -9,3 +9,5 @@ web/dist
 evidence/screenshots
 backups
 .secrets
+google.json
+client_secret_*.json

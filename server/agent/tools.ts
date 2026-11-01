@@ -1,7 +1,8 @@
 import { createTool } from "@mastra/core/tools";
-import { ActionKind, type BacklogTag, ListWriteOutcome, LongTool, type ModeKind as Mode, ModeKind, Urgency, zActionKind, zBacklogTag } from "@household/contracts";
+import { ActionKind, type BacklogTag, Limits, ListWriteOutcome, LongTool, type ModeKind as Mode, ModeKind, Urgency, zActionKind, zBacklogTag } from "@household/contracts";
 import { z } from "zod";
 import { gatherFacts, oneThingCandidates } from "../planner/gather.ts";
+import { inQuietHours } from "../rules/budget.ts";
 import { adultsOf, contextLine, eventsOn } from "../rules/day.ts";
 import { parseOrder } from "../rules/orders.ts";
 import { guessTags } from "../rules/tags.ts";
@@ -9,6 +10,12 @@ import { dayIn } from "../rules/when.ts";
 import { addLocalDays, clock, localDate, longDate, nextLocalMidnight } from "../time.ts";
 import { respond, subjectFor } from "./respond.ts";
 import type { JobScope } from "./scope.ts";
+
+// limit: defaultQuietStartHour
+// limit: defaultQuietEndHour
+const personDefaults = { quietStartHour: Limits.defaultQuietStartHour.value, quietEndHour: Limits.defaultQuietEndHour.value };
+
+const NOTHING_PRESSING = { title: "Nothing pressing today", why: "No rule, calendar entry or quick backlog job needs doing now." } as const;
 
 /** The household's tools. Each runs as the agent actor for this job's person (PRV-1 is enforced by the routers). */
 export function houseTools(scope: JobScope) {
@@ -24,21 +31,27 @@ export function houseTools(scope: JobScope) {
     if (!scope.effects.replan.includes(today())) scope.effects.replan.push(today());
   };
 
+  // HOU-148: each capture claims its position before awaiting anything, so captures the model makes
+  // in parallel for one message get distinct positions (a retried job builds a fresh counter).
+  let captures = 0;
   const capture = createTool({
     id: "capture",
-    description: "Put a thought on the shared backlog: a job with no date. Guess tags for what it needs.",
+    description: "Put a thought on the shared backlog: a job with no date, including fixing, setting up, booking or buying anything that is not groceries ('get the printer working', 'buy a new kettle'). One sentence is one item unless it clearly lists separate jobs. Guess tags for what it needs.",
     inputSchema: z.object({ text: z.string().min(1), tags: z.array(zBacklogTag).optional() }),
     execute: record("capture", async (input: { text: string; tags?: BacklogTag[] | undefined }) => {
+      const index = captures++;
       const hints = await rt.system("tags").household.tagHints();
       const tags = input.tags !== undefined && input.tags.length > 0 ? input.tags : guessTags(input.text, hints);
-      const item = await api.backlog.create({ text: input.text, tags, createdVia: scope.channel, sourceMessage: scope.messageId });
+      const item = await api.backlog.create({ text: input.text, tags, createdVia: scope.channel, sourceMessage: scope.messageId, index });
+      // HOU-149: today's plan says whether the backlog is empty ("Getting started"), so redraw it now.
+      replanToday();
       return { id: item.id, tags: item.tags, say: `Added to the backlog: ${item.text}.` };
     }),
   });
 
   const shop = createTool({
     id: "shop",
-    description: "Groceries someone mentioned. They go in the next supermarket shop (the helper adds them).",
+    description: "Groceries for the weekly supermarket shop ('we're out of oat milk and bread'), one item each. Never a job, a repair or a set-up, and never pieces of a sentence about something to do: that is capture.",
     inputSchema: z.object({ items: z.array(z.string().min(1)).min(1) }),
     execute: record("shop", async (input: { items: string[] }) => {
       const ids: string[] = [];
@@ -47,6 +60,8 @@ export function houseTools(scope: JobScope) {
         scope.effects.long.push({ tool: LongTool.shop, requestId: request.id, sku: null });
         ids.push(request.id);
       }
+      // HOU-148: with no helper connected nothing will be looked for, so it says the request is saved.
+      if (!rt.ports.shopping.connected) return { requests: ids, added: false, saved: true, say: `Saved ${input.items.join(" and ")} for when shopping is connected.` };
       // Nothing is in the basket yet: the helper adds it afterwards, or asks if there's no exact match (AUT-3).
       return { requests: ids, added: false, say: `I'll put ${input.items.join(" and ")} in the next shop. The home screen will show which product once it's in.` };
     }),
@@ -95,8 +110,13 @@ export function houseTools(scope: JobScope) {
       const date = today();
       const facts = await gatherFacts(rt, date, 2);
       const closed = new Set((await api.plans.responsesOn({ date })).map((r) => r.ref));
-      const [best] = await oneThingCandidates(rt, facts, date, rt.ports.clock.now(), closed, scope.person);
-      if (best === undefined) return { ref: null, say: "Nothing needs doing. Have a rest." };
+      const now = rt.ports.clock.now();
+      const [first] = await oneThingCandidates(rt, facts, date, now, closed, scope.person);
+      // HOU-149: the thin-house fallback waits out the asker's quiet hours (PRO-7); nobody should be told to ring someone at 11pm.
+      const quiet = inQuietHours(scope.person === null ? personDefaults : await rt.system("what-now").household.personSettings({ person: scope.person }), now, tz);
+      const best = first?.fallback === true && quiet ? undefined : first;
+      // HOU-149: a thin house still gets one plain answer, never an error or a list.
+      if (best === undefined) return { ref: null, title: NOTHING_PRESSING.title, why: NOTHING_PRESSING.why, say: `${NOTHING_PRESSING.title}. ${NOTHING_PRESSING.why}` };
       return { ref: best.ref, title: best.title, why: best.why, say: `${best.title}. ${best.why}` };
     }),
   });
