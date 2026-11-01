@@ -171,6 +171,25 @@ describe("Google Calendar on the real adapter (HOU-147, HOU-152)", () => {
     expect(await ensureWatches(rt)).toMatchObject({ calendars: [{ action: "kept" }, { action: "kept" }], syncJobId: null });
   });
 
+  test("[HOME-1] a calendar that has never been read is tried once a day at the hourly check, not every hour", async () => {
+    // Everything as the house has it, except that Tom's calendar has no sync token yet.
+    const unread = {
+      ...rt,
+      system: (reason: string) => {
+        const api = rt.system(reason);
+        const calendar = new Proxy(api.calendar, { get: (t, k) => (k === "syncTokens" ? async () => ({ [FAMILY]: "s" }) : Reflect.get(t, k)) });
+        return new Proxy(api, { get: (t, k) => (k === "calendar" ? calendar : Reflect.get(t, k)) });
+      },
+    };
+    h.ports.clock.set("2026-11-09T10:17:00Z", true);
+    const first = await ensureWatches(unread);
+    expect(first.action === "checked" ? first.syncJobId : null).not.toBeNull();
+    h.ports.clock.set("2026-11-09T11:17:00Z", true);
+    expect(await ensureWatches(unread)).toMatchObject({ syncJobId: null });
+    h.ports.clock.set("2026-11-10T10:17:00Z", true);
+    expect(await ensureWatches(unread)).toMatchObject({ syncJobId: expect.any(String) });
+  });
+
   test("[CH-6] when the calendars change, the next check opens a channel on the new one and closes those no longer read", async () => {
     const family = await inUse(FAMILY)();
     const tom = await inUse(TOM)();

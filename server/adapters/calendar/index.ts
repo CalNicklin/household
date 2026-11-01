@@ -8,6 +8,7 @@ import { accept, type Accepted } from "../../coordinator/accept.ts";
 import { type CalendarNotification, parseCalendarNotification } from "../../integrations/google-calendar.ts";
 import type { CalendarPush } from "../../ports.ts";
 import type { Runtime } from "../../runtime.ts";
+import { localDate } from "../../time.ts";
 import type { Adapter } from "../registry.ts";
 
 /**
@@ -113,13 +114,18 @@ export async function ensureWatches(rt: Runtime): Promise<WatchCheck> {
   }
   const opened = outcomes.find((o) => o.action === "opened");
   const synced = await api.calendar.syncTokens();
-  const neverRead = push.calendarIds.some((id) => synced[id] === undefined);
+  const neverRead = push.calendarIds.filter((id) => synced[id] === undefined);
   const now = rt.ports.clock.now();
   let syncJobId: string | null = null;
-  if (opened !== undefined || neverRead) {
-    // Dedupe key `calendar:opened:<time>` (or `calendar:never-read:<time>`): one sync per check.
-    const channelId = opened === undefined ? "never-read" : "opened";
-    syncJobId = (await calendarChanged(rt, { channelId, messageNumber: now.toISOString(), token: rt.env.CALENDAR_WEBHOOK_TOKEN, state: "exists" }))?.jobId ?? null;
+  if (opened !== undefined) {
+    // Dedupe key `calendar:opened:<time>`: one sync per check that opened a channel.
+    syncJobId = (await calendarChanged(rt, { channelId: "opened", messageNumber: now.toISOString(), token: rt.env.CALENDAR_WEBHOOK_TOKEN, state: "exists" }))?.jobId ?? null;
+  } else if (neverRead.length > 0) {
+    // A calendar never read (not shared yet, say) is tried once a day, not every hour:
+    // dedupe key `calendar:never-read:<calendars>:<local date>`.
+    const day = localDate(now, rt.timeZone);
+    const accepted = await calendarChanged(rt, { channelId: "never-read", messageNumber: `${neverRead.join(",")}:${day}`, token: rt.env.CALENDAR_WEBHOOK_TOKEN, state: "exists" });
+    syncJobId = accepted === null || accepted.duplicate ? null : accepted.jobId;
   }
   return { action: "checked", calendars: outcomes, closed, syncJobId };
 }
