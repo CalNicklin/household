@@ -1,4 +1,4 @@
-import { ActionKind, BlockType, DayPart, type LocalDate, ModeKind, NotificationStatus, RhythmSource } from "@household/contracts";
+import { ActionKind, BlockType, DayPart, type LocalDate, LongTool, ModeKind, NotificationStatus, RhythmSource } from "@household/contracts";
 import { addLocalDays, localDate, localHour, weekdayOf } from "../time.ts";
 import type { JobScope } from "./scope.ts";
 
@@ -95,7 +95,7 @@ export async function respond(scope: JobScope, ref: string, action: ActionKind, 
     return "Understood. I'll keep those to myself for a month.";
   }
   if (ref.startsWith("shopping:") && action === ActionKind.answer && value !== null) {
-    scope.effects.shopping.push({ requestId: ref.slice("shopping:".length), sku: value });
+    scope.effects.long.push({ tool: LongTool.shop, requestId: ref.slice("shopping:".length), sku: value });
     return "Adding that one.";
   }
   if (ref.startsWith("sitter:") && action === ActionKind.accept && value !== null) {

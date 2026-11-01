@@ -1,13 +1,12 @@
 import { DBOS } from "@dbos-inc/dbos-sdk";
-import { type ActionKind, AttachmentKind, Channel, JobStatus, type LocalDate, type TimerKind } from "@household/contracts";
+import { type ActionKind, AttachmentKind, Channel, JobStatus, type TimerKind } from "@household/contracts";
 import { type AgentResult, HouseAgent } from "../agent/agent.ts";
 import { type Effects, emptyEffects, jobScope, type ToolCall } from "../agent/scope.ts";
 import { subjectFor } from "../agent/respond.ts";
-import { messageSitter, notify, reply } from "../notify/notify.ts";
+import { reply } from "../notify/notify.ts";
 import { localDate, longDate } from "../time.ts";
 import { jobRuntime } from "./context.ts";
-import { planDay } from "./plan-day.ts";
-import { runShopping } from "./shopping-run.ts";
+import { applyEffects } from "./effects.ts";
 import { runTimer } from "./timers.ts";
 
 type Meta = {
@@ -64,34 +63,6 @@ async function agentStep(jobId: string, messageId: string, meta: Meta): Promise<
   // PRV-3: an email's words never leave the step; only the shop and date recorded by the tool remain.
   const toolCalls = meta.channel === Channel.email ? scope.toolCalls.map((c) => ({ tool: c.tool, input: "[email]", output: c.output })) : scope.toolCalls;
   return { ...result, effects: scope.effects, toolCalls };
-}
-
-/** Durable follow-through: re-plans, child workflows, messages. Each is its own checkpointed step. */
-async function applyEffects(jobId: string, effects: Effects, person: string | null): Promise<{ inputTokens: number; outputTokens: number; costMicros: number }> {
-  const rt = jobRuntime();
-  const totals = { inputTokens: 0, outputTokens: 0, costMicros: 0 };
-  for (const c of effects.closeRefs) await DBOS.runStep(async () => rt.system("PRO-9").jobs.closeNotificationsForRef(c), { name: `close:${c.ref}` });
-  for (const n of effects.notify) await DBOS.runStep(async () => notify(rt, n, jobId), { name: `notify:${n.key}` });
-  for (const s of effects.sitterAsk)
-    await DBOS.runStep(
-      async () => {
-        const people = await rt.system("sitter").household.people();
-        const from = people.find((p) => p.id === s.from)?.name ?? "We";
-        await messageSitter(rt, s.sitter, `Hi ${s.sitter}, are you free to babysit on ${longDate(s.date)} in the evening? — ${from} (sent from our household app)`);
-      },
-      { name: `sitter:${s.sitter}:${s.date}` },
-    );
-  if (person !== null) for (const [i, m] of effects.remember.entries()) await DBOS.runStep(async () => rt.ports.memory.retain({ household: rt.env.HOUSEHOLD_ID, person }, m), { name: `remember:${i}` });
-  const dates: LocalDate[] = [...new Set(effects.replan)];
-  for (const date of dates) {
-    const r = await planDay(date, `job:${jobId}`, jobId);
-    totals.inputTokens += r.inputTokens;
-    totals.outputTokens += r.outputTokens;
-    totals.costMicros += r.costMicros;
-  }
-  // PLT-10: long tool calls are child workflows. They report back to this job; the coordinator never waits.
-  for (const s of effects.shopping) await DBOS.startWorkflow(runShopping, { workflowID: `${jobId}:shop:${s.requestId}:${s.sku ?? "item"}` })(s.requestId, s.sku, jobId, person);
-  return totals;
 }
 
 async function handleMessageImpl(messageId: string): Promise<void> {

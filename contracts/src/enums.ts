@@ -420,6 +420,16 @@ export const Intent = {
 } as const;
 export type Intent = ValueOf<typeof Intent>;
 
+/**
+ * PLT-10: the tools whose work is too long for the agent step. Each declares one long step, which runs
+ * in a child workflow of the job that asked, keyed `<job>:<tool>:<key>`.
+ */
+export const LongTool = {
+  shop: "shop",
+} as const;
+export type LongTool = ValueOf<typeof LongTool>;
+export const zLongTool = z.enum(LongTool);
+
 export const ModelProvider = {
   practice: "practice",
   anthropic: "anthropic",

@@ -1,3 +1,4 @@
+import { LongTool } from "@household/contracts";
 import { afterAll, beforeAll, describe, expect, test } from "vitest";
 import { testHousehold, type TestHousehold } from "../testing/household.ts";
 import { jobScope } from "./scope.ts";
@@ -47,8 +48,7 @@ describe("AUT-1 through the real tool", () => {
     const { output, scope } = await shop(["bananas"]);
     expect(output).toMatchObject({ added: false, say: "I'll put bananas in the next shop. The home screen will show which product once it's in." });
     // The basket add happens afterwards, in the helper's own job.
-    expect(scope.effects.shopping).toHaveLength(1);
-    expect(scope.effects.shopping[0]?.sku).toBeNull();
+    expect(scope.effects.long).toEqual([{ tool: LongTool.shop, requestId: expect.any(String), sku: null }]);
   });
 });
 

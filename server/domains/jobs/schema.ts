@@ -94,10 +94,32 @@ export const timerRuns = pgTable(
   (t) => [uniqueIndex("timer_runs_timer_scheduled").on(t.timer, t.scheduledFor)],
 );
 
+/**
+ * QA-8 / QA-10: usage a child workflow added to its job after the job finished, once per source (the
+ * child workflow's ID), so a step that re-runs after a crash does not count it twice.
+ */
+export const jobUsage = pgTable(
+  "job_usage",
+  {
+    id: id(),
+    jobId: text("job_id").notNull().references(() => jobs.id, { onDelete: "cascade" }),
+    source: text("source").notNull(),
+    inputTokens: integer("input_tokens").notNull(),
+    outputTokens: integer("output_tokens").notNull(),
+    costMicros: integer("cost_micros").notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [uniqueIndex("job_usage_job_source").on(t.jobId, t.source)],
+);
+
 export const messagesRelations = relations(messages, ({ many }) => ({ jobs: many(jobs), replies: many(replies) }));
 export const jobsRelations = relations(jobs, ({ one, many }) => ({
   message: one(messages, { fields: [jobs.messageId], references: [messages.id] }),
   notifications: many(notifications),
+  usage: many(jobUsage),
+}));
+export const jobUsageRelations = relations(jobUsage, ({ one }) => ({
+  job: one(jobs, { fields: [jobUsage.jobId], references: [jobs.id] }),
 }));
 export const notificationsRelations = relations(notifications, ({ one }) => ({
   job: one(jobs, { fields: [notifications.jobId], references: [jobs.id] }),
