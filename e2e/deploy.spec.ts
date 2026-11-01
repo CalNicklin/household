@@ -106,7 +106,9 @@ test("[HOME-6] (HOU-154) after a deploy one reload shows the new build, an open 
     await pause(3_000);
     expect(loads).toBe(1);
 
-    // Deploy D, and reload straight away: that one reload shows D.
+    // Deploy D, and reload straight away: that one reload shows D. The live connection is cut first, so
+    // the page's own reload (above) cannot race this one; this step is about the reload alone.
+    await page.route("**/api/live", (route) => route.abort());
     await deploy("d");
     const d = await buildOf();
     expect(d).not.toBe(c);
