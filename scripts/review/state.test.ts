@@ -160,8 +160,16 @@ describe("HOU-151 the code a finding points at", () => {
     const forgot = merge(first.state, answers(), { ...head("bbbbbbb", a), read: files({ "server/a.ts": lines(20, [2, "other();"]) }) });
     expect(forgot.open.map((f) => f.id)).toEqual(["AR-1"]);
     const accepted = merge(forgot.state, answers({ security: { findings: [], earlier: [{ id: "AR-1", outcome: "accepted", reason: "it quotes the fixture" }] } }), head("ccccccc", a));
-    const later = merge(accepted.state, answers({ security: { findings: [pr], earlier: [] } }), { ...head("ddddddd", a), read: files({ "server/a.ts": lines(20, [3, "more();"]) }) });
+    // Raised again by name (the stage is shown its settled findings): still settled.
+    const later = merge(accepted.state, answers({ security: { findings: [{ ...pr, repeats: "AR-1" }], earlier: [] } }), { ...head("ddddddd", a), read: files({ "server/a.ts": lines(20, [3, "more();"]) }) });
     expect(later.raised).toEqual([]);
     expect(later.state.findings).toMatchObject([{ id: "AR-1", status: "accepted" }]);
+    // A different whole-PR finding (or one whose path normalise refused) is still raised.
+    const other = merge(accepted.state, answers({ security: { findings: [finding({ file: "", line: null, severity: "high", summary: "the workflow leaks the key" }), finding({ file: "/etc/x", line: 3, severity: "medium" })], earlier: [] } }), head("eeeeeee", a));
+    expect(other.raised.map((f) => [f.id, f.severity, f.file])).toEqual([
+      ["AR-2", "high", ""],
+      ["AR-3", "medium", ""],
+    ]);
+    expect(other.blocking).toBe(true);
   });
 });

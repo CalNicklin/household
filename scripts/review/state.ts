@@ -135,11 +135,12 @@ export type Merged = {
 /**
  * A new finding restates a remembered one of its stage when it is anchored on exactly the same code as
  * one still open (and is no more severe) or one accepted. Anything else is raised: a duplicate comment is
- * better than a hidden defect. A fixed finding is only restated by name (`repeats`), so a new defect next
- * to a fix is still raised.
+ * better than a hidden defect. A fixed finding, or one about the PR as a whole, is only restated by name
+ * (`repeats`), so a new defect next to a fix, or a new one about the PR, is still raised.
  */
 function restates(f: ReviewFinding, window: string, k: StoredFinding): boolean {
-  if (k.status === ReviewStatus.fixed || k.stage !== f.stage || k.file !== f.file || k.window !== window) return false;
+  // A whole-PR anchor ("pr") is the same for every such finding, so it says nothing about which one this is.
+  if (k.status === ReviewStatus.fixed || k.stage !== f.stage || k.file !== f.file || k.file === "" || k.window !== window) return false;
   return k.status === ReviewStatus.accepted || severityRank[f.severity] >= severityRank[k.severity];
 }
 
