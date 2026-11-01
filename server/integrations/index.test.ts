@@ -55,15 +55,22 @@ describe("real ports", () => {
     expect(missing).not.toContain("lists");
   });
 
-  it("[PLT-8] the real house with no shopping helper runs, and says nothing was added instead of using a practice basket", async () => {
+  it("[PLT-8] the real house with no shopping helper runs, and saves each request (nothing looked for) instead of using a practice basket", async () => {
     const real = { PRACTICE: "false", SESSION_SECRET: "s", STORAGE_KEY: "ab".repeat(32), TELEGRAM_WEBHOOK_SECRET: "t", EMAIL_WEBHOOK_SECRET: "e", CALENDAR_WEBHOOK_TOKEN: "c", MCP_TOKEN: "m", HELPER_TOKEN: "h" };
     const { ports, missing } = realPorts(loadEnv(real), clock, options);
     expect(ports.shopping).toBeInstanceOf(NoShoppingHelper);
     expect(missing).toContain("shopping (no helper: nothing is added)");
+    expect(ports.shopping.connected).toBe(false);
     const result = await ports.shopping.addItem("oat milk");
-    expect(result.kind).toBe("failed");
-    expect(result.kind === "failed" ? result.reason : "").toContain("not connected");
+    expect(result.kind).toBe("not-connected");
+    expect(result.kind === "not-connected" ? result.reason : "").toContain("not connected");
     expect(await ports.shopping.basket()).toEqual({ items: [], deliveryDate: null, changeUrl: "" });
+  });
+
+  it("[PLT-9] the real house on the default practice model says so at start; with a real provider it does not", () => {
+    const real = { PRACTICE: "false", SESSION_SECRET: "s", STORAGE_KEY: "ab".repeat(32), TELEGRAM_WEBHOOK_SECRET: "t", EMAIL_WEBHOOK_SECRET: "e", CALENDAR_WEBHOOK_TOKEN: "c", MCP_TOKEN: "m", HELPER_TOKEN: "h" };
+    expect(realPorts(loadEnv(real), clock, options).missing).toContain("model (MODEL_PROVIDER is practice: messages are read by the practice model's patterns)");
+    expect(realPorts(loadEnv({ ...real, MODEL_PROVIDER: "anthropic", MODEL_ID: "claude-opus-5-5" }), clock, options).missing.some((m) => m.startsWith("model"))).toBe(false);
   });
 
   it("[HOU-147] after Google refuses the refresh token, a newly copied google.json is read without a restart", async () => {
