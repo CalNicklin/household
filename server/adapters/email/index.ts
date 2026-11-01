@@ -27,7 +27,8 @@ export async function handleEmail(rt: Runtime, raw: unknown): Promise<EmailOutco
     return "ignored";
   }
   if (person === null) {
-    await dropUnknown(rt, Channel.email, candidates[0] ?? addressOf(email.from));
+    // CH-3: who it was: the From of a plain webhook email, every proven address of one from the receiver.
+    await dropUnknown(rt, Channel.email, email.provenSenders === undefined ? addressOf(email.from) : candidates.join(", "));
     return "dropped";
   }
   await accept(rt, {

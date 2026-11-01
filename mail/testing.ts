@@ -194,3 +194,15 @@ export async function smtpSession(port: number, host = "127.0.0.1", localAddress
     },
   };
 }
+
+/** One delivery as a sending server makes it: EHLO, MAIL, each RCPT, DATA if any recipient was taken, QUIT. */
+export async function deliver(port: number, envelopeFrom: string, rcpt: string[], message: string, localAddress?: string) {
+  const s = await smtpSession(port, "127.0.0.1", localAddress);
+  const ehlo = await s.send("EHLO mail-sor-f41.google.com");
+  const mail = await s.send(`MAIL FROM:<${envelopeFrom}>`);
+  const rcpts = [];
+  for (const r of rcpt) rcpts.push((await s.send(`RCPT TO:<${r}>`)).code);
+  const data = rcpts.includes(250) ? (await s.data(message)).code : null;
+  await s.close();
+  return { ehlo: ehlo.text, mail: mail.code, rcpts, data };
+}

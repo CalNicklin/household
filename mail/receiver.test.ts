@@ -10,7 +10,7 @@ import { afterAll, beforeAll, describe, expect, test } from "vitest";
 import { z } from "zod";
 import { lastConfirmation } from "./confirmation.ts";
 import { createReceiver } from "./receiver.ts";
-import { fixtureWorld, gmailConfirmation, gmailForwarded, screwfixOrder, signed, smtpSession } from "./testing.ts";
+import { deliver as deliverOnce, fixtureWorld, gmailConfirmation, gmailForwarded, screwfixOrder, signed, smtpSession } from "./testing.ts";
 
 /**
  * HOU-150 over real SMTP: the receiver takes mail for orders@ only, never relays, refuses what is too
@@ -58,16 +58,9 @@ afterAll(async () => {
   await new Promise<void>((r) => webhook.close(() => r()));
 });
 
-async function deliver(envelopeFrom: string, rcpt: string[], message: string, to = port) {
-  const s = await smtpSession(to, "127.0.0.1", CLIENT);
-  const ehlo = await s.send("EHLO mail-sor-f41.google.com");
-  const mail = await s.send(`MAIL FROM:<${envelopeFrom}>`);
-  const rcpts = [];
-  for (const r of rcpt) rcpts.push((await s.send(`RCPT TO:<${r}>`)).code);
-  const data = rcpts.includes(250) ? (await s.data(message)).code : null;
-  await s.close();
-  return { ehlo: ehlo.text, mail: mail.code, rcpts, data };
-}
+const deliver = (envelopeFrom: string, rcpt: string[], message: string, to = port) => deliverOnce(to, envelopeFrom, rcpt, message, CLIENT);
+/** A forward by hand that is proven on its own. */
+const handForward = (id: string) => signed(["From: Cal <cal@gmail.com>", `To: ${ORDERS}`, "Subject: Fwd: Your Screwfix order", `Message-ID: <${id}@mail.gmail.com>`, "", "From: Screwfix <orders@screwfix.com>", "Arriving tomorrow.", ""].join("\r\n"), world.signer.gmail);
 const newPosts = async (before: number, run: () => Promise<unknown>) => {
   await run();
   return posted.slice(before).map((p) => p.body);
@@ -134,9 +127,13 @@ describe("the mail receiver", () => {
   });
 
   test("[CODE-13] a message with more signatures than the limit is dropped unchecked", async () => {
-    const order = await signed(screwfixOrder(ORDERS), world.signer.gmail);
-    const many = `${"DKIM-Signature: v=1; a=rsa-sha256; d=evil.test; s=s1; h=from; bh=YQ==; b=YQ==\r\n".repeat(Limits.inboundEmailMaxSignatures.value)}${order}`;
-    expect(await newPosts(posted.length, async () => expect((await deliver("mallory@evil.test", [ORDERS], many)).data).toBe(250))).toEqual([]);
+    // A hand-forward that is proven on its own (the control), then the same with junk signatures on top.
+    const junk = "DKIM-Signature: v=1; a=rsa-sha256; d=evil.test; s=s1; h=from; bh=YQ==; b=YQ==\r\n";
+    expect(await newPosts(posted.length, async () => deliver("", [ORDERS], await handForward("sig-ok")))).toEqual([expect.objectContaining({ provenSenders: ["cal@gmail.com"] })]);
+    // At the limit (its own signature and nine more) it is still checked; over it, dropped with 250.
+    expect(await newPosts(posted.length, async () => deliver("", [ORDERS], junk.repeat(Limits.inboundEmailMaxSignatures.value - 1) + (await handForward("sig-at"))))).toHaveLength(1);
+    const over = junk.repeat(Limits.inboundEmailMaxSignatures.value) + (await handForward("sig-over"));
+    expect(await newPosts(posted.length, async () => expect((await deliver("", [ORDERS], over)).data).toBe(250))).toEqual([]);
   });
 
   test("[CODE-13] one address gets two sessions at once, and the healthcheck always gets in", async () => {

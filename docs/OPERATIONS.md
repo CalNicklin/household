@@ -580,8 +580,8 @@ given `--mail-domain`, so until then a deploy runs exactly the four containers a
 
 - **One address:** mail for `orders@<mail domain>` is taken. Every other recipient is refused at `RCPT`
   (`550`), whoever sent it, so the receiver can't be used as a relay. There is no `AUTH` to log in with.
-  - Messages over 5 MB are refused (`552`), and so is a message with more than ten DKIM/ARC headers
-    (dropped unchecked).
+  - Messages over 5 MB are refused (`552`). A message with more than ten DKIM/ARC headers is answered
+    `250` and dropped unchecked, like any unproven mail.
   - Connections are limited: at most four from the internet at once and two from any one address. Each
     is closed after a minute idle or ten minutes in all, and ten messages per connection.
   - One message is checked at a time, for at most 30 seconds.
