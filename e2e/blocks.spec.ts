@@ -79,3 +79,14 @@ test.describe("on a phone", () => {
     await evidence(page, "HOU-153-phone-cards", { fullPage: false });
   });
 });
+
+test("[HOME-7] on Week, only today has a Now or Later today label; a later day's blocks sit under its own heading (HOU-153)", async ({ page }) => {
+  await login(page);
+  await page.goto("/week");
+  const today = page.getByRole("region", { name: "Monday 2 November" });
+  await expect(today.getByRole("heading", { name: "Now" })).toBeVisible();
+  const tuesday = page.getByRole("region", { name: "Tuesday 3 November" });
+  await expect(tuesday.getByText(/Dinner at Sam's/).first()).toBeVisible();
+  await expect(tuesday.getByRole("heading", { name: /^(Now|Later today)$/ })).toHaveCount(0);
+  await evidence(page, "HOU-153-week", { fullPage: false });
+});

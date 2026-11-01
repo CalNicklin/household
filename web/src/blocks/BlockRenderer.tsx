@@ -83,15 +83,20 @@ function SuggestionBlock({ block, handlers }: { block: Extract<Block, { type: "s
   return <SuggestionCard title={block.title} reason={block.reason} actions={cardActions(block, block.actions, handlers)} onSelect={select({ ref: block.ref, title: block.title })} selected={isSelected(block.ref)} />;
 }
 
-function RunView({ run, handlers, nav }: { run: Run; handlers: BlockHandlers; nav: readonly NavLink[] }) {
+/** HOU-153: sections whose names only make sense on today's screen ("Now", "Later today"). */
+const TODAY_ONLY: ReadonlySet<Section> = new Set([Section.now, Section.later]);
+
+function RunView({ run, handlers, nav, today }: { run: Run; handlers: BlockHandlers; nav: readonly NavLink[]; today: boolean }) {
   const { select, isSelected } = useSelect();
+  // On another day (Week), its blocks sit straight under the day's heading, not under "Now".
+  const label = today || !TODAY_ONLY.has(run.section) ? SectionLabel[run.section] : "";
   const content = piecesOf(run).map((piece) => {
     switch (piece.kind) {
       case "events": {
         const [only] = piece.blocks;
         if (piece.blocks.length === 1 && only !== undefined && run.section === Section.now) return <BlockView key={only.id} block={only} handlers={handlers} nav={nav} />;
         return (
-          <ListCard key={piece.blocks.map((b) => b.id).join()} label={SectionLabel[run.section]}>
+          <ListCard key={piece.blocks.map((b) => b.id).join()} {...(label === "" ? {} : { label })}>
             {piece.blocks.map((b) => (
               <EventRow key={b.id} time={b.time} title={b.title} detail={b.detail} provenance={b.provenance} onSelect={select({ ref: b.ref, title: b.title })} selected={isSelected(b.ref)} />
             ))}
@@ -110,7 +115,6 @@ function RunView({ run, handlers, nav }: { run: Run; handlers: BlockHandlers; na
         return <BlockView key={piece.block.id} block={piece.block} handlers={handlers} nav={nav} />;
     }
   });
-  const label = SectionLabel[run.section];
   if (label === "") return <>{content}</>;
   return (
     <SectionView label={label} tone={run.section === Section.now || run.section === Section.focus ? "suggestion" : "muted"}>
@@ -119,11 +123,11 @@ function RunView({ run, handlers, nav }: { run: Run; handlers: BlockHandlers; na
   );
 }
 
-function Runs({ runs, handlers, nav }: { runs: readonly Run[]; handlers: BlockHandlers; nav: readonly NavLink[] }) {
+function Runs({ runs, handlers, nav, today = true }: { runs: readonly Run[]; handlers: BlockHandlers; nav: readonly NavLink[]; today?: boolean }) {
   return (
     <>
       {runs.map((r) => (
-        <RunView key={r.key} run={r} handlers={handlers} nav={nav} />
+        <RunView key={r.key} run={r} handlers={handlers} nav={nav} today={today} />
       ))}
     </>
   );
@@ -151,9 +155,12 @@ export function BlockLayout({ blocks, handlers, nav, fallbackHeader }: { blocks:
   );
 }
 
-/** Plain list of blocks in order, for views like Week that lay days out themselves. */
-export function BlockList({ blocks, handlers }: { blocks: readonly Block[]; handlers: BlockHandlers }) {
+/**
+ * Plain list of blocks in order, for views like Week that lay days out themselves. `today` false
+ * (a later day) drops the "Now" and "Later today" labels; the day's own heading says when.
+ */
+export function BlockList({ blocks, handlers, today }: { blocks: readonly Block[]; handlers: BlockHandlers; today: boolean }) {
   const slots = slotBlocks(blocks);
   const runs = [...slots.header, ...slots.focus, ...slots.main, ...slots.aside];
-  return <Runs runs={runs} handlers={handlers} nav={[]} />;
+  return <Runs runs={runs} handlers={handlers} nav={[]} today={today} />;
 }
