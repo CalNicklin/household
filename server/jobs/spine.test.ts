@@ -56,7 +56,7 @@ describe("message → coordinator → job → agent → tools", () => {
     await expect(agent.household.deleteRule({ id: rule.id })).rejects.toThrow(/PRV-1/);
     await expect(agent.household.updateRule({ id: rule.id, spec: rule.spec })).rejects.toThrow(/PRV-1/);
     await expect(agent.household.createRule({ spec: rule.spec })).rejects.toThrow(/PRV-1/);
-    await expect(agent.calendar.applySync({ upserts: [], deletedExternalIds: [], syncToken: null })).rejects.toThrow(/PRV-1/);
+    await expect(agent.calendar.applySync({ upserts: [], deletedExternalIds: [], syncTokens: {}, calendarIds: ["family@practice.home"], sharedRead: true })).rejects.toThrow(/PRV-1/);
     await expect(agent.backlog.create({ text: "x", tags: [], createdVia: "app", sourceMessage: "another-message" })).rejects.toThrow(/PRV-1/);
   });
 });

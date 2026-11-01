@@ -54,7 +54,7 @@ describe("a new or quiet house", () => {
     const start = view.blocks.filter((b) => b.section === Section.start);
     expect(start.map((b) => (b.type === BlockType.suggestion ? b.title : ""))).toEqual([
       "Say a few jobs into the box below",
-      "Connect the shared calendar in Settings",
+      "Calendars aren't connected yet",
       "Ask “if I do one thing, what should it be?”",
     ]);
     for (const b of start) {

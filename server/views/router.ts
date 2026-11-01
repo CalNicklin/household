@@ -63,7 +63,7 @@ export function viewsRouter(rt: Runtime, hooks: ViewHooks) {
     backlog: personProcedure.output(zBacklogScreen).query(async () => backlogScreen(rt)),
     shop: personProcedure.output(zShopView).query(async () => {
       const basket = await rt.ports.shopping.basket();
-      return { basket: basket.items, deliveryDate: basket.deliveryDate, changeUrl: basket.changeUrl, requests: await rt.system("views").shopping.recent() };
+      return { basket: basket.items, deliveryDate: basket.deliveryDate, changeUrl: basket.changeUrl, requests: await rt.system("views").shopping.recent(), helperConnected: rt.ports.shopping.connected };
     }),
     /** CAP-6: the shared lists. Every change publishes `lists`, so every open screen refetches this. */
     lists: personProcedure.output(zListsView).query(async () => rt.system("views").lists.list()),

@@ -63,8 +63,23 @@ export const wellbeingIdeas = [
   { text: "Call a friend", createdBy: "priya" },
 ] as const;
 
-type PracticeEvent = {
+/**
+ * HOME-1: the practice household's Google calendars, each with its owner, as GOOGLE_CALENDARS names
+ * the real ones: Priya's and Tom's own, and the shared one.
+ */
+export const calendars = [
+  { calendarId: "priya@practice.home", owner: "priya" },
+  { calendarId: "tom@practice.home", owner: "tom" },
+  { calendarId: "family@practice.home", owner: "shared" },
+] as const;
+
+export type PracticeEvent = {
+  /** Google's event ID; an invite has the same one on every calendar it is on. */
   externalId: string;
+  /** Whose calendar this copy is on (default: the shared one). */
+  calendar?: string | undefined;
+  /** Google's iCalUID: copies on several calendars share it and are one event. */
+  uid?: string | undefined;
   title: string;
   start: string;
   end: string;
@@ -72,19 +87,24 @@ type PracticeEvent = {
   attendees: string[];
   away?: string[];
   work?: boolean;
-  soloWithKids?: string;
+  soloWithKids?: string | null;
 };
 
-/** A week of the shared calendar, as Google would return it. */
+/**
+ * A week of the practice calendars, as Google would return them: each person's own events on their
+ * own calendar, the kids' on the shared one, and one invite (dinner at Sam's) on both Priya's and
+ * Tom's, which the house reads as one event with both of them out.
+ */
 export const calendar: PracticeEvent[] = [
-  { externalId: "g-mon-drop", title: "Nursery drop-off", start: "2026-11-02T08:45:00Z", end: "2026-11-02T09:00:00Z", attendees: ["priya"] },
-  { externalId: "g-mon-call", title: "Priya — client call", start: "2026-11-02T13:00:00Z", end: "2026-11-02T13:45:00Z", attendees: ["priya"], work: true, soloWithKids: "tom" },
-  { externalId: "g-mon-pick", title: "Nursery pick-up", start: "2026-11-02T16:10:00Z", end: "2026-11-02T16:30:00Z", attendees: ["tom"] },
-  { externalId: "g-tue-dinner", title: "Dinner at Sam's", start: "2026-11-03T19:30:00Z", end: "2026-11-03T23:00:00Z", attendees: ["priya", "tom"], away: ["priya", "tom"] },
-  { externalId: "g-wed-leeds", title: "Tom — Leeds site visit", start: "2026-11-04T06:30:00Z", end: "2026-11-04T18:00:00Z", attendees: ["tom"], away: ["tom"], work: true, soloWithKids: "priya" },
-  { externalId: "g-thu-office", title: "Priya — office day", start: "2026-11-05T09:00:00Z", end: "2026-11-05T17:00:00Z", attendees: ["priya"], away: ["priya"], work: true },
-  { externalId: "g-thu-football", title: "Tom — five-a-side", start: "2026-11-05T19:00:00Z", end: "2026-11-05T21:00:00Z", attendees: ["tom"], away: ["tom"], soloWithKids: "priya" },
-  { externalId: "g-fri-early", title: "Priya — early train", start: "2026-11-06T06:15:00Z", end: "2026-11-06T12:00:00Z", attendees: ["priya"], away: ["priya"], work: true, soloWithKids: "tom" },
+  { externalId: "g-mon-drop", calendar: "priya", title: "Nursery drop-off", start: "2026-11-02T08:45:00Z", end: "2026-11-02T09:00:00Z", attendees: ["priya"] },
+  { externalId: "g-mon-call", calendar: "priya", title: "Priya — client call", start: "2026-11-02T13:00:00Z", end: "2026-11-02T13:45:00Z", attendees: ["priya"], work: true, soloWithKids: "tom" },
+  { externalId: "g-mon-pick", calendar: "tom", title: "Nursery pick-up", start: "2026-11-02T16:10:00Z", end: "2026-11-02T16:30:00Z", attendees: ["tom"] },
+  { externalId: "g-tue-dinner", calendar: "priya", uid: "dinner-at-sams@practice.home", title: "Dinner at Sam's", start: "2026-11-03T19:30:00Z", end: "2026-11-03T23:00:00Z", attendees: ["priya"], away: ["priya"] },
+  { externalId: "g-tue-dinner", calendar: "tom", uid: "dinner-at-sams@practice.home", title: "Dinner at Sam's", start: "2026-11-03T19:30:00Z", end: "2026-11-03T23:00:00Z", attendees: ["tom"], away: ["tom"] },
+  { externalId: "g-wed-leeds", calendar: "tom", title: "Tom — Leeds site visit", start: "2026-11-04T06:30:00Z", end: "2026-11-04T18:00:00Z", attendees: ["tom"], away: ["tom"], work: true, soloWithKids: "priya" },
+  { externalId: "g-thu-office", calendar: "priya", title: "Priya — office day", start: "2026-11-05T09:00:00Z", end: "2026-11-05T17:00:00Z", attendees: ["priya"], away: ["priya"], work: true },
+  { externalId: "g-thu-football", calendar: "tom", title: "Tom — five-a-side", start: "2026-11-05T19:00:00Z", end: "2026-11-05T21:00:00Z", attendees: ["tom"], away: ["tom"], soloWithKids: "priya" },
+  { externalId: "g-fri-early", calendar: "priya", title: "Priya — early train", start: "2026-11-06T06:15:00Z", end: "2026-11-06T12:00:00Z", attendees: ["priya"], away: ["priya"], work: true, soloWithKids: "tom" },
   { externalId: "g-sat-grandma", title: "Kids at Grandma's", start: "2026-11-07T09:30:00Z", end: "2026-11-07T13:00:00Z", attendees: ["ivy", "noah"] },
   { externalId: "g-thu-theatre", title: "Theatre — both", start: "2026-11-12T19:00:00Z", end: "2026-11-12T22:30:00Z", attendees: ["priya", "tom"], away: ["priya", "tom"] },
 ];

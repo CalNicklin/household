@@ -16,7 +16,7 @@ Every line has an ID so it can become one task for the building agent. Lines mar
 
 You can look at the kitchen iPad when you wake up and know what today needs, without touching it.
 
-- [ ] HOME-1 **(gate)** The home screen shows three sections: Now, Later today, Tomorrow. They come from our shared Google Calendar and update within a minute of a change.
+- [ ] HOME-1 **(gate)** The home screen shows three sections: Now, Later today, Tomorrow. They come from our Google calendars (Cal's, Chloe's and the shared one) and update within a minute of a change.
 - [ ] HOME-2 One line at the top says what shapes today: the weather window, when it gets dark, who is home and until when.
 - [ ] HOME-3 Every suggestion says why it is there, in one line you could check yourself. For example "dry until 2pm" or "you are both out on Thursday".
 - [ ] HOME-4 You can dismiss any suggestion with one tap. Nothing ever becomes "overdue".

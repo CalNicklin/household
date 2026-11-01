@@ -2,7 +2,7 @@ import { DBOS } from "@dbos-inc/dbos-sdk";
 import { Channel, type LocalDate, type Plan } from "@household/contracts";
 import { HouseAgent } from "../agent/agent.ts";
 import { jobScope } from "../agent/scope.ts";
-import { compose } from "../planner/compose.ts";
+import { compose, shoppingForPlan } from "../planner/compose.ts";
 import { gatherFacts, houseFill, otherAdultOf, pickCandidates, screenNotes } from "../planner/gather.ts";
 import { buildId } from "../build.ts";
 import { allRules } from "../rules/nudges.ts";
@@ -47,7 +47,8 @@ async function planDayImpl(date: LocalDate, trigger: string, parentJob: string |
       const rules = { ...all, items: all.items.filter((r) => r.kind !== "suggestion" || !signals.avoid.includes(`${r.title.toLowerCase()}|${part}`)) };
       const today = localDate(now, rt.timeZone) === date;
       const notes = today ? await screenNotes(rt) : [];
-      const shopping = today ? (await rt.system("planner").shopping.recent()).filter((r) => localDate(new Date(r.createdAt), rt.timeZone) === date) : [];
+      const asked = today ? (await rt.system("planner").shopping.recent()).filter((r) => localDate(new Date(r.createdAt), rt.timeZone) === date) : [];
+      const shopping = shoppingForPlan(asked, rt.ports.shopping.connected);
       const blocks = compose({
         date,
         now,
