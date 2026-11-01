@@ -254,11 +254,26 @@ sudo household-restore /var/backups/household/<timestamp>
 On a new server, run steps 2 to 4 first, put the old `.env` back into `/srv/household/.env` (from the
 password manager), then restore.
 
+### Where an image that can't build shows up
+
+`pnpm check` never builds the image (CODE-11). The `preview` workflow does, on every push to a PR from this
+repository, exactly as `deploy` does on main, with or without the preview secrets (without them it only
+builds). A build that fails is a red `preview / image` job on the PR.
+
+HOU-145 was the first image built on GitHub, and it failed where every local build had passed: the SPA
+prerender starts a `vite preview` server and fetches the shell from it. On `localhost` the server bound
+`::1` while the fetch tried only `127.0.0.1`. That happens wherever the loopback has `::1` and there is
+no other IPv6 address, as in GitHub's BuildKit sandbox. The build sandbox has no IPv6 at all, so neither
+`deploy/build-image.sh` nor the test scripts can show that kind of difference. The preview's `image` job
+on GitHub can. The preview server now listens on `127.0.0.1` (`web/vite.config.ts`, tested by
+`web/prerender.test.ts`).
+
 ### Tried on the build sandbox — 1 November 2026
 
 There is no access to the real server from the build sandbox, so `deploy/test-deploy.sh` drives the real
 `household-deploy`, `household-setup`, `household-backup` and `household-restore` against local Docker,
-with a local registry standing in for GHCR. It covers:
+with a local registry standing in for GHCR. It builds the image first with `deploy/build-image.sh`, as the
+workflows do: the committed tree, on a BuildKit builder in its own container. It covers:
 
 - refusing anything but a digest;
 - the first deploy waiting for setup;
@@ -366,7 +381,8 @@ environment's allowed hosts.
 
 `deploy/test-preview.sh` drives the real `household-preview` next to the real house (deployed by
 `household-deploy`, with the preview overlay on its Caddy) against local Docker, with a local registry
-standing in for GHCR. It shows:
+standing in for GHCR. Like `test-deploy.sh`, it builds the image itself with `deploy/build-image.sh`. It
+shows:
 
 - 20 malformed commands refused (and `household-deploy` refusing both preview forms);
 - two previews up at once behind the house's Caddy, each with its own database; `priya` logs in to each,

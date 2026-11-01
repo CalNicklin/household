@@ -165,6 +165,19 @@ describe("the preview workflow", () => {
     expect(workflow.jobs["image"]?.if).toContain("github.event.action != 'closed'");
   });
 
+  it("[PLT-8] builds the image on every same-repo PR, preview secrets or not, and pushes and deploys only with them", () => {
+    // HOU-145: an image that can't build fails this PR's `image` job, not main's deploy after the merge.
+    expect(workflow.jobs["image"]?.if).toBe("github.event.action != 'closed'");
+    const text = read("../.github/workflows/preview.yml");
+    expect(text).toContain("push: ${{ needs.ready.outputs.configured == 'true' }}");
+    expect(text).toContain("pushed: ${{ needs.ready.outputs.configured }}");
+    expect(workflow.jobs["deploy"]?.if).toBe("needs.image.outputs.pushed == 'true'");
+    // The same build as deploy.yml's: its build step is the same action, builder, context and Dockerfile.
+    const build = (file: string) => /- uses: docker\/setup-buildx-action@v3\n[\s\S]*?uses: (docker\/build-push-action@v\d+)\n\s+with:\n\s+context: (\S+)/.exec(read(file))?.slice(1);
+    expect(build("../.github/workflows/preview.yml")).toEqual(build("../.github/workflows/deploy.yml"));
+    expect(build("../.github/workflows/deploy.yml")).toEqual(["docker/build-push-action@v6", "."]);
+  });
+
   it("[FB-5] asks the server for only the two preview forms, with the preview key, never the deploy key", () => {
     const runs = Object.values(workflow.jobs).flatMap((j) => j.steps ?? []);
     const ssh = runs.flatMap((s) => (s.run ?? "").split("\n").filter((l) => l.includes("ssh ")));

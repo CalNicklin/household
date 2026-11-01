@@ -3,7 +3,9 @@
 # (CODE-11). On each push to the PR it builds the PR's image, pushes it to GHCR, and asks the server for
 # `preview <n> sha256:<digest>` over SSH as the `household` user with the preview key, which can only run
 # household-preview. When the PR closes it asks for `preview-stop <n>`. It comments the URL and the
-# practice logins on the PR. Never for a PR from a fork. Until the secrets are added, it skips cleanly.
+# practice logins on the PR. Never for a PR from a fork. Until the secrets are added it still builds the
+# image (HOU-145: an image that can't build shows as a failed `image` job on the PR, before main's deploy
+# finds out), but pushes and deploys nothing.
 name: preview
 on:
   pull_request:
@@ -37,21 +39,24 @@ jobs:
             echo "::notice title=Preview skipped::Add HOUSEHOLD_PREVIEW_SSH_KEY, HOUSEHOLD_SSH_HOST and HOUSEHOLD_SSH_KNOWN_HOSTS (docs/OPERATIONS.md) to get a preview per PR."
           fi
 
+  # Built exactly as deploy.yml builds the house's image (same action, builder, context and Dockerfile).
   image:
     needs: ready
-    if: needs.ready.outputs.configured == 'true' && github.event.action != 'closed'
+    if: github.event.action != 'closed'
     runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
     outputs:
       digest: ${{ steps.build.outputs.digest }}
+      pushed: ${{ needs.ready.outputs.configured }}
     steps:
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.event.pull_request.head.sha }}
       - uses: docker/setup-buildx-action@v3
       - uses: docker/login-action@v3
+        if: needs.ready.outputs.configured == 'true'
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -60,7 +65,7 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: .
-          push: true
+          push: ${{ needs.ready.outputs.configured == 'true' }}
           # Its own package, never the house's: household-deploy can't be pointed at a PR's image.
           tags: ghcr.io/calnicklin/household-preview:pr-${{ github.event.pull_request.number }}
           cache-from: type=gha
@@ -68,6 +73,7 @@ jobs:
 
   deploy:
     needs: image
+    if: needs.image.outputs.pushed == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: read
