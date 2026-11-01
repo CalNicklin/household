@@ -16,6 +16,6 @@ Closes LINEAR-ISSUE-ID
 
 <!-- Replace this placeholder. The PR doesn't merge while this section is empty or still the placeholder. -->
 
-> Commit SHA(s) the fresh reviewer saw, then each finding (correctness and security, graded high/medium/low) and what was done about it, or "No findings". Every medium and high is fixed; a low is fixed or its reason is given here.
+> The `agent-review` summary comment's link, and the reason for each low finding you didn't fix, or "No findings". (While `agent-review` skips for want of its key: the commit SHA(s) the fresh reviewer saw, then each finding, graded high/medium/low, and what was done about it.)
 
 ## Assumptions
