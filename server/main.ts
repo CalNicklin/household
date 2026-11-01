@@ -40,7 +40,7 @@ async function main(): Promise<void> {
   const seeded = (await probe.dbs.household.query.settings.findFirst()) !== undefined;
   await probe.close();
   if (!seeded) {
-    if (!env.PRACTICE) throw new Error("household not set up: run the setup script first");
+    if (!env.PRACTICE) throw new Error("household not set up: run `pnpm house:setup < house.json` first (docs/OPERATIONS.md)");
     await seedPractice(env, ports.clock.now());
   }
   const rt = await createRuntime(env, ports);

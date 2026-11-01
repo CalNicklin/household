@@ -360,3 +360,19 @@ export const zList = z.object({
   items: z.array(zListItem),
 });
 export type List = z.infer<typeof zList>;
+
+/**
+ * PLT-8: the real house, described once on the server (`pnpm house:setup < house.json`). It holds no
+ * secret: each adult's app password is generated on the server and printed once.
+ */
+export const zHouseSetup = z.object({
+  name: z.string().min(1),
+  timezone: z.string().min(1),
+  latitude: z.number(),
+  longitude: z.number(),
+  adults: z.array(z.object({ id: z.string().regex(/^[a-z][a-z0-9-]*$/), name: z.string().min(1), email: z.email().optional(), telegram: z.string().regex(/^\d+$/).optional() })).min(1),
+  children: z.array(z.object({ id: z.string().regex(/^[a-z][a-z0-9-]*$/), name: z.string().min(1), nurseryDays: z.array(zWeekday) })).default([]),
+  /** PRV-2: the one adult whose health tracking may exist at all (her own yes); omitted, nobody's does. */
+  healthOwner: z.string().optional(),
+}).refine((h) => h.healthOwner === undefined || h.adults.some((a) => a.id === h.healthOwner), { message: "healthOwner must be one of the adults", path: ["healthOwner"] });
+export type HouseSetup = z.infer<typeof zHouseSetup>;

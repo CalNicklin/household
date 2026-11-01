@@ -13,6 +13,7 @@ import type { Env } from "../env.ts";
 import type { CalendarSource, Clock, ObjectStore, Ports, ShoppingHelper } from "../ports.ts";
 import { GoogleCalendarSource, refreshingTokenProvider } from "./google-calendar.ts";
 import { HindsightMemory } from "./hindsight-memory.ts";
+import { NoShoppingHelper } from "./shopping-helper.ts";
 import { FsObjectStore, S3ObjectStore } from "./s3-object-store.ts";
 import { TelegramTransport } from "./telegram.ts";
 import { AiSdkTranscriber } from "./transcriber.ts";
@@ -59,6 +60,21 @@ export type RealPortsOptions = {
   transcriptionModel?: TranscriptionModel;
   workCalendarIds?: readonly string[];
 };
+
+/**
+ * The real house runs without the helper until it has a home machine (Waitrose blocks data-centre
+ * addresses): each shopping request is recorded and fails at once with that reason ("nothing was added"),
+ * never added to a practice basket; nothing retries it.
+ */
+function shoppingPort(env: Env, helper: ShoppingHelper | undefined, missing: string[]): ShoppingHelper {
+  if (helper !== undefined) return helper;
+  if (env.PRACTICE) {
+    missing.push("shopping");
+    return new PracticeShoppingHelper();
+  }
+  missing.push("shopping (no helper: nothing is added)");
+  return new NoShoppingHelper();
+}
 
 /**
  * Ports for the real house. Anything not configured falls back to the practice fake and is named
@@ -109,13 +125,7 @@ export function realPorts(env: Env, clock: Clock, options: RealPortsOptions): { 
     memory = new HindsightMemory({ baseUrl: env.HINDSIGHT_URL });
   }
 
-  let shopping: ShoppingHelper;
-  if (options.shopping === undefined) {
-    missing.push("shopping");
-    shopping = new PracticeShoppingHelper();
-  } else {
-    shopping = options.shopping;
-  }
+  const shopping = shoppingPort(env, options.shopping, missing);
 
   let transcriber: Ports["transcriber"];
   if (options.transcriptionModel === undefined) {

@@ -22,7 +22,8 @@
     "dev:web": "cd web && vite dev",
     "person": "node scripts/person.ts",
     "check:full": "node scripts/check.ts --full",
-    "env:init": "node scripts/env-init.ts"
+    "env:init": "node scripts/env-init.ts",
+    "house:setup": "node scripts/house-setup.ts"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "4.0.94",
@@ -70,6 +71,7 @@
     "tsx": "^4.23.15",
     "typescript": "^7.0.2",
     "vite": "8.3.5",
-    "vitest": "5.0.5"
+    "vitest": "5.0.5",
+    "yaml": "^2.9.1"
   }
 }

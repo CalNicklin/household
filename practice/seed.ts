@@ -1,8 +1,9 @@
-import { Channel, DeliveryChannel, Domain, Limits, ListItemSource, Urgency } from "@household/contracts";
+import { Channel, Domain, ListItemSource } from "@household/contracts";
 import { closePool, databaseName, dropDatabases, ensureDatabase, migrateDomain } from "../server/db/index.ts";
 import { hashPassword } from "../server/domains/household/router.ts";
 import type { Env } from "../server/env.ts";
 import { connectAll, schemas } from "../server/runtime.ts";
+import { personDefaults } from "../server/setup/house.ts";
 import * as data from "./data.ts";
 
 const H = schemas.household;
@@ -35,20 +36,9 @@ export async function seedPractice(env: Env, now: Date = new Date(data.PRACTICE_
       { personId: "priya", username: "priya", passwordHash },
       { personId: "tom", username: "tom", passwordHash },
     ]);
-    // CH-7: urgent goes to the messenger, everything else to the morning screen; each of us can change it.
-    const routing = { [Urgency.urgent]: DeliveryChannel.telegram, [Urgency.normal]: DeliveryChannel.screen, [Urgency.low]: DeliveryChannel.screen };
-    const personDefaults = {
-      // limit: defaultDailyMessageBudget
-      dailyMessageBudget: Limits.defaultDailyMessageBudget.value,
-      // limit: defaultQuietStartHour
-      quietStartHour: Limits.defaultQuietStartHour.value,
-      // limit: defaultQuietEndHour
-      quietEndHour: Limits.defaultQuietEndHour.value,
-      routing,
-    };
     await h.insert(H.personSettings).values([
-      { personId: "priya", ...personDefaults },
-      { personId: "tom", ...personDefaults },
+      { personId: "priya", ...personDefaults() },
+      { personId: "tom", ...personDefaults() },
     ]);
     for (const s of data.sitters) {
       const [row] = await h.insert(H.sitters).values({ name: s.name, knownFreeDays: [...s.knownFreeDays] }).returning();

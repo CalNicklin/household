@@ -62,3 +62,24 @@ export class HttpShoppingHelper implements ShoppingHelper {
     return zBasket.parse(await this.#call("GET", "/basket"));
   }
 }
+
+const NO_HELPER = "the shopping helper is not connected yet, so nothing was added to the basket";
+
+/**
+ * The real house before its helper is running (it needs a home connection: the supermarket blocks
+ * data-centre addresses). Every request fails with that reason, so it shows as not added rather than
+ * pretending; the basket is empty with no delivery, so no basket summary goes out.
+ */
+export class NoShoppingHelper implements ShoppingHelper {
+  async addItem(item: string): Promise<HelperResult> {
+    return { kind: "failed", reason: NO_HELPER, log: [`"${item}": ${NO_HELPER}`], screenshots: [] };
+  }
+
+  async addProduct(sku: string): Promise<HelperResult> {
+    return { kind: "failed", reason: NO_HELPER, log: [`${sku}: ${NO_HELPER}`], screenshots: [] };
+  }
+
+  async basket() {
+    return { items: [], deliveryDate: null, changeUrl: "" };
+  }
+}
