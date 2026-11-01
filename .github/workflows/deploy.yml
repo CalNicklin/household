@@ -2,7 +2,9 @@
 # else (CODE-11). This runs only after CI has passed on a push to main: it builds the image here, pushes
 # it to GHCR, then asks the server to deploy it by digest over SSH as the `household` user, whose key can
 # only run household-deploy. GitHub holds only the SSH key, host and known_hosts; every app secret is
-# generated on the server. Until those three secrets are added, it skips cleanly.
+# generated on the server. Until those three secrets are added, it skips cleanly. The jobs that read the
+# deploy key run in the `production` environment, which only main may use and which holds the key, so a
+# pull_request workflow (it runs from the PR's own branch) can never read it.
 name: deploy
 on:
   workflow_run:
@@ -22,6 +24,7 @@ jobs:
     # A dispatch (to redeploy by hand) only from main, which only holds code CI has passed.
     if: (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push')
     runs-on: ubuntu-latest
+    environment: production
     permissions:
       contents: read
     outputs:
@@ -83,6 +86,7 @@ jobs:
   deploy:
     needs: image
     runs-on: ubuntu-latest
+    environment: production
     permissions:
       contents: read
       packages: read

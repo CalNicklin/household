@@ -117,7 +117,8 @@ pushes it to GHCR.
   (below) or deploy a fix.
 - **Secrets:** generated on the server into `/srv/household/.env` (root only, mode 600) by
   `pnpm env:init --real`, run by `install.sh`. GitHub holds only the SSH key, host and known_hosts. The
-  job passes its own short-lived token on stdin so the server can pull a private image; the server
+  key is in the `production` environment, which only `main` may use, so no pull request's workflow can
+  read it; the host and known_hosts aren't secret and stay at repository level. The job passes its own short-lived token on stdin so the server can pull a private image; the server
   removes it straight after the pull.
 
 ### Cal's one-time steps, in order
@@ -149,17 +150,40 @@ Check what it found: `sudo grep -E '^(HOUSEHOLD_DOMAIN|HINDSIGHT_NETWORK)=' /srv
 Copy `/srv/household/.env` into the password manager once. It holds `STORAGE_KEY`, without which the
 object backups can't be read.
 
-**3. The GitHub secrets** (Settings → Secrets and variables → Actions, or with `gh`):
+**3. The `production` environment and the GitHub secrets.** First make the environment the deploy key
+lives in: Settings → Environments → New environment, name it `production`, then under **Deployment
+branches and tags** choose **Selected branches and tags** and add the rule `main` (no other branch or
+tag). Save it before adding the key. If `production` already exists (a deploy run after this change
+creates it, with no branch rule), open it and set that rule before adding the key. Check it:
+`gh api repos/CalNicklin/household/environments/production --jq .deployment_branch_policy` must show
+`"custom_branch_policies": true`, and `gh api repos/CalNicklin/household/environments/production/deployment-branch-policies --jq '.branch_policies[].name'`
+only `main`. Then, with `gh`:
 
 ```bash
-gh secret set HOUSEHOLD_SSH_KEY < household-deploy                     # the private key
-gh secret set HOUSEHOLD_SSH_HOST --body "203.0.113.10"                 # the server's address
-ssh-keyscan -t ed25519 203.0.113.10 | gh secret set HOUSEHOLD_SSH_KNOWN_HOSTS
+gh secret set HOUSEHOLD_SSH_KEY --env production < household-deploy   # the private key, in production only
+gh secret set HOUSEHOLD_SSH_HOST --body "203.0.113.10"                 # the server's address (repository level)
+ssh-keyscan -t ed25519 203.0.113.10 | gh secret set HOUSEHOLD_SSH_KNOWN_HOSTS   # (repository level)
 ```
+
+Never set `HOUSEHOLD_SSH_KEY` at repository level (`gh secret set HOUSEHOLD_SSH_KEY` without `--env`):
+every pull request's workflow runs from the PR's own branch and can read every repository secret.
+Check it's only in the environment: `gh secret list --env production` shows it and `gh secret list`
+doesn't. The host and known_hosts stay at repository level because the preview workflow uses them too.
+
+What the branch rule doesn't stop: for a pull request's run, GitHub checks the rule against the PR's
+*head* branch. Someone who can push to this repo could push a branch with their own workflow that asks
+for `production`, then open a PR from `main` into that branch; the head is `main`, so the run gets the
+key. Only people with write access can do that. HOU-143 tracks closing it (a required reviewer on
+`production`, which would mean approving each deploy).
 
 Check the scanned key against the server's own (`ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub` on
 the server, `ssh-keygen -lf <(ssh-keyscan -t ed25519 203.0.113.10)` locally), then delete the private key
 from the laptop. Until all three secrets exist, the deploy workflow skips with a notice.
+
+*If `HOUSEHOLD_SSH_KEY` is already at repository level* (set before this step said otherwise): create the
+`production` environment as above, run `gh secret set HOUSEHOLD_SSH_KEY --env production <
+household-deploy` (GitHub never shows a secret back, so you need the private key file, or make a new key
+and re-run `install.sh --deploy-key` with its `.pub`), then `gh secret delete HOUSEHOLD_SSH_KEY`.
 
 **4. The first deploy.** Actions → deploy → Run workflow (on `main`), or merge anything to `main`. The first
 deploy pulls the image, starts Postgres and SeaweedFS, and stops with "The house is not set up yet". Then,
@@ -287,9 +311,10 @@ preview.
   `household-preview:pr-<n>` (its own package: `household-deploy` only pulls from `household`), and runs `ssh household@<server> "preview <n> sha256:<digest>"`; on close,
   `"preview-stop <n>"`. That uses a **second** key, forced to `household-preview`, which accepts exactly
   those two forms and nothing else. The deploy key still runs only `household-deploy`, and neither can
-  run the other's command. The preview key on its own can only start and stop practice previews. But the
-  workflow runs from the PR's own branch, so a PR can read any repository secret, the deploy key
-  included, until HOU-141 moves that key into an environment only `main` may use (see step 3).
+  run the other's command. The preview key on its own can only start and stop practice previews. The
+  workflow runs from the PR's own branch, so a PR can read any repository secret; the deploy key is
+  not one, it is only in the `production` environment, which only `main` may use (step 3 of the real
+  house).
   By hand on the server: `sudo household-preview "preview-stop 12"`; running ones are listed in
   `/srv/household-previews/live`.
 
@@ -324,11 +349,9 @@ gh secret set HOUSEHOLD_PREVIEW_SSH_KEY < household-preview
 
 Then delete the private key from the laptop. Until it exists, the preview workflow skips with a notice.
 
-A PR's workflow can read every repository secret, the deploy key included. HOU-141 moves
-`HOUSEHOLD_SSH_KEY` into a `production` environment that only `main` may use. Turn previews on (add this
-secret) only after HOU-141 has merged and its steps are done. **Don't move or delete
-`HOUSEHOLD_SSH_KEY` before HOU-141's change to `deploy.yml` has merged:** until then the deploy workflow
-reads it only at repository level, and without it every deploy silently skips.
+A PR's workflow can read every repository secret. Before turning previews on (adding this secret),
+check that `HOUSEHOLD_SSH_KEY` is only in the `production` environment: `gh secret list` must not list
+it (step 3 of the real house).
 
 **4. The cloud environment's network allowlist.** For the building agent to perform journeys on a preview
 with computer use (FB-4), add the preview domain (`*.preview.example.com`) to the claude.ai cloud
