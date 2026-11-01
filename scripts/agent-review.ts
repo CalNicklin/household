@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { appendFileSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { parseArgs } from "node:util";
@@ -48,8 +49,12 @@ const headTrees = () => new GitTrees(need("checkout"), diffBase(need("checkout")
 const prNumber = () => z.coerce.number().int().min(1).parse(need("pr"));
 
 const zPriorFile = z.object({ state: zReviewState, replies: z.array(z.tuple([z.string(), z.array(z.object({ author: z.string(), body: z.string() }))])) });
+/** The state a review read, so `post` can tell whether another run changed it since. */
+const digest = (state: unknown) => createHash("sha256").update(JSON.stringify(state)).digest("hex");
+
 const zAnswersFile = z.object({
   sha: z.string(),
+  prior: z.string(),
   base: z.string(),
   model: z.string(),
   stages: z.array(z.object({ stage: z.enum(ReviewStage), answer: zModelAnswer, costMicros: z.number(), steps: z.number().int(), usage: z.object({ input: z.number(), cacheRead: z.number(), cacheWrite: z.number(), output: z.number() }) })),
@@ -82,7 +87,7 @@ async function reviewCommand(): Promise<void> {
   });
   rest.catch(() => undefined);
   const results: StageResult[] = [await first, ...(await rest)];
-  const out = { sha: trees.head, base: trees.base, model: modelId, stages: results.map(({ stage, answer, costMicros, steps, usage }) => ({ stage, answer, costMicros, steps, usage })) };
+  const out = { sha: trees.head, base: trees.base, prior: digest(prior.state), model: modelId, stages: results.map(({ stage, answer, costMicros, steps, usage }) => ({ stage, answer, costMicros, steps, usage })) };
   writeFileSync(need("out"), JSON.stringify(out, null, 1));
   const total = results.reduce((s, r) => s + r.costMicros, 0);
   summary(
@@ -116,6 +121,9 @@ async function postCommand(): Promise<void> {
   const answers: Answers = { code: answerOf(ReviewStage.code), security: answerOf(ReviewStage.security), slop: answerOf(ReviewStage.slop) };
   const diff = prDiff(trees.repo, trees.base, trees.head);
   const before = await readPrior(gh, pr);
+  // Merging these answers into any other state would settle findings the stages never saw (e.g. after
+  // "Re-run failed jobs", or a cancelled run's late post).
+  if (digest(before.state) !== file.prior) throw new Error("the findings changed since this review read them: re-run all jobs of the agent-review workflow");
   const merged = merge(before.state, answers, { sha: trees.head, read: (f) => trees.show("head", f), diff });
   const slop = byStage.get(ReviewStage.slop)?.answer;
   const run: RunSummary = {

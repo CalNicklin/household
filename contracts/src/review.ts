@@ -37,16 +37,15 @@ export type SlopRating = ValueOf<typeof SlopRating>;
 export const zSlopRating = z.enum(SlopRating);
 
 /**
- * Where a finding stands. `open` blocks (if medium or high). The rest are settled: `fixed` (the code it
- * points at changed and the reviewer no longer raises it), `accepted` (the reviewer accepted a reply's
- * reason) and `dropped` (raised once, not raised again on unchanged code). A settled finding is not raised
- * again unless the code it points at changes.
+ * Where a finding stands. `open` blocks (if medium or high) until its stage says it is fixed or accepts
+ * a reply's reason, or the code it points at changes: a stage that just stops mentioning it settles
+ * nothing. The rest are settled: `fixed` and `accepted`. A settled finding is not raised again unless
+ * the code it points at changes.
  */
 export const ReviewStatus = {
   open: "open",
   fixed: "fixed",
   accepted: "accepted",
-  dropped: "dropped",
 } as const;
 export type ReviewStatus = ValueOf<typeof ReviewStatus>;
 export const zReviewStatus = z.enum(ReviewStatus);

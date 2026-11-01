@@ -147,7 +147,7 @@ Your read-only commands are the tools. read_file with ref "base" is \`git show <
 Answer with the schema:
 - findings: each defect you report. file is repo-relative ("" for the Change as a whole), line is the head's 1-based line it is anchored on (null for a whole file), summary is the body the instructions describe, failure_scenario names the input, state or sequence that triggers it, severity is high, medium or low as the instructions define them, confidence is 0 to 1. repeats is the id of an earlier finding it restates, or null.
 - earlier: one entry per earlier open finding of this stage, with outcome "fixed", "accepted" (a reply's reason holds up against the code) or "still_open", and a one-sentence reason. Do not report an earlier finding again in findings.
-- Never raise again a settled earlier finding (fixed, accepted or dropped) listed for this stage.
+- Never raise again a settled earlier finding (fixed or accepted) listed for this stage.
 - signal as the instructions define it; rating and rationale only where the instructions ask for a rating (null otherwise).`;
 
 /** The answer a stage's model returns, before `merge` decides anything. */

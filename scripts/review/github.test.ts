@@ -202,8 +202,8 @@ describe("HOU-151 the comment updater", () => {
   it("the summary stays under GitHub's comment limit: it forgets the oldest settled findings, then lists open ones by count", () => {
     const one = merge(emptyState(), answers({ code: { findings: [f({ summary: "x".repeat(4000), failure_scenario: "y".repeat(4000) })], earlier: [] } }), head("aaaaaaa")).state.findings[0];
     if (one === undefined) throw new Error("no finding");
-    const many = (n: number, status: "open" | "dropped", from: number) => Array.from({ length: n }, (_, i) => ({ ...one, id: `AR-${from + i}`, status, reason: status === "open" ? null : "z".repeat(500) }));
-    const settledToo = { version: 1 as const, next: 400, findings: [...many(150, "dropped", 1), ...many(10, "open", 200)] };
+    const many = (n: number, status: "open" | "accepted", from: number) => Array.from({ length: n }, (_, i) => ({ ...one, id: `AR-${from + i}`, status, reason: status === "open" ? null : "z".repeat(500) }));
+    const settledToo = { version: 1 as const, next: 400, findings: [...many(150, "accepted", 1), ...many(10, "open", 200)] };
     const text = summaryBody({ state: settledToo, raised: [], settled: [], open: [], blocking: true }, run("aaaaaaa"));
     expect(text.length).toBeLessThanOrEqual(65_000);
     expect(text).toContain("AR-209");

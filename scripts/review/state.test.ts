@@ -87,14 +87,21 @@ describe("HOU-151 the blocking decision", () => {
     expect(second.blocking).toBe(true);
   });
 
-  it("a finding raised and then dropped isn't raised again unless its code changes", () => {
+  it("a finding its stage stops mentioning stays open while its code is unchanged (it fails closed)", () => {
     const first = merge(emptyState(), answers({ code: { findings: [finding()], earlier: [] } }), head("aaaaaaa", a));
-    const dropped = merge(first.state, answers(), head("bbbbbbb", a));
-    expect(dropped.settled).toMatchObject([{ id: "AR-1", status: "dropped" }]);
-    expect(merge(dropped.state, answers({ code: { findings: [finding()], earlier: [] } }), head("ccccccc", a)).raised).toEqual([]);
-    // Its code changed: forgotten, so it may be raised again, with a new id.
+    // A re-run on the same head whose answer forgets AR-1, and raises it again without saying so.
+    const forgot = merge(first.state, answers({ code: { findings: [finding()], earlier: [] } }), head("aaaaaaa", a));
+    expect(forgot.settled).toEqual([]);
+    expect(forgot.raised).toEqual([]);
+    expect(forgot.open.map((f) => f.id)).toEqual(["AR-1"]);
+    expect(forgot.blocking).toBe(true);
+  });
+
+  it("an accepted finding is raised again, with a new id, once its code changes", () => {
+    const first = merge(emptyState(), answers({ code: { findings: [finding()], earlier: [] } }), head("aaaaaaa", a));
+    const accepted = merge(first.state, answers({ code: { findings: [], earlier: [{ id: "AR-1", outcome: "accepted", reason: "on purpose" }] } }), head("bbbbbbb", a));
     const changed = { "server/a.ts": lines(20, [4, "const l4 = compute();"]) };
-    const again = merge(dropped.state, answers({ code: { findings: [finding()], earlier: [] } }), head("ddddddd", changed));
+    const again = merge(accepted.state, answers({ code: { findings: [finding()], earlier: [] } }), head("ccccccc", changed));
     expect(again.raised).toMatchObject([{ id: "AR-2", status: "open" }]);
     expect(again.state.findings.map((f) => f.id)).toEqual(["AR-2"]);
   });

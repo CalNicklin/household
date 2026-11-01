@@ -135,7 +135,7 @@ const near = (a: Pick<ReviewFinding, "stage" | "file" | "line">, b: Pick<ReviewF
 
 /**
  * A new finding restates a remembered one of its stage when it is near one still open, or anchored on
- * exactly the code of one accepted or dropped. A fixed finding is only restated by name (`repeats`), so a
+ * exactly the code of one accepted. A fixed finding is only restated by name (`repeats`), so a
  * new defect next to a fix is still raised.
  */
 function restates(f: ReviewFinding, window: string, k: StoredFinding): boolean {
@@ -148,7 +148,7 @@ function restates(f: ReviewFinding, window: string, k: StoredFinding): boolean {
  * The check's rule. Earlier settled findings whose code changed are forgotten (they may be raised
  * again); the rest suppress any finding that restates them. Each earlier open finding is fixed,
  * accepted or still open as its stage says; one the stage doesn't mention is fixed if its code changed
- * and dropped if not. New findings get the next ids. It blocks while any open finding is medium or high.
+ * and stays open if not (failing closed: a model that forgets a finding doesn't clear it). New findings get the next ids. It blocks while any open finding is medium or high.
  */
 export function merge(prior: ReviewState, answers: Answers, head: { sha: string; read: ReadHead; diff: string }): Merged {
   const { sha, read, diff } = head;
@@ -159,10 +159,9 @@ export function merge(prior: ReviewState, answers: Answers, head: { sha: string;
     const said = answers[f.stage].earlier.find((e) => e.id === f.id);
     const changed = !unchanged(f, read, diff);
     let next: StoredFinding;
-    if (said?.outcome === ReviewOutcome.stillOpen) return f;
     if (said?.outcome === ReviewOutcome.accepted) next = { ...f, status: ReviewStatus.accepted, reason: short(said.reason) || "accepted", settledOn: sha };
-    else if (said?.outcome === ReviewOutcome.fixed || changed) next = { ...f, status: ReviewStatus.fixed, reason: (said === undefined ? "" : short(said.reason)) || "no longer raised after the code changed", settledOn: sha };
-    else next = { ...f, status: ReviewStatus.dropped, reason: "no longer raised on unchanged code", settledOn: sha };
+    else if (said?.outcome === ReviewOutcome.fixed || (said === undefined && changed)) next = { ...f, status: ReviewStatus.fixed, reason: (said === undefined ? "" : short(said.reason)) || "no longer raised after the code changed", settledOn: sha };
+    else return f;
     // A settled finding remembers the code as it is now, so it stays settled until that changes.
     next = { ...next, window: windowOf(next, read, diff) };
     settled.push(next);

@@ -494,8 +494,9 @@ left out) fails the review: split it.
 - **Resolving a finding:** fix it and push (the next review no longer raises it), or reply to its comment
   with a reason (for one posted on the PR, a PR comment that names it, e.g. `AR-7: …`) and push or re-run
   all jobs (the next review reads replies from the PR's owner, members and collaborators, and may accept
-  them). A finding that was fixed, accepted, or raised once and then
-  not raised again is remembered in the summary comment and isn't raised again until the code it points
+  them). A finding stays open until its stage says it is fixed or accepts a reply, or its code changes
+  (a stage that just stops mentioning it clears nothing). A fixed or accepted finding is remembered in
+  the summary comment and isn't raised again until the code it points
   at changes (`scripts/review/state.ts`, unit-tested). The summary is written before any other comment,
   so a comment that fails to post is retried on the next push rather than raised as a new finding.
 - **Model and cost:** the `REVIEW_MODEL` repository variable, default `claude-opus-5-5`; effort high for

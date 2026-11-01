@@ -204,7 +204,7 @@ function renderSummary(state: ReviewState, run: RunSummary, tables: boolean): st
   if (settled.length > 0 && tables) lines.push("", `<details><summary>Settled (${settled.length})</summary>`, "", "| | Stage | Severity | Where | Finding | Outcome |", "|---|---|---|---|---|---|", ...settled.map((f) => row(f, `${f.status}: ${oneLine(f.reason ?? "")}`)), "", "</details>");
   lines.push(
     "",
-    "<sub>Each open finding has a comment: on its line, or on the PR when it isn't a line of this diff. Fix it and push, or reply to that comment with a reason (for one on the PR, a PR comment that names it, e.g. `AR-7: …`), then push or re-run all jobs of the `agent-review` workflow. A finding that is settled (fixed, accepted, or not raised again) is not raised again unless its code changes.</sub>",
+    "<sub>Each open finding has a comment: on its line, or on the PR when it isn't a line of this diff. Fix it and push, or reply to that comment with a reason (for one on the PR, a PR comment that names it, e.g. `AR-7: …`), then push or re-run all jobs of the `agent-review` workflow. A settled (fixed or accepted) finding is not raised again unless its code changes.</sub>",
     `<!-- agent-review-state:${Buffer.from(JSON.stringify(state)).toString("base64")} -->`,
   );
   return lines.join("\n");
