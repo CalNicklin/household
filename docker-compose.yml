@@ -58,9 +58,8 @@ services:
     ports: ["${PORT:-3001}:3001"]
     env_file: [.env]
     environment:
-      # The password travels in PGPASSWORD (read by every Postgres client), never inside a URL.
+      # No password in the URL: the app reads POSTGRES_PASSWORD from .env (server/env.ts).
       DATABASE_URL: postgres://postgres@postgres:5432/postgres
-      PGPASSWORD: ${POSTGRES_PASSWORD:?run pnpm env:init first}
       PORT: "3001"
       HELPER_URL: http://helper:3003
       S3_ENDPOINT: http://objects:8333

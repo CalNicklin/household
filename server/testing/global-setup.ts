@@ -29,6 +29,15 @@ async function templateReady(url: string, prefix: string): Promise<boolean> {
 /** Builds migrated + seeded template databases once; each test household is a cheap copy. */
 export default async function setup(project: TestProject) {
   const pg = await ensurePostgres();
+  // FB-2: CI declares its Postgres throwaway, so it can skip flushing to disk. Every test household
+  // creates and drops databases, and each of those forced a full checkpoint. Never set locally.
+  if (process.env["THROWAWAY_DATABASE"] === "true") {
+    const client = new Client({ connectionString: pg.url });
+    await client.connect();
+    for (const setting of ["fsync", "synchronous_commit", "full_page_writes"]) await client.query(`alter system set ${setting} = off`);
+    await client.query("select pg_reload_conf()");
+    await client.end();
+  }
   const prefix = templatePrefix();
   if (!(await templateReady(pg.url, prefix))) {
     const env = loadEnv({ DATABASE_URL: pg.url, DB_PREFIX: prefix });

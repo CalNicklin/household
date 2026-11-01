@@ -21,6 +21,8 @@ jobs:
     env:
       CI: "true"
       DATABASE_URL: postgres://postgres@localhost:5432/postgres
+      # FB-2: this Postgres is thrown away after the run, so the test setup lets it skip flushing to disk.
+      THROWAWAY_DATABASE: "true"
       FALLOW_BASE: origin/${{ github.base_ref || 'main' }}
     steps:
       - uses: actions/checkout@v4

@@ -21,6 +21,7 @@ export async function jobSteps(jobId: string) {
   return (await DBOS.listWorkflowSteps(jobId)) ?? [];
 }
 
+/** Used by tests. DBOS checks for the result once a second by default; most jobs finish in ~100ms (FB-2). */
 export async function waitForJob(jobId: string): Promise<void> {
-  await DBOS.retrieveWorkflow(jobId).getResult();
+  await DBOS.retrieveWorkflow(jobId).getResult({ pollingIntervalMs: 25 });
 }

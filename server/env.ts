@@ -1,6 +1,10 @@
 import { ModelProvider, zModelProvider } from "@household/contracts";
 import { z } from "zod";
 
+// The app reads the same POSTGRES_PASSWORD the database container gets from .env, and hands it to
+// every Postgres client here (DBOS included) as PGPASSWORD. It never goes inside a URL.
+if (process.env["PGPASSWORD"] === undefined && process.env["POSTGRES_PASSWORD"] !== undefined) process.env["PGPASSWORD"] = process.env["POSTGRES_PASSWORD"];
+
 const zEnv = z.object({
   HOUSEHOLD_ID: z.string().default("practice"),
   /** Postgres server; each domain gets its own database on it (CODE-4). */
