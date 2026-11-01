@@ -61,7 +61,10 @@ export const zReviewOutcome = z.enum(ReviewOutcome);
 
 const text = (max: number) => z.string().trim().min(1).max(max);
 
-/** One finding, as the issue specifies it: `{stage, severity, file, line, summary, failure_scenario}`. */
+/**
+ * One finding, as the issue specifies it: `{stage, severity, file, line, summary, failure_scenario}`,
+ * plus the stage's confidence in it (Entire's prompts: 0.5 to 1; below 0.5 is not reported).
+ */
 export const zReviewFinding = z.object({
   stage: zReviewStage,
   severity: zReviewSeverity,
@@ -71,5 +74,6 @@ export const zReviewFinding = z.object({
   line: z.number().int().min(1).nullable(),
   summary: text(Limits.reviewMaxTextChars.value),
   failure_scenario: text(Limits.reviewMaxTextChars.value),
+  confidence: z.number().min(0).max(1),
 });
 export type ReviewFinding = z.infer<typeof zReviewFinding>;

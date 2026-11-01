@@ -141,7 +141,7 @@ const where = (f: Pick<StoredFinding, "file" | "line">) => (f.file === "" ? "the
 
 function findingBody(f: StoredFinding, onPr: boolean): string {
   return [
-    `**${f.id} · ${f.severity} · ${f.stage}**`,
+    `**${f.id} · ${f.severity} · ${f.stage}** · confidence ${f.confidence.toFixed(2)}`,
     "",
     sanitise(f.summary),
     "",

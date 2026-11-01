@@ -87,7 +87,7 @@ beforeEach(() => {
 
 const quiet = (): StageAnswer => ({ findings: [], earlier: [] });
 const answers = (over: Partial<Answers> = {}): Answers => ({ code: quiet(), security: quiet(), slop: quiet(), ...over });
-const f = (over: Partial<StageAnswer["findings"][number]>): StageAnswer["findings"][number] => ({ severity: "medium", file: "a.ts", line: 5, summary: "bug", failure_scenario: "when", repeats: null, ...over });
+const f = (over: Partial<StageAnswer["findings"][number]>): StageAnswer["findings"][number] => ({ severity: "medium", file: "a.ts", line: 5, summary: "bug", failure_scenario: "when", confidence: 0.9, repeats: null, ...over });
 const file = Array.from({ length: 30 }, (_, i) => `line ${i + 1}`).join("\n");
 const head = (sha: string, text = file) => ({ sha, read: (p: string) => (p === "a.ts" ? text : null), diff: "d" });
 const run = (sha: string): RunSummary => ({ sha, base: "0000000", model: "m", stages: [{ stage: "code", costMicros: 120_000, steps: 3 }], slop: { rating: "Low", rationale: "fine" } });
@@ -112,7 +112,7 @@ describe("HOU-151 the comment updater", () => {
     ]);
     // other.ts isn't in the diff: its finding goes on the PR, to be answered by a comment that names it.
     const ours = issueComments.filter((c) => c.user.login === BOT.login);
-    expect(ours.map((c) => c.body.split("\n")[0])).toEqual(["<!-- agent-review -->", "**AR-2 · medium · code**"]);
+    expect(ours.map((c) => c.body.split("\n")[0])).toEqual(["<!-- agent-review -->", "**AR-2 · medium · code** · confidence 0.90"]);
     expect(ours[1]?.body).toContain("answer with a comment on this PR that names AR-2");
     const summaries = ours.slice(0, 1);
     expect(summaries[0]?.body).toContain("✗ 2 open medium or high findings block this PR");
@@ -173,7 +173,7 @@ describe("HOU-151 the comment updater", () => {
     const second = merge(p2.state, answers({ code: { findings: [f({ repeats: "AR-1" })], earlier: [{ id: "AR-1", outcome: "still_open", reason: "same" }] } }), head("bbbbbbb"));
     expect(second.raised).toEqual([]);
     await publish(gh, 7, p2, second, run("bbbbbbb"), commentable);
-    expect(reviewComments.map((c) => c.body.split("\n")[0])).toEqual(["**AR-1 · medium · code**"]);
+    expect(reviewComments.map((c) => c.body.split("\n")[0])).toEqual(["**AR-1 · medium · code** · confidence 0.90"]);
     expect((await readPrior(gh, 7)).state.findings).toMatchObject([{ id: "AR-1", commentId: reviewComments[0]?.id }]);
   });
 

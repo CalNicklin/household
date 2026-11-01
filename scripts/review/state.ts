@@ -29,6 +29,7 @@ export const zStageAnswer = z.object({
       line: z.number().int().nullable(),
       summary: z.string(),
       failure_scenario: z.string(),
+      confidence: z.number(),
       /** The id (AR-n) of an earlier finding this one restates, or null. */
       repeats: z.string().nullable(),
     }),
@@ -114,6 +115,7 @@ export function normalise(stage: ReviewStage, f: StageAnswer["findings"][number]
     line: f.line !== null && f.line >= 1 ? f.line : null,
     summary: cap(f.summary),
     failure_scenario: cap(f.failure_scenario),
+    confidence: Math.min(1, Math.max(0, f.confidence)),
   });
   return parsed.success ? parsed.data : null;
 }

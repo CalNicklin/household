@@ -483,7 +483,8 @@ shows:
 
 Every push to a PR from this repository (never a fork's) is reviewed by `.github/workflows/agent-review.yml`
 in three stages: Entire's code, security and slop reviews, whose prompts are `.github/review/code.md`,
-`security.md` and `slop.md`, verbatim. Each stage returns findings graded high, medium or low. The
+`security.md` and `slop.md`, verbatim. Each stage returns findings graded high, medium or low, each
+with the stage's confidence (0.5 to 1; anything lower is dropped, as the prompts say). The
 `agent-review` job comments each new finding on its line, replies on a finding's comment when it is
 settled, keeps one summary comment (verdict, open and settled findings, the slop rating, the cost) up to
 date in place, and **fails while any medium or high finding is open**. A low never blocks. A finding on

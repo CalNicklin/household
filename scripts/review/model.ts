@@ -152,7 +152,6 @@ Answer with the schema:
 
 /** The answer a stage's model returns, before `merge` decides anything. */
 export const zModelAnswer = zStageAnswer.extend({
-  findings: z.array(zStageAnswer.shape.findings.element.extend({ confidence: z.number() })),
   signal: z.boolean(),
   rating: zSlopRating.nullable(),
   rationale: z.string().nullable(),

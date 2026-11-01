@@ -11,6 +11,7 @@ const finding = (over: Partial<StageAnswer["findings"][number]> = {}): StageAnsw
   line: 5,
   summary: "divides by three",
   failure_scenario: "half(4) returns 1.33",
+  confidence: 0.9,
   repeats: null,
   ...over,
 });
@@ -23,11 +24,11 @@ const files =
 const head = (sha: string, map: Record<string, string>) => ({ sha, read: files(map), diff: "diff" });
 
 describe("HOU-151 findings", () => {
-  it("a finding is {stage, severity, file, line, summary, failure_scenario}, validated", () => {
-    expect(zReviewFinding.safeParse({ stage: "code", severity: "high", file: "a.ts", line: 3, summary: "s", failure_scenario: "f" }).success).toBe(true);
-    expect(zReviewFinding.safeParse({ stage: "code", severity: "critical", file: "a.ts", line: 3, summary: "s", failure_scenario: "f" }).success).toBe(false);
-    expect(zReviewFinding.safeParse({ stage: "lint", severity: "low", file: "a.ts", line: 3, summary: "s", failure_scenario: "f" }).success).toBe(false);
-    expect(zReviewFinding.safeParse({ stage: "code", severity: "low", file: "a.ts", line: 0, summary: "s", failure_scenario: "f" }).success).toBe(false);
+  it("a finding is {stage, severity, file, line, summary, failure_scenario, confidence}, validated", () => {
+    expect(zReviewFinding.safeParse({ stage: "code", severity: "high", file: "a.ts", line: 3, summary: "s", failure_scenario: "f", confidence: 0.8 }).success).toBe(true);
+    expect(zReviewFinding.safeParse({ stage: "code", severity: "critical", file: "a.ts", line: 3, summary: "s", failure_scenario: "f", confidence: 0.8 }).success).toBe(false);
+    expect(zReviewFinding.safeParse({ stage: "lint", severity: "low", file: "a.ts", line: 3, summary: "s", failure_scenario: "f", confidence: 0.8 }).success).toBe(false);
+    expect(zReviewFinding.safeParse({ stage: "code", severity: "low", file: "a.ts", line: 0, summary: "s", failure_scenario: "f", confidence: 0.8 }).success).toBe(false);
     expect(zReviewFinding.safeParse({ stage: "code", severity: "low", file: "a.ts", line: null, summary: "", failure_scenario: "f" }).success).toBe(false);
   });
 
