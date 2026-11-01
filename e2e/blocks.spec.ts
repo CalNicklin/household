@@ -69,7 +69,19 @@ test.describe("on a phone", () => {
     for (let i = 0; i < count; i++) {
       const card = cards.nth(i);
       const { text, actions, buttonsWidth } = await boxes(card);
-      if (text === null || actions === null) continue;
+      expect(text, `card ${i} has no text box`).not.toBeNull();
+      if (text === null) continue;
+      // Nothing in the card spills out of it, on any side. (Every tap target on the page is checked by [HOME-10] in morning.spec.ts.)
+      const c = await card.boundingBox();
+      expect(c).not.toBeNull();
+      if (c === null) continue;
+      for (const r of actions === null ? [text] : [text, actions]) {
+        expect(r.left).toBeGreaterThanOrEqual(c.x - 1);
+        expect(r.top).toBeGreaterThanOrEqual(c.y - 1);
+        expect(r.right).toBeLessThanOrEqual(c.x + c.width + 1);
+        expect(r.bottom).toBeLessThanOrEqual(c.y + c.height + 1);
+      }
+      if (actions === null) continue;
       expect(actions.top >= text.bottom - 1 || text.width >= buttonsWidth, `card ${i}: text ${text.width}px beside buttons ${buttonsWidth}px`).toBe(true);
       for (const b of await card.locator(".ds-card__actions button").all()) {
         const box = await b.boundingBox();
