@@ -24,18 +24,27 @@ async function boxes(card: Locator) {
 test("[HOME-7][HOME-10] a suggestion in the narrow right-hand column keeps its text at least as wide as its buttons, or puts the buttons below (HOU-153)", async ({ page }) => {
   await login(page);
   const column = page.getByRole("region", { name: "Could fit this week" });
-  const card = column.locator(".ds-card--suggestion").first();
-  await expect(card).toBeVisible();
-  const { text, actions, buttonsWidth } = await boxes(card);
-  expect(text).not.toBeNull();
-  expect(actions).not.toBeNull();
-  if (text === null || actions === null) return;
-  const below = actions.top >= text.bottom - 1;
-  expect(below || text.width >= buttonsWidth, `text ${text.width}px wide beside buttons ${buttonsWidth}px wide`).toBe(true);
-  // Nothing in the card spills out of it.
-  const cardBox = await card.boundingBox();
-  expect(cardBox).not.toBeNull();
-  if (cardBox !== null) expect(Math.max(text.right, actions.right)).toBeLessThanOrEqual(cardBox.x + cardBox.width + 1);
+  await expect(column.locator(".ds-card--suggestion").first()).toBeVisible();
+  const cards = column.locator(".ds-card--fluid");
+  const count = await cards.count();
+  for (let i = 0; i < count; i++) {
+    const card = cards.nth(i);
+    const { text, actions, buttonsWidth } = await boxes(card);
+    expect(text).not.toBeNull();
+    if (text === null || actions === null) continue;
+    const below = actions.top >= text.bottom - 1;
+    expect(below || text.width >= buttonsWidth, `card ${i}: text ${text.width}px wide beside buttons ${buttonsWidth}px wide`).toBe(true);
+    // Nothing in the card spills out of it, on any side.
+    const c = await card.boundingBox();
+    expect(c).not.toBeNull();
+    if (c === null) continue;
+    for (const r of [text, actions]) {
+      expect(r.left).toBeGreaterThanOrEqual(c.x - 1);
+      expect(r.top).toBeGreaterThanOrEqual(c.y - 1);
+      expect(r.right).toBeLessThanOrEqual(c.x + c.width + 1);
+      expect(r.bottom).toBeLessThanOrEqual(c.y + c.height + 1);
+    }
+  }
   await evidence(page, "HOU-153-narrow-suggestion", { fullPage: false });
 });
 
