@@ -44,7 +44,8 @@ export const zBacklogScreen = z.object({
 });
 export type BacklogScreen = z.infer<typeof zBacklogScreen>;
 
-export const zWeekDay = z.object({ date: zLocalDate, label: z.string(), blocks: z.array(zBlock) });
+/** HOU-153: `today` says which day is today, so the screen labels "Now" only there. */
+export const zWeekDay = z.object({ date: zLocalDate, label: z.string(), today: z.boolean(), blocks: z.array(zBlock) });
 export const zWeekView = z.object({ days: z.array(zWeekDay) });
 export type WeekView = z.infer<typeof zWeekView>;
 
