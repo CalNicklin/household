@@ -2,12 +2,12 @@ import { Limits } from "@household/contracts";
 import type { APIRequestContext } from "@playwright/test";
 import { readFileSync } from "node:fs";
 import { z } from "zod";
-import { evidence, expect, json, login, phone, reset, say, test, timer } from "./fixtures.ts";
+import { evidence, expect, json, login, ownStack, phone, reset, say, test, timer } from "./fixtures.ts";
 
 test.beforeEach(async ({ request }) => reset(request));
 
 const shopState = async (request: APIRequestContext) =>
-  json(z.object({ orders: z.array(z.unknown()), slotChanges: z.array(z.unknown()).optional() }).passthrough(), await request.get("http://localhost:3102/practice-api/basket"));
+  json(z.object({ orders: z.array(z.unknown()), slotChanges: z.array(z.unknown()).optional() }).passthrough(), await request.get(`http://localhost:${ownStack().shop}/practice-api/basket`));
 
 test("[AUT-1][AUT-6] mention a shopping item and it goes in the basket; the home screen shows the product, and the run's log and screenshots open from it", async ({ page }) => {
   await login(page);
@@ -22,7 +22,7 @@ test("[AUT-1][AUT-6] mention a shopping item and it goes in the basket; the home
   await expect(images.first()).toBeVisible();
   expect(await images.first().evaluate((img) => (img instanceof HTMLImageElement ? img.naturalWidth : 0))).toBeGreaterThan(0);
   // AUT-2: the helper's login (generated for this run by e2e/stack.ts) never reaches the page.
-  const { password } = z.object({ password: z.string() }).parse(JSON.parse(readFileSync(".data/e2e/supermarket.json", "utf8")));
+  const { password } = z.object({ password: z.string() }).parse(JSON.parse(readFileSync(ownStack().creds, "utf8")));
   await expect(page.getByText(password)).toHaveCount(0);
   expect(await page.content()).not.toContain(password);
   await evidence(page, "AUT-6-run-log");
@@ -48,10 +48,10 @@ test("[AUT-3][AUT-4] no exact match: nothing is added and it asks one question w
 });
 
 test("[AUT-2][AUT-7] the shopping helper runs sealed, with its own login; a second helper is just another folder", async ({ request }) => {
-  const tasks = await request.get("http://localhost:3103/tasks", { headers: { Authorization: "Bearer e2e-helper-token" } });
+  const tasks = await request.get(`http://localhost:${ownStack().helper}/tasks`, { headers: { Authorization: "Bearer e2e-helper-token" } });
   expect(tasks.ok()).toBe(true);
   expect(JSON.stringify(await tasks.json())).toContain("shopping");
-  expect((await request.get("http://localhost:3103/tasks")).status()).toBe(401);
+  expect((await request.get(`http://localhost:${ownStack().helper}/tasks`)).status()).toBe(401);
   const env = await request.get("/api/practice/now");
   expect(await env.text()).not.toContain("practice-shopper");
 });

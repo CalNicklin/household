@@ -16,7 +16,8 @@ const SKIP = new Set(["node_modules", ".git", ".data", "dist", ".claude", "test-
 function files(dir: string, ext: RegExp): string[] {
   const out: string[] = [];
   for (const name of readdirSync(dir)) {
-    if (SKIP.has(name)) continue;
+    // The CH-11 test (server/adapters/registry.test.ts) briefly copies server/adapters to `.adapters-copy-*`.
+    if (SKIP.has(name) || name.startsWith(".adapters-copy-")) continue;
     const p = path.join(dir, name);
     if (statSync(p).isDirectory()) out.push(...files(p, ext));
     else if (ext.test(name)) out.push(p);
