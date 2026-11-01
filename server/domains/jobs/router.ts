@@ -115,9 +115,11 @@ export function jobsRouter(db: JobsDb) {
         .values({ id: input.id, messageId: input.messageId, channel: message?.channel ?? Channel.app, person: message?.person ?? null, status: "running", provider: input.provider, model: input.model, createdAt: ctx.now })
         .onConflictDoNothing();
     }),
-    finishJob: systemProcedure.input(zJobFinishInput).mutation(async ({ input }) => {
+    finishJob: systemProcedure.input(zJobFinishInput).mutation(async ({ ctx, input }) => {
       const { id, ...rest } = input;
       await db.update(schema.jobs).set(rest).where(eq(schema.jobs.id, id));
+      // HOU-149: the reply's answer (the one thing) is read from the finished job's tool calls.
+      ctx.publish("replies");
     }),
     /**
      * QA-8 / QA-10: adds to a job's totals rather than replacing them, so a child workflow can report after

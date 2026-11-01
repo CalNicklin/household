@@ -34,14 +34,21 @@ import { personProcedure, router } from "../trpc.ts";
 import { backlogScreen } from "./backlog.ts";
 import { learnedSentences } from "./learned.ts";
 import { runView, traceView } from "./runs.ts";
+import { conversationView } from "./conversation.ts";
 import { screenView } from "./screen.ts";
 import { weekView } from "./week.ts";
+
+/** What the views may ask the composition root to start; views never reach the coordinator themselves. */
+export type ViewHooks = {
+  /** HOU-149: start today's plan through the coordinator, at most once an hour. */
+  planToday: () => Promise<unknown>;
+};
 
 /**
  * The query layer the app reads and the few direct edits a person makes to their own things
  * (PLT-11). Everything said to the house goes through POST /api/messages instead.
  */
-export function viewsRouter(rt: Runtime) {
+export function viewsRouter(rt: Runtime, hooks: ViewHooks) {
   const me = (person: string) => rt.as({ kind: ActorKind.person, person });
   return router({
     me: personProcedure.output(zMe).query(async ({ ctx }) => {
@@ -51,7 +58,7 @@ export function viewsRouter(rt: Runtime) {
       if (person === undefined) throw new TRPCError({ code: "NOT_FOUND" });
       return { person: person.id, name: person.name, healthOwner: settings.healthOwner === person.id };
     }),
-    screen: personProcedure.input(zScreenInput).output(zScreenView).query(async ({ ctx, input }) => screenView(rt, ctx.actor.person, input.date ?? localDate(rt.ports.clock.now(), rt.timeZone))),
+    screen: personProcedure.input(zScreenInput).output(zScreenView).query(async ({ ctx, input }) => screenView(rt, ctx.actor.person, input.date ?? localDate(rt.ports.clock.now(), rt.timeZone), hooks.planToday)),
     week: personProcedure.output(zWeekView).query(async ({ ctx }) => weekView(rt, ctx.actor.person)),
     backlog: personProcedure.output(zBacklogScreen).query(async () => backlogScreen(rt)),
     shop: personProcedure.output(zShopView).query(async () => {
@@ -75,9 +82,7 @@ export function viewsRouter(rt: Runtime) {
         rules: await api.household.rules(),
       };
     }),
-    conversation: personProcedure.output(zConversationView).query(async ({ ctx }) =>
-      (await rt.system("views").jobs.replies({ person: ctx.actor.person })).map((r) => ({ id: r.id, text: r.text, createdAt: r.createdAt })),
-    ),
+    conversation: personProcedure.output(zConversationView).query(async ({ ctx }) => conversationView(rt, ctx.actor.person)),
     run: personProcedure.input(zIdInput).output(zRunView.nullable()).query(async ({ input }) => runView(rt, input.id)),
     trace: personProcedure.input(zIdInput).output(zTraceView.nullable()).query(async ({ input }) => traceView(rt, input.id)),
     runLog: personProcedure.output(zRunLogView).query(async () => ({ jobs: await rt.system("views").jobs.recentJobs(), timers: await rt.system("views").jobs.timerRuns() })),

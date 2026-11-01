@@ -1,4 +1,5 @@
 import { ActionKind, BlockType, DayPart, type LocalDate, LongTool, ModeKind, NotificationStatus, RhythmSource } from "@household/contracts";
+import { START_REF_PREFIX } from "../planner/first-day.ts";
 import { addLocalDays, localDate, localHour, weekdayOf } from "../time.ts";
 import type { JobScope } from "./scope.ts";
 
@@ -51,6 +52,11 @@ export async function respond(scope: JobScope, ref: string, action: ActionKind, 
   await scope.api.plans.respond({ ref, action, channel: scope.channel, date, value });
   const subject = await subjectFor(scope, ref, date);
 
+  // HOU-149: "Getting started" cards are about the app, not the house's life: nothing to learn or remember.
+  if (ref.startsWith(START_REF_PREFIX)) {
+    scope.effects.closeRefs.push({ ref, status: "dismissed" });
+    return "Okay, not now.";
+  }
   const learnable: readonly ActionKind[] = [ActionKind.accept, ActionKind.notToday, ActionKind.snooze, ActionKind.handOver, ActionKind.done];
   if (learnable.includes(action)) {
     const mode = await scope.rt.system("mode").household.activeMode();
