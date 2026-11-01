@@ -231,9 +231,12 @@ example, files "How are you?" in the backlog). `/srv/household/.env` must have:
 
 With `MODEL_PROVIDER` unset or `practice`, or the provider's key empty, the app refuses to start and
 `household-deploy` refuses to switch to it, each with one line naming what to set. A house set up before
-these keys existed: `git pull` the checkout, `sudo deploy/install.sh` (it adds `MODEL_PROVIDER` and
-`MODEL_ID`), add `ANTHROPIC_API_KEY` with `sudo nano /srv/household/.env`, then redeploy with
-`sudo household-deploy "$(sudo cut -d@ -f2 /srv/household/image)"`. Check which model the running house
+these keys existed: first add `ANTHROPIC_API_KEY` with `sudo nano /srv/household/.env`, then `git pull`
+the checkout and `sudo deploy/install.sh` (it adds `MODEL_PROVIDER` and `MODEL_ID`), then redeploy with
+`sudo household-deploy "$(sudo cut -d@ -f2 /srv/household/image)"`. Key first: an image from before
+this check starts without complaint on `MODEL_PROVIDER=anthropic` with no key, and then fails every
+message, so don't run `household-setup` or `household-restore` (both restart the app) between
+`install.sh` and adding the key. Check which model the running house
 uses with:
 
 ```bash
