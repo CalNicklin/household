@@ -52,7 +52,8 @@ test("[HOME-7] an all-day item shows where it came from in the time column, not 
   await login(page);
   const row = page.getByRole("listitem").filter({ hasText: "Ivy and Noah" }).first();
   await expect(row).toBeVisible();
-  await expect(row.locator(".ds-list-row__time svg")).toBeVisible();
+  // The nursery day comes from the house's rules, so it must show that icon, not the calendar default.
+  await expect(row.getByRole("img", { name: "No set time, from the house's rules" })).toBeVisible();
 });
 
 test.describe("on a phone", () => {
