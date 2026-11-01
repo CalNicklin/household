@@ -88,8 +88,8 @@ describe("household-google check (HOU-147, HOU-152)", () => {
     expect(good.text).toMatch(/All good\.$/);
 
     const busy = await check({ calendars: `chloe:chloe-busy@example.com,shared:${FAMILY}`, watches: [watchOn("chloe-busy@example.com", "c4"), openWatch] });
-    expect(busy.code).toBe(1);
-    expect(busy.text).toContain('✗ Chloe\'s calendar (chloe: chloe-busy@example.com): "Chloe (work)" is shared as free/busy only, so the house sees when chloe is busy but no titles ("Busy"). For titles, share it with "See all event details"');
+    expect(busy.code).toBe(0);
+    expect(busy.text).toContain('✓ Chloe\'s calendar (chloe: chloe-busy@example.com): "Chloe (work)", readable, free/busy only: the house sees when chloe is busy but no titles ("Busy"). For titles, share it with "See all event details"');
 
     const unseen = await check({ calendars: `chloe:not-shared@example.com,shared:${FAMILY}`, watches: [openWatch] });
     expect(unseen.text).toContain("✗ Chloe's calendar (chloe: not-shared@example.com): this account can't see it.");

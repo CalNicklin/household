@@ -85,7 +85,7 @@ function calendarState(c: HouseCalendar, seen: CalendarListEntry[] | null, peopl
   const entry = seen.find((x) => x.id === c.calendarId);
   if (entry === undefined) return r.bad(`${label}: this account can't see it. If it is someone else's, they share it with this Google account ("See all event details") and you accept the share; check the ID against the list above`);
   if (entry.accessRole === "freeBusyReader")
-    return r.bad(`${label}: "${entry.name}" is shared as free/busy only, so the house sees when ${c.owner} is busy but no titles ("Busy"). For titles, share it with "See all event details"`);
+    return r.ok(`✓ ${label}: "${entry.name}", readable, free/busy only: the house sees when ${c.owner} is busy but no titles ("Busy"). For titles, share it with "See all event details"`);
   r.ok(`✓ ${label}: "${entry.name}", readable, full details [${entry.accessRole}]`);
 }
 
