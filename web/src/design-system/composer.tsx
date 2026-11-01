@@ -105,7 +105,7 @@ export function Composer({
 /**
  * The house's answer, right above the composer where you are looking (MOM-2, HOU-149). A `what_now`
  * answer is the one thing in big type and its reason under it; anything else is one plain line.
- * Planner-made, so green, with a no-guilt dismiss. `onDismiss` null while the house is still thinking.
+ * Planner-made, so green, with a no-guilt dismiss (`onDismiss` null leaves it out).
  */
 export function Answer({ heading, title, detail, onDismiss }: { heading: string; title: string | null; detail: string; onDismiss: (() => void) | null }) {
   return (

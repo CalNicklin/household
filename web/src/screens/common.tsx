@@ -82,7 +82,9 @@ function LatestAnswer() {
   const latest = conversation.data?.[0];
   // Ids, not times, tell the answer apart: the server's clock (the practice clock) can differ from this device's.
   const fresh = latest !== undefined && (said.before === undefined ? new Date(latest.createdAt).getTime() >= said.at - 5_000 : latest.id !== said.before);
-  if (latest === undefined || !fresh) return <Answer heading="Asking the house" title={null} detail="One moment…" onDismiss={null} />;
+  // Still waiting. A job that fails writes no reply, so this can be put away too.
+  const waiting = `waiting:${said.at}`;
+  if (latest === undefined || !fresh) return dismissed === waiting ? null : <Answer heading="Asking the house" title={null} detail="One moment…" onDismiss={() => setDismissed(waiting)} />;
   if (latest.id === dismissed) return null;
   const hide = () => setDismissed(latest.id);
   if (latest.pick !== null) return <Answer heading="The one thing" title={latest.pick.title} detail={latest.pick.why} onDismiss={hide} />;
