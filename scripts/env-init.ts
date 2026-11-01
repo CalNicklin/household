@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { chmodSync, closeSync, existsSync, fsyncSync, mkdirSync, openSync, readFileSync, renameSync, writeFileSync, writeSync } from "node:fs";
+import { chmodSync, closeSync, existsSync, fsyncSync, mkdirSync, openSync, readFileSync, renameSync, rmSync, writeFileSync, writeSync } from "node:fs";
 
 /**
  * PLT-8 / PRV-6: generate every secret docker compose needs, at random, into `.env` and `.secrets/`
@@ -51,15 +51,22 @@ for (const name of added) {
 // install.sh runs this against the real house's .env: write only when something was added, and then to a
 // temporary file renamed over it, so a full disk or a killed container can never leave .env cut short.
 if (added.length > 0) {
-  const tmp = `.env.tmp-${process.pid}`;
+  // A random name (in a container node is always pid 1), removed if anything fails before the rename, so an
+  // interrupted run leaves no copy of the secrets behind and never blocks the next one.
+  const tmp = `.env.tmp-${randomBytes(6).toString("hex")}`;
   const fd = openSync(tmp, "wx", 0o600);
   try {
-    writeSync(fd, `${lines.join("\n")}\n`);
-    fsyncSync(fd);
-  } finally {
-    closeSync(fd);
+    try {
+      writeSync(fd, `${lines.join("\n")}\n`);
+      fsyncSync(fd);
+    } finally {
+      closeSync(fd);
+    }
+    renameSync(tmp, ".env");
+  } catch (e) {
+    rmSync(tmp, { force: true });
+    throw e;
   }
-  renameSync(tmp, ".env");
 }
 
 mkdirSync(".secrets", { recursive: true, mode: 0o700 });
