@@ -116,6 +116,18 @@ describe("The house only ever adds to a list (PRV-1)", () => {
     expect((await listNamed("Shopping")).items.map((i) => i.text)).not.toContain("oat milk");
   });
 
+  test("[CAP-6][PLT-2] a job step re-run after a crash does not add its item again, even if someone renamed it in between", async () => {
+    const list = await freshList("Replay", []);
+    const first = await job("m-replay").addItem({ listId: list.id, text: "String", sourceMessage: "m-replay" });
+    expect(first.outcome).toBe(ListWriteOutcome.added);
+    await tom().renameItem({ id: first.item.id, text: "Garden twine" });
+    const replay = await job("m-replay").addItem({ listId: list.id, text: "String", sourceMessage: "m-replay" });
+    expect(replay).toMatchObject({ outcome: ListWriteOutcome.duplicate, item: { id: first.item.id, text: "Garden twine" } });
+    expect((await listNamed("Replay")).items.map((i) => i.text)).toEqual(["Garden twine"]);
+    // A different message asking for the same thing again is a new add.
+    expect((await job("m-later").addItem({ listId: list.id, text: "String", sourceMessage: "m-later" })).outcome).toBe(ListWriteOutcome.added);
+  });
+
   test("[PRV-1] a job can add an item, but never delete, rename, tick or untick one a person wrote, or change a list", async () => {
     const list = await freshList("Guarded", ["Batteries", "Tape"]);
     const [batteries, tape] = list.items;

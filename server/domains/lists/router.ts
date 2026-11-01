@@ -112,6 +112,11 @@ export function listsRouter(db: ListsDb) {
         const fromJob = job !== null;
         const list = await db.query.lists.findFirst({ where: eq(schema.lists.id, input.listId) });
         if (list === undefined) forbid(`no list ${input.listId}`);
+        // A job's step can run again after a crash; its own earlier add is found by key, renamed or not.
+        const sourceKey = job === null ? null : `${job.message}:${input.text.trim().toLowerCase()}`;
+        const byKey = () => (sourceKey === null ? Promise.resolve(undefined) : db.query.items.findFirst({ where: and(eq(schema.items.listId, list.id), eq(schema.items.sourceKey, sourceKey)) }));
+        const mine = await byKey();
+        if (mine !== undefined) return { outcome: ListWriteOutcome.duplicate, item: toItem(mine) };
         const existing = await duplicateOf(list.id, input.text, null);
         if (existing !== undefined) return { outcome: ListWriteOutcome.duplicate, item: toItem(existing) };
         const [last] = await db
@@ -128,6 +133,7 @@ export function listsRouter(db: ListsDb) {
               createdBy: author,
               source: fromJob ? ListItemSource.agent : ListItemSource.person,
               sourceMessage: fromJob ? input.sourceMessage : null,
+              sourceKey,
               createdAt: ctx.now,
             })
             .returning();
@@ -136,7 +142,7 @@ export function listsRouter(db: ListsDb) {
           return { outcome: ListWriteOutcome.added, item: toItem(row) };
         } catch (e) {
           if (!isUniqueViolation(e)) throw e;
-          const winner = await duplicateOf(list.id, input.text, null);
+          const winner = (await byKey()) ?? (await duplicateOf(list.id, input.text, null));
           if (winner === undefined) throw e;
           return { outcome: ListWriteOutcome.duplicate, item: toItem(winner) };
         }

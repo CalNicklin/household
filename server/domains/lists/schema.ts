@@ -26,6 +26,11 @@ export const items = pgTable(
     source: text("source", { enum: values(ListItemSource) }).notNull(),
     /** The message a job was handling when the house added it (PRV-1); null for the Lists screen and the import. */
     sourceMessage: text("source_message"),
+    /**
+     * PLT-2 / PRV-1: what a job added, as `<message>:<lower(trim(text))>`. A job step re-run after a crash
+     * finds its own item by this, even if a person has renamed it since; null for people and the import.
+     */
+    sourceKey: text("source_key"),
     createdAt: createdAt(),
   },
   (t) => [
@@ -33,6 +38,7 @@ export const items = pgTable(
     // this makes a duplicate impossible even when two phones add the same thing at the same moment.
     uniqueIndex("items_list_text_ci_uniq").on(t.listId, sql`lower(btrim(${t.text}))`),
     index("items_created_by_idx").on(t.createdBy),
+    uniqueIndex("items_list_source_key_uniq").on(t.listId, t.sourceKey),
   ],
 );
 
