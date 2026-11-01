@@ -43,7 +43,7 @@ export type ComposeInput = {
   /** Day parts in which a subject's suggestions are not offered (LRN-5). */
   avoid: ReadonlySet<string>;
   otherAdult: (person: string) => string | null;
-  /** HOU-149: how much the house has in it, for the first-day blocks; null where they don't apply (Week). */
+  /** HOU-149: how much the house has in it, for the first-day blocks; null for Week's unsaved days (Week hides them anyway). */
   fill: HouseFill | null;
 };
 
