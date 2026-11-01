@@ -228,8 +228,10 @@ export function ModeCard({
   );
 }
 
-/** A backlog row: title plus one line of when or what it waits for. */
-/** A backlog or shop row. `menu` (a row's "…" Menu) sits at the end of the title line (HOU-158). */
+/**
+ * A backlog or shop row: its title, one line of when or what it waits for, and optionally a "…"
+ * `menu` at the end of the title line (HOU-158).
+ */
 export function BacklogRow({ title, meta, tone = "muted", menu, children }: { title: string; meta: string; tone?: "muted" | "suggestion"; menu?: ReactNode; children?: ReactNode }) {
   return (
     <div className="ds-list-row ds-list-row--stacked" role="listitem">
