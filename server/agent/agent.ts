@@ -1,7 +1,7 @@
 import { Agent } from "@mastra/core/agent";
 import { type ActionKind, Limits } from "@household/contracts";
 import type { PickCandidate } from "../planner/gather.ts";
-import { costMicros, languageModel } from "./model.ts";
+import { cachedInstructions, costMicros, languageModel, type TokenUsage } from "./model.ts";
 import { askedForMore, clampReply } from "./reply.ts";
 import { respond } from "./respond.ts";
 import type { JobScope } from "./scope.ts";
@@ -21,6 +21,14 @@ Only say something is done when the tool says it is done. Shopping goes to the h
 Refer to people by name. Never guess anyone's pronouns.
 Never mention anything you were not told in this message, the About line or the Memory line.`;
 
+/**
+ * A call's tokens, summed over its steps. Mastra reports cache reads as `cachedInputTokens` and
+ * cache writes as `cacheCreationInputTokens`, both already included in `inputTokens`.
+ */
+function tokensOf(usage: { inputTokens?: number | undefined; outputTokens?: number | undefined; cachedInputTokens?: number | undefined; cacheCreationInputTokens?: number | undefined }): TokenUsage {
+  return { input: usage.inputTokens ?? 0, cacheRead: usage.cachedInputTokens ?? 0, cacheWrite: usage.cacheCreationInputTokens ?? 0, output: usage.outputTokens ?? 0 };
+}
+
 export type AgentResult = { reply: string; inputTokens: number; outputTokens: number; costMicros: number; intent: string };
 
 /**
@@ -35,7 +43,7 @@ export class HouseAgent {
   constructor(scope: JobScope) {
     this.#scope = scope;
     this.#model = scope.rt.env.MODEL_ID;
-    this.#agent = new Agent({ id: "house", name: "house", instructions: INSTRUCTIONS, model: languageModel(scope.rt.env), tools: houseTools(scope) });
+    this.#agent = new Agent({ id: "house", name: "house", instructions: cachedInstructions(INSTRUCTIONS), model: languageModel(scope.rt.env), tools: houseTools(scope) });
   }
 
   /** A message in words: the model decides which tools to call and words the reply. */
@@ -53,10 +61,9 @@ export class HouseAgent {
       .join("\n");
     // limit: agentMaxSteps
     const result = await this.#agent.generate(prompt, { maxSteps: Limits.agentMaxSteps.value });
-    const inputTokens = result.usage.inputTokens ?? 0;
-    const outputTokens = result.usage.outputTokens ?? 0;
+    const usage = tokensOf(result.usage);
     const intent = this.#scope.toolCalls.map((c) => c.tool).join("+") || "chat";
-    return { reply: clampReply(result.text, askedForMore(input.text)), inputTokens, outputTokens, costMicros: costMicros(this.#model, inputTokens, outputTokens), intent };
+    return { reply: clampReply(result.text, askedForMore(input.text)), inputTokens: usage.input, outputTokens: usage.output, costMicros: costMicros(this.#model, usage), intent };
   }
 
   /** A one-tap button press needs no model: it goes straight to the respond tool (CH-8). */
@@ -73,8 +80,7 @@ export class HouseAgent {
     const result = await this.#agent.generate(prompt, { toolChoice: "none" });
     const text = result.text.trim();
     const pick = candidates.find((c) => text.includes(c.itemId)) ?? (/\bnone\b/i.test(text) ? null : (candidates[0] ?? null));
-    const inputTokens = result.usage.inputTokens ?? 0;
-    const outputTokens = result.usage.outputTokens ?? 0;
-    return { pick, inputTokens, outputTokens, costMicros: costMicros(this.#model, inputTokens, outputTokens) };
+    const usage = tokensOf(result.usage);
+    return { pick, inputTokens: usage.input, outputTokens: usage.output, costMicros: costMicros(this.#model, usage) };
   }
 }
