@@ -1,8 +1,8 @@
-import { ActionKind, type BacklogItem, BacklogStatus, BacklogTag, BlockType, type LocalDate, NotificationStatus, type NotifyAction } from "@household/contracts";
+import { ActionKind, type BacklogItem, BacklogStatus, BacklogTag, BlockType, Limits, type LocalDate, NotificationStatus, type NotifyAction } from "@household/contracts";
 import { findSlot, partOfDay } from "../rules/fit.ts";
 import { adultsOf, type HouseFacts, nameOf } from "../rules/day.ts";
 import type { Runtime } from "../runtime.ts";
-import { addLocalDays, atLocal, daysBetween, localDate, shortWeekday, startOfLocalDay } from "../time.ts";
+import { addLocalDays, atLocal, daysBetween, localDate, localHour, shortWeekday, startOfLocalDay } from "../time.ts";
 import type { BacklogPick, OneThing } from "./compose.ts";
 import { type HouseFill, START_REF_PREFIX } from "./first-day.ts";
 
@@ -105,14 +105,19 @@ export async function oneThingCandidates(rt: Runtime, facts: HouseFacts, date: L
     if (b.type === BlockType.suggestion) out.push({ ref: b.ref, title: b.title, why: b.reason, actions: withHandOver(b.ref, b.actions) });
   }
   // HOU-149: a thin house still gets one answer — the oldest small job that needs nothing it can't check.
-  const small = out.length === 0 ? oldestSmall(items) : undefined;
+  // Not in the house's quiet hours (PRO-7's defaults): nobody should be told to ring someone at 11pm.
+  const hour = localHour(now, rt.timeZone);
+  // limit: defaultQuietStartHour
+  // limit: defaultQuietEndHour
+  const quiet = hour >= Limits.defaultQuietStartHour.value || hour < Limits.defaultQuietEndHour.value;
+  const small = out.length === 0 && !quiet ? oldestSmall(items) : undefined;
   if (small !== undefined) {
     const ref = `backlog:${small.id}`;
     const age = daysBetween(localDate(new Date(small.createdAt), rt.timeZone), date);
     out.push({
       ref,
       title: small.text,
-      why: `It's the oldest quick job on the backlog (${age <= 0 ? "added today" : age === 1 ? "added yesterday" : `added ${age} days ago`}) and takes about fifteen minutes.`,
+      why: `Of the quick jobs that need no weather, daylight or anyone else, it's the oldest (${age <= 0 ? "added today" : age === 1 ? "added yesterday" : `added ${age} days ago`}). About fifteen minutes.`,
       actions: withHandOver(ref, [
         { kind: ActionKind.done, label: "Done", ref },
         { kind: ActionKind.notToday, label: "Not today", ref },

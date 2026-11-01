@@ -99,7 +99,7 @@ describe("a new or quiet house", () => {
     expect(reply).toMatch(/^Ring the dentist\. /);
     const [latest] = await conversationView(h.rt, "priya");
     expect(latest?.pick?.title).toBe("Ring the dentist");
-    expect(latest?.pick?.why).toMatch(/oldest quick job|fifteen minutes/);
+    expect(latest?.pick?.why).toMatch(/oldest|fifteen minutes/);
   });
 
   test("[HOME-3] (HOU-149) saying a job redraws today at once, so 'the backlog is empty' is never left up", async () => {
