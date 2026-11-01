@@ -55,7 +55,7 @@ export async function setUpHouse(env: Env, house: HouseSetup): Promise<{ usernam
   const dbs = connectAll(env);
   try {
     return await dbs.household.transaction(async (tx) => {
-      await tx.insert(H.settings).values({ household: env.HOUSEHOLD_ID, name: house.name, timezone: house.timezone, latitude: house.latitude, longitude: house.longitude, retainMessages: true });
+      await tx.insert(H.settings).values({ household: env.HOUSEHOLD_ID, name: house.name, timezone: house.timezone, latitude: house.latitude, longitude: house.longitude, retainMessages: true, healthOwner: house.healthOwner ?? null });
       await tx.insert(H.people).values([
         ...house.adults.map((a) => ({ id: a.id, name: a.name, role: PersonRole.adult, nurseryDays: [] })),
         ...house.children.map((c) => ({ id: c.id, name: c.name, role: PersonRole.child, nurseryDays: c.nurseryDays })),

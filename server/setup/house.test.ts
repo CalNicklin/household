@@ -1,5 +1,6 @@
 import { randomBytes } from "node:crypto";
 import { Client } from "pg";
+import { zHouseSetup } from "@household/contracts";
 import { describe, expect, inject, it } from "vitest";
 import { practicePorts } from "../../practice/fakes.ts";
 import { migrateAll } from "../../practice/seed.ts";
@@ -18,9 +19,16 @@ const house = {
     { id: "alex", name: "Alex" },
   ],
   children: [{ id: "kit", name: "Kit", nurseryDays: ["mon" as const] }],
+  healthOwner: "alex",
 };
 
 describe("setting up the real house", () => {
+  it("[PRV-2] names at most one health owner, and only one of the adults", () => {
+    expect(zHouseSetup.safeParse(house).success).toBe(true);
+    expect(zHouseSetup.safeParse({ ...house, healthOwner: "kit" }).success).toBe(false);
+    expect(zHouseSetup.parse({ ...house, healthOwner: undefined }).healthOwner).toBeUndefined();
+  });
+
   it("[PLT-8] writes the house and its adults once, with generated logins that work, and changes nothing the second time", async () => {
     const url = inject("databaseUrl");
     const prefix = `s${inject("runId")}${randomBytes(3).toString("hex")}`;
@@ -43,7 +51,7 @@ describe("setting up the real house", () => {
       const rt = await createRuntime(env, practicePorts());
       try {
         const api = rt.system("test");
-        expect((await api.household.settings()).name).toBe("Home");
+        expect(await api.household.settings()).toMatchObject({ name: "Home", healthOwner: "alex" });
         expect((await api.household.adults()).map((p) => p.id).sort()).toEqual(["alex", "sam"]);
         expect(await api.household.resolveIdentity({ channel: "email", address: "sam@example.com" })).toBe("sam");
         expect(await api.household.resolveIdentity({ channel: "telegram", address: "42" })).toBe("sam");

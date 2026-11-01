@@ -149,7 +149,8 @@ on the server, describe the house (no secrets in it):
     { "id": "cal", "name": "Cal", "email": "cal@example.com", "telegram": "123456789" },
     { "id": "chloe", "name": "Chloe", "email": "chloe@example.com" }
   ],
-  "children": [{ "id": "kid", "name": "Kid", "nurseryDays": ["mon", "tue"] }]
+  "children": [{ "id": "kid", "name": "Kid", "nurseryDays": ["mon", "tue"] }],
+  "healthOwner": "chloe"
 }
 ```
 
@@ -157,6 +158,7 @@ on the server, describe the house (no secrets in it):
 sudo household-setup < house.json
 ```
 
+`healthOwner` is the one adult whose health tracking may exist (PRV-2). Leave it out and nobody's does.
 It prints each adult's app login once (username and a generated password): put them in the password
 manager. Then fill in the credentials `.env` still lacks (`sudo nano /srv/household/.env`:
 `ANTHROPIC_API_KEY`, `TELEGRAM_BOT_TOKEN`, the Google settings; see `.env.example`). Redeploy what's running with

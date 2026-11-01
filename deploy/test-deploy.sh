@@ -1,11 +1,19 @@
 #!/usr/bin/env bash
 # PLT-8: run the real household-deploy (and household-setup, -backup, -restore) against local Docker,
 # the way the VPS runs them, with a local registry standing in for GHCR. Needs Docker and ports 80, 443
-# and 5000 free; leaves nothing behind.
+# and 5000 free, and no `household` compose project on this machine (it would be the same project: it
+# refuses rather than touch one); leaves nothing behind.
 #   docker build -t household:local . && deploy/test-deploy.sh household:local
 set -euo pipefail
 local_image="${1:?usage: deploy/test-deploy.sh <locally built household image>}"
 repo="$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)"
+# The production project is named `household`, like the dev stack in docker-compose.yml. Its containers
+# and volumes are only ever ours to remove when this run made them.
+existing="$(docker ps -aq --filter label=com.docker.compose.project=household; docker volume ls -q --filter label=com.docker.compose.project=household)"
+if [ -n "$existing" ] || docker volume inspect household_objects > /dev/null 2>&1; then
+  echo "a household compose project (containers or volumes) already exists here; take it down first (docker compose down), or run this on another machine. Nothing was touched." >&2
+  exit 1
+fi
 work="$(mktemp -d)"
 export HOUSEHOLD_CONF="$work/household.conf"
 cleanup() {

@@ -344,5 +344,7 @@ export const zHouseSetup = z.object({
   longitude: z.number(),
   adults: z.array(z.object({ id: z.string().regex(/^[a-z][a-z0-9-]*$/), name: z.string().min(1), email: z.email().optional(), telegram: z.string().regex(/^\d+$/).optional() })).min(1),
   children: z.array(z.object({ id: z.string().regex(/^[a-z][a-z0-9-]*$/), name: z.string().min(1), nurseryDays: z.array(zWeekday) })).default([]),
-});
+  /** PRV-2: the one adult whose health tracking may exist at all (her own yes); omitted, nobody's does. */
+  healthOwner: z.string().optional(),
+}).refine((h) => h.healthOwner === undefined || h.adults.some((a) => a.id === h.healthOwner), { message: "healthOwner must be one of the adults", path: ["healthOwner"] });
 export type HouseSetup = z.infer<typeof zHouseSetup>;
