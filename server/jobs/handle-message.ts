@@ -98,7 +98,7 @@ async function handleMessageImpl(messageId: string): Promise<void> {
       // HOU-149: the first sync connects the calendar, which today's "Getting started" cards talk about.
       if (changed.firstSync && !effects.replan.includes(today)) effects.replan.unshift(today);
       usage = await applyEffects(jobId, effects, null);
-      toolCalls = [{ tool: "calendar-sync", input: {}, output: changed }];
+      toolCalls = [{ tool: "calendar-sync", input: {}, output: { changedDates: changed.changedDates } }];
     } else {
       const step = await DBOS.runStep(() => agentStep(jobId, messageId, meta), { name: "agent" });
       intent = step.intent;
