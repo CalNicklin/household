@@ -12,7 +12,14 @@ if (env.PRACTICE) {
 const clock = { now: () => new Date() };
 const rt = await createRuntime(env, realPorts(env, clock, { timeZone: "Europe/London", personForEmail: () => null }).ports);
 try {
-  process.exitCode = await googleCheck({ env, clock, watch: () => rt.system("household-google check").calendar.watch(), out: (line) => console.log(line) });
+  const api = rt.system("household-google check");
+  process.exitCode = await googleCheck({
+    env,
+    clock,
+    watches: () => api.calendar.watches(),
+    people: async () => (await api.household.adults()).map((p) => ({ id: p.id, name: p.name })),
+    out: (line) => console.log(line),
+  });
 } finally {
   await rt.close();
 }

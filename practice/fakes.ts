@@ -1,5 +1,6 @@
 import type { LocalDate, ProductOption } from "@household/contracts";
 import type {
+  CalendarChanges,
   CalendarSource,
   Clock,
   EpisodicMemory,
@@ -15,7 +16,7 @@ import type {
   Transcriber,
   WeatherSource,
 } from "../server/ports.ts";
-import { calendar, PRACTICE_START, supermarket, weather } from "./data.ts";
+import { calendar, calendars, PRACTICE_START, type PracticeEvent, supermarket, weather } from "./data.ts";
 
 /** Runs in real time from a settable starting point, or frozen for unit tests. */
 export class PracticeClock implements Clock {
@@ -37,8 +38,34 @@ export class PracticeClock implements Clock {
   }
 }
 
-/** A Google Calendar stand-in: edits bump a version, `changes` returns what changed since a token. */
+/** One practice calendar's copy of an event, as the house stores it (practice/seed.ts writes the same). */
+export function practiceCopy(e: PracticeEvent): ExternalEvent {
+  const owner = e.calendar ?? "shared";
+  const calendarId = calendars.find((c) => c.owner === owner)?.calendarId;
+  if (calendarId === undefined) throw new Error(`no practice calendar for ${owner}`);
+  return {
+    externalId: `${calendarId}/${e.externalId}`,
+    calendarId,
+    owner,
+    uid: e.uid ?? null,
+    busy: false,
+    title: e.title,
+    start: e.start,
+    end: e.end,
+    allDay: e.allDay ?? false,
+    attendees: e.attendees,
+    away: e.away ?? [],
+    work: e.work ?? false,
+    soloWithKids: e.soloWithKids ?? null,
+  };
+}
+
+/**
+ * Google Calendar stand-in for the practice household's calendars (Priya's, Tom's and the shared
+ * one): edits bump a version, `changes` returns what changed on each calendar since its token.
+ */
 export class PracticeCalendar implements CalendarSource {
+  readonly calendars = calendars;
   #events = new Map<string, { event: ExternalEvent; version: number; deleted: boolean }>();
   #version = 0;
   constructor() {
@@ -51,28 +78,32 @@ export class PracticeCalendar implements CalendarSource {
   }
   reset(): void {
     this.clear();
-    for (const e of calendar) this.upsert({ externalId: e.externalId, title: e.title, start: e.start, end: e.end, attendees: e.attendees, soloWithKids: e.soloWithKids ?? null, away: e.away ?? [], work: e.work ?? false, allDay: e.allDay ?? false });
+    for (const e of calendar) this.upsert(e);
   }
-  upsert(event: ExternalEvent): void {
+  /** Add or change one calendar's copy (the shared calendar's unless `calendar` names a person). */
+  upsert(event: PracticeEvent): void {
+    const copy = practiceCopy(event);
     this.#version += 1;
-    this.#events.set(event.externalId, { event, version: this.#version, deleted: false });
+    this.#events.set(copy.externalId, { event: copy, version: this.#version, deleted: false });
   }
+  /** Delete a Google event: its copy on every calendar. */
   remove(externalId: string): void {
-    const existing = this.#events.get(externalId);
-    if (existing === undefined) return;
-    this.#version += 1;
-    this.#events.set(externalId, { ...existing, version: this.#version, deleted: true });
+    for (const [key, existing] of this.#events) {
+      if (!key.endsWith(`/${externalId}`) || existing.deleted) continue;
+      this.#version += 1;
+      this.#events.set(key, { ...existing, version: this.#version, deleted: true });
+    }
   }
   list(): ExternalEvent[] {
     return [...this.#events.values()].filter((e) => !e.deleted).map((e) => e.event);
   }
-  async changes(syncToken: string | null) {
-    const since = syncToken === null ? 0 : Number(syncToken);
-    const changed = [...this.#events.values()].filter((e) => e.version > since);
+  async changes(syncTokens: Readonly<Record<string, string>>): Promise<CalendarChanges> {
+    const changed = [...this.#events.values()].filter((e) => e.version > Number(syncTokens[e.event.calendarId] ?? 0));
     return {
       upserts: changed.filter((e) => !e.deleted).map((e) => e.event),
       deletedExternalIds: changed.filter((e) => e.deleted).map((e) => e.event.externalId),
-      nextSyncToken: String(this.#version),
+      nextSyncTokens: Object.fromEntries(this.calendars.map((c) => [c.calendarId, String(this.#version)])),
+      sharedRead: true,
     };
   }
 }

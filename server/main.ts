@@ -4,7 +4,7 @@ import { practicePorts } from "../practice/fakes.ts";
 import { migrateAll, seedPractice } from "../practice/seed.ts";
 import { loadAdapters } from "./adapters/registry.ts";
 import { acceptTimer } from "./coordinator/accept.ts";
-import { loadEnvOrExit, modelStatus } from "./env.ts";
+import { houseCalendars, loadEnvOrExit, modelStatus, unknownCalendarOwners } from "./env.ts";
 import { createApp } from "./http/app.ts";
 import { practiceRoutes } from "./http/practice.ts";
 import { realPorts } from "./integrations/index.ts";
@@ -46,6 +46,9 @@ async function main(): Promise<void> {
   const rt = await createRuntime(env, ports);
   for (const a of await rt.system("boot").household.adults())
     if (a.role === PersonRole.adult) for (const addr of await rt.system("boot").household.addressesFor({ person: a.id })) if (addr.channel === Channel.email) emails.set(addr.address.toLowerCase(), a.id);
+  // HOME-1: an owner that isn't anyone in the house (a typo) would attribute their events to nobody.
+  const strangers = unknownCalendarOwners(houseCalendars(env), (await rt.system("boot").household.adults()).map((p) => p.id));
+  if (strangers.length > 0) console.warn(JSON.stringify({ event: "calendar-owner-unknown", owners: strangers, fix: "use a person's ID or `shared` in GOOGLE_CALENDARS" }));
   const adapters = await loadAdapters();
   await launchJobs(rt);
   for (const a of adapters) await a.start?.(rt);
