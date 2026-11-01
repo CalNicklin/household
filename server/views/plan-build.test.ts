@@ -79,6 +79,7 @@ describe("a deploy shows on the next reload (HOU-154)", () => {
     const sw = await served.request("/sw.js");
     expect(sw.status).toBe(200);
     expect(sw.headers.get("cache-control")).toBe("no-cache");
+    expect(sw.headers.get("x-household-build")).toBe(id);
     expect(await sw.text()).toBe(`const BUILD = "${id}";`);
     const cookie = await loginCookie(served);
     const page = await served.request("/", { headers: { cookie } });

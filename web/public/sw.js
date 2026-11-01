@@ -23,11 +23,6 @@ self.addEventListener("activate", (event) => {
   );
 });
 
-// HOU-154: the page asks which build this worker is, to tell a new build from a first install.
-self.addEventListener("message", (event) => {
-  if (event.data === "build" && event.ports[0] !== undefined) event.ports[0].postMessage(BUILD);
-});
-
 async function networkFirst(request, cacheName) {
   const cache = await caches.open(cacheName);
   try {

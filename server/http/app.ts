@@ -120,7 +120,7 @@ export function createApp(rt: Runtime, adapters: Adapter[], extra?: (app: Hono<H
   app.get("/sw.js", (c) => {
     const file = path.join(dist, "sw.js");
     if (!existsSync(file)) return c.notFound();
-    return new Response(readFileSync(file, "utf8").replaceAll("__BUILD__", build), { headers: { "content-type": "text/javascript", "cache-control": "no-cache" } });
+    return new Response(readFileSync(file, "utf8").replaceAll("__BUILD__", build), { headers: { "content-type": "text/javascript", "cache-control": "no-cache", "x-household-build": build } });
   });
   app.get("*", (c) => {
     const file = path.join(dist, c.req.path);
