@@ -1,4 +1,4 @@
-import { type CalendarEvent, zCalendarEvent, zCalendarSyncInput, zCalendarSyncOutput, zDateRangeInput } from "@household/contracts";
+import { type CalendarEvent, type CalendarWatch, zCalendarEvent, zCalendarSyncInput, zCalendarSyncOutput, zCalendarWatch, zDateRangeInput } from "@household/contracts";
 import { and, desc, eq, gt, inArray, lt } from "drizzle-orm";
 import { z } from "zod";
 import type { DomainDb } from "../../db/index.ts";
@@ -38,6 +38,14 @@ export function calendarRouter(db: CalendarDb, timeZone: string) {
     between: readProcedure.input(zDateRangeInput).output(z.array(zCalendarEvent)).query(async ({ input }) =>
       (await db.select().from(schema.events).where(and(lt(schema.events.start, new Date(input.to)), gt(schema.events.end, new Date(input.from)))).orderBy(schema.events.start)).map(toEvent),
     ),
+    /** CH-6: the push channel in use (the newest opened), or null before the first one. */
+    watch: readProcedure.output(zCalendarWatch.nullable()).query(async (): Promise<CalendarWatch | null> => {
+      const w = await db.query.watches.findFirst({ orderBy: desc(schema.watches.openedAt) });
+      return w === undefined ? null : { channelId: w.channelId, resourceId: w.resourceId, address: w.address, expiresAt: iso(w.expiresAt), openedAt: iso(w.openedAt) };
+    }),
+    recordWatch: systemProcedure.input(zCalendarWatch).mutation(async ({ input }) => {
+      await db.insert(schema.watches).values({ ...input, expiresAt: new Date(input.expiresAt), openedAt: new Date(input.openedAt) });
+    }),
     syncToken: readProcedure.output(z.string().nullable()).query(async () => (await db.query.syncs.findFirst({ orderBy: desc(schema.syncs.at) }))?.syncToken ?? null),
 
     /** CH-6: apply a sync and report exactly which local days changed, so only those are re-planned. */

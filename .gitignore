@@ -16,3 +16,6 @@ backups
 .secrets
 # The CH-11 test (server/adapters/registry.test.ts) briefly copies server/adapters here while pnpm check runs.
 server/.adapters-copy-*
+# HOU-147: Google OAuth files on the laptop (pnpm google:connect); they go to the server, never into git.
+google.json
+client_secret_*.json

@@ -15,11 +15,12 @@
  * - cancelled events are reported as deleted.
  */
 import { z } from "zod";
-import type { CalendarSource, Clock, ExternalEvent } from "../ports.ts";
+import type { CalendarPush, CalendarSource, Clock, ExternalEvent } from "../ports.ts";
 import { startOfLocalDay } from "../time.ts";
 import { defaultFetch, expectOk, type Fetch, IntegrationError } from "./http.ts";
 
 export const GOOGLE_CALENDAR_SCOPE = "https://www.googleapis.com/auth/calendar.readonly";
+const CALENDAR_API = "https://www.googleapis.com/calendar/v3";
 
 const zDateTime = z.object({ dateTime: z.string().optional(), date: z.string().optional() });
 const zEvent = z.object({
@@ -59,7 +60,7 @@ export class GoogleCalendarSource implements CalendarSource {
   constructor(options: GoogleCalendarOptions) {
     this.#o = options;
     this.#fetch = options.fetch ?? defaultFetch;
-    this.#baseUrl = options.baseUrl ?? "https://www.googleapis.com/calendar/v3";
+    this.#baseUrl = options.baseUrl ?? CALENDAR_API;
   }
 
   async changes(syncToken: string | null): Promise<{ upserts: ExternalEvent[]; deletedExternalIds: string[]; nextSyncToken: string | null }> {
@@ -163,28 +164,59 @@ export function refreshingTokenProvider(options: { clientId: string; clientSecre
 }
 
 /**
- * CH-6: subscribe to push notifications for the calendar. This creates a notification channel, not
- * an event; Google then calls `webhookUrl` with `token` echoed in X-Goog-Channel-Token.
+ * CH-6: Google's push notifications for one calendar. `open` is `events.watch`, which creates a
+ * notification channel, not an event; Google then calls `address` with `token` echoed in
+ * X-Goog-Channel-Token. `close` is `channels.stop`. Neither can create, move or delete an event (PRV-1).
  */
-export async function createWatchChannel(options: {
-  calendarId: string;
-  webhookUrl: string;
-  token: string;
-  channelId: string;
-  getAccessToken: () => Promise<string>;
-  baseUrl?: string;
-  fetch?: Fetch;
-}): Promise<{ resourceId: string; expiration: string | null }> {
+export class GoogleCalendarPush implements CalendarPush {
+  readonly #o: { calendarId: string; getAccessToken: () => Promise<string>; baseUrl: string; fetch: Fetch };
+  constructor(options: { calendarId: string; getAccessToken: () => Promise<string>; baseUrl?: string; fetch?: Fetch }) {
+    this.#o = { calendarId: options.calendarId, getAccessToken: options.getAccessToken, baseUrl: options.baseUrl ?? CALENDAR_API, fetch: options.fetch ?? defaultFetch };
+  }
+
+  async open(channel: { id: string; address: string; token: string }): Promise<{ resourceId: string; expiresAt: string }> {
+    const response = await this.#post(`/calendars/${encodeURIComponent(this.#o.calendarId)}/events/watch`, { id: channel.id, type: "web_hook", address: channel.address, token: channel.token });
+    await expectOk(response, "Google Calendar events.watch");
+    // Google gives the expiry as milliseconds since the epoch, in a string.
+    const body = z.object({ resourceId: z.string(), expiration: z.string().regex(/^\d+$/) }).parse(await response.json());
+    return { resourceId: body.resourceId, expiresAt: new Date(Number(body.expiration)).toISOString() };
+  }
+
+  async close(channel: { id: string; resourceId: string }): Promise<void> {
+    await expectOk(await this.#post("/channels/stop", { id: channel.id, resourceId: channel.resourceId }), "Google Calendar channels.stop");
+  }
+
+  async #post(path: string, body: unknown): Promise<Response> {
+    return this.#o.fetch(`${this.#o.baseUrl}${path}`, {
+      method: "POST",
+      headers: { authorization: `Bearer ${await this.#o.getAccessToken()}`, "content-type": "application/json" },
+      body: JSON.stringify(body),
+    });
+  }
+}
+
+export type CalendarListEntry = { id: string; name: string; primary: boolean; accessRole: string };
+
+/** The calendars the token can see: names and IDs only, never events (for `household-google check`). */
+export async function listCalendars(options: { getAccessToken: () => Promise<string>; baseUrl?: string; fetch?: Fetch }): Promise<CalendarListEntry[]> {
   const doFetch = options.fetch ?? defaultFetch;
-  const url = `${options.baseUrl ?? "https://www.googleapis.com/calendar/v3"}/calendars/${encodeURIComponent(options.calendarId)}/events/watch`;
-  const response = await doFetch(url, {
-    method: "POST",
-    headers: { authorization: `Bearer ${await options.getAccessToken()}`, "content-type": "application/json" },
-    body: JSON.stringify({ id: options.channelId, type: "web_hook", address: options.webhookUrl, token: options.token }),
+  const zPage = z.object({
+    items: z.array(z.object({ id: z.string(), summary: z.string().optional(), summaryOverride: z.string().optional(), primary: z.boolean().optional(), accessRole: z.string() })).optional(),
+    nextPageToken: z.string().optional(),
   });
-  await expectOk(response, "Google Calendar events.watch");
-  const body = z.object({ resourceId: z.string(), expiration: z.string().optional() }).parse(await response.json());
-  return { resourceId: body.resourceId, expiration: body.expiration ?? null };
+  const out: CalendarListEntry[] = [];
+  let pageToken: string | undefined;
+  do {
+    const url = new URL(`${options.baseUrl ?? CALENDAR_API}/users/me/calendarList`);
+    url.searchParams.set("fields", "items(id,summary,summaryOverride,primary,accessRole),nextPageToken");
+    if (pageToken !== undefined) url.searchParams.set("pageToken", pageToken);
+    const response = await doFetch(url.toString(), { method: "GET", headers: { authorization: `Bearer ${await options.getAccessToken()}` } });
+    await expectOk(response, "Google Calendar calendarList.list");
+    const page = zPage.parse(await response.json());
+    for (const c of page.items ?? []) out.push({ id: c.id, name: c.summaryOverride ?? c.summary ?? c.id, primary: c.primary ?? false, accessRole: c.accessRole });
+    pageToken = page.nextPageToken;
+  } while (pageToken !== undefined);
+  return out;
 }
 
 export type CalendarNotification = { channelId: string; token: string | null; state: string; messageNumber: string };

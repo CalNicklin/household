@@ -28,3 +28,13 @@ export const eventsRelations = relations(events, ({ one }) => ({
   sync: one(syncs, { fields: [events.syncId], references: [syncs.id] }),
 }));
 export const syncsRelations = relations(syncs, ({ many }) => ({ events: many(events) }));
+
+/** CH-6: every Google push channel the house has opened; the newest is the one in use. Not an event (PRV-1). */
+export const watches = pgTable("watches", {
+  id: id(),
+  channelId: text("channel_id").notNull().unique(),
+  resourceId: text("resource_id").notNull(),
+  address: text("address").notNull(),
+  expiresAt: at("expires_at").notNull(),
+  openedAt: at("opened_at").notNull(),
+});
