@@ -17,6 +17,13 @@ async function sitterBooked(input: { sitter: string; when: string }) {
   return { output: await execute(input, {}), scope };
 }
 
+async function shop(items: string[]) {
+  const scope = jobScope(h.rt, `job-shop-${items.join("-")}`, `msg-shop-${items.join("-")}`, "priya", "app");
+  const execute = houseTools(scope).shop.execute;
+  if (execute === undefined) throw new Error("shop has no execute");
+  return { output: await execute({ items }, {}), scope };
+}
+
 describe("PRO-2 through the real tool", () => {
   test("[PRO-2] 'Tuesday 3 November' (what the real model sent for \"Jess's doing Tuesday\") books Tuesday and clears Tuesday's warning", async () => {
     const { output, scope } = await sitterBooked({ sitter: "Jess", when: "Tuesday 3 November" });
@@ -32,5 +39,29 @@ describe("PRO-2 through the real tool", () => {
     expect(output).toMatchObject({ booked: false, say: 'Which day is Marta doing? I couldn\'t tell from "next week sometime".' });
     expect((await h.rt.system("t").household.sitterBookings()).length).toBe(before);
     expect(scope.effects.closeRefs).toEqual([]);
+  });
+});
+
+describe("AUT-1 through the real tool", () => {
+  test("[AUT-1] the shop tool says the item will go in the next shop, never that it is already in the basket", async () => {
+    const { output, scope } = await shop(["bananas"]);
+    expect(output).toMatchObject({ added: false, say: "I'll put bananas in the next shop. The home screen will show which product once it's in." });
+    // The basket add happens afterwards, in the helper's own job.
+    expect(scope.effects.shopping).toHaveLength(1);
+    expect(scope.effects.shopping[0]?.sku).toBeNull();
+  });
+});
+
+describe("MOM-6 through the real tool", () => {
+  test("[MOM-6] handing something over names the person it went to and guesses no pronoun for them", async () => {
+    const item = (await h.rt.system("t").backlog.list())[0];
+    if (item === undefined) throw new Error("practice backlog is empty");
+    const scope = jobScope(h.rt, "job-hand-over", "msg-hand-over", "priya", "app");
+    const execute = houseTools(scope).hand_over.execute;
+    if (execute === undefined) throw new Error("hand_over has no execute");
+    const output = await execute({ ref: `backlog:${item.id}`, to: "Tom" }, {});
+    expect(output).toMatchObject({ say: "Okay, Tom has it now, with one message about it." });
+    expect(JSON.stringify(output)).not.toMatch(/\b(he|she|him|her|his|hers|they|them|their)\b/i);
+    expect(scope.effects.notify.map((n) => n.person)).toEqual(["tom"]);
   });
 });

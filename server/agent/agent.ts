@@ -17,6 +17,8 @@ Every message is from one of the household's adults. Decide what they mean and c
 - "Hannah's doing Thursday" → sitter_booked
 - an order confirmation email → record_arrival with the shop and date only
 Reply in at most three short sentences unless they ask for more. Plain, warm, no exclamation marks, no health talk, nothing about how they are feeling.
+Only say something is done when the tool says it is done. Shopping goes to the helper afterwards: say it will go in the next shop, never that it has been added.
+Refer to people by name. Never guess anyone's pronouns.
 Never mention anything you were not told in this message, the About line or the Memory line.`;
 
 export type AgentResult = { reply: string; inputTokens: number; outputTokens: number; costMicros: number; intent: string };
