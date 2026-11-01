@@ -32,7 +32,10 @@ export function practiceRoutes(rt: Runtime) {
       const ports = rt.ports;
       if (!(ports.clock instanceof PracticeClock)) return c.json({ error: "not the practice household" }, 400);
       ports.clock.set(body.at, true);
-      if (ports.calendar instanceof PracticeCalendar) ports.calendar.reset();
+      if (ports.calendar instanceof PracticeCalendar) {
+        if (body.empty) ports.calendar.clear();
+        else ports.calendar.reset();
+      }
       if (ports.messenger instanceof PracticeMessenger) ports.messenger.sent.length = 0;
       if (ports.memory instanceof InMemoryEpisodicMemory) ports.memory.banks.clear();
       await truncateAndSeed(rt.env, new Date(body.at), { empty: body.empty });
