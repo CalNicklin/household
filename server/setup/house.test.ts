@@ -1,11 +1,12 @@
 import { randomBytes } from "node:crypto";
+import { Client } from "pg";
 import { describe, expect, inject, it } from "vitest";
 import { practicePorts } from "../../practice/fakes.ts";
 import { migrateAll } from "../../practice/seed.ts";
 import { dropDatabases } from "../db/index.ts";
 import { loadEnv } from "../env.ts";
 import { createRuntime } from "../runtime.ts";
-import { setUpHouse } from "./house.ts";
+import { isHouseSetUp, setUpHouse } from "./house.ts";
 
 const house = {
   name: "Home",
@@ -25,7 +26,15 @@ describe("setting up the real house", () => {
     const prefix = `s${inject("runId")}${randomBytes(3).toString("hex")}`;
     const env = loadEnv({ DATABASE_URL: url, DB_PREFIX: prefix, HOUSEHOLD_ID: "home" });
     try {
+      // household-deploy asks with a new image before it is healthy: asking creates nothing.
+      expect(await isHouseSetUp(env)).toBe(false);
+      const client = new Client({ connectionString: url });
+      await client.connect();
+      const made = await client.query("select datname from pg_database where datname like $1", [`${prefix}\\_%`]);
+      await client.end();
+      expect(made.rows).toEqual([]);
       await migrateAll(env);
+      expect(await isHouseSetUp(env)).toBe(false);
       const logins = await setUpHouse(env, house);
       expect(logins?.map((l) => l.username)).toEqual(["sam", "alex"]);
       expect(new Set(logins?.map((l) => l.password)).size).toBe(2);

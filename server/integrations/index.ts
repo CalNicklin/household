@@ -64,7 +64,8 @@ export type RealPortsOptions = {
 
 /**
  * The real house runs without the helper until it has a home machine (Waitrose blocks data-centre
- * addresses): shopping requests are recorded and fail with a reason, never added to a practice basket.
+ * addresses): each shopping request is recorded and fails at once with that reason ("nothing was added"),
+ * never added to a practice basket; nothing retries it.
  */
 function shoppingPort(env: Env, helper: ShoppingHelper | undefined, missing: string[]): ShoppingHelper {
   if (helper !== undefined) return helper;
@@ -72,7 +73,7 @@ function shoppingPort(env: Env, helper: ShoppingHelper | undefined, missing: str
     missing.push("shopping");
     return new PracticeShoppingHelper();
   }
-  missing.push("shopping (no helper: requests wait)");
+  missing.push("shopping (no helper: nothing is added)");
   return new NoShoppingHelper();
 }
 

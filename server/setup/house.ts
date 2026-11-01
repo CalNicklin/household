@@ -1,5 +1,6 @@
 import { randomBytes } from "node:crypto";
 import { Channel, DeliveryChannel, type HouseSetup, Limits, PersonRole, Urgency } from "@household/contracts";
+import { z } from "zod";
 import { closePool } from "../db/index.ts";
 import { hashPassword } from "../domains/household/router.ts";
 import type { Env } from "../env.ts";
@@ -21,11 +22,23 @@ export function personDefaults() {
   };
 }
 
-/** Whether the house has been set up (the app refuses to start the real house until it has). */
+/** Postgres codes for "no such database" and "no such table": a house never migrated is not set up. */
+const NOT_THERE = new Set(["3D000", "42P01"]);
+const zPgError = z.object({ code: z.string().optional(), cause: z.object({ code: z.string().optional() }).optional() });
+
+/**
+ * Whether the house has been set up (the app refuses to start the real house until it has). Read-only:
+ * it creates and migrates nothing, so asking with a new image leaves the databases as they were.
+ */
 export async function isHouseSetUp(env: Env): Promise<boolean> {
   const dbs = connectAll(env);
   try {
     return (await dbs.household.query.settings.findFirst()) !== undefined;
+  } catch (e) {
+    const pg = zPgError.safeParse(e);
+    const code = pg.success ? (pg.data.cause?.code ?? pg.data.code) : undefined;
+    if (code !== undefined && NOT_THERE.has(code)) return false;
+    throw e;
   } finally {
     await Promise.all(Object.values(dbs).map((db) => closePool(db.$client)));
   }

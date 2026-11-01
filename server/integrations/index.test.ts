@@ -53,7 +53,7 @@ describe("real ports", () => {
     const real = { PRACTICE: "false", SESSION_SECRET: "s", STORAGE_KEY: "ab".repeat(32), TELEGRAM_WEBHOOK_SECRET: "t", EMAIL_WEBHOOK_SECRET: "e", CALENDAR_WEBHOOK_TOKEN: "c", MCP_TOKEN: "m", HELPER_TOKEN: "h" };
     const { ports, missing } = realPorts(loadEnv(real), clock, options);
     expect(ports.shopping).toBeInstanceOf(NoShoppingHelper);
-    expect(missing).toContain("shopping (no helper: requests wait)");
+    expect(missing).toContain("shopping (no helper: nothing is added)");
     const result = await ports.shopping.addItem("oat milk");
     expect(result.kind).toBe("failed");
     expect(result.kind === "failed" ? result.reason : "").toContain("not connected");

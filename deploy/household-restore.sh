@@ -5,4 +5,4 @@ source "$(dirname "$(readlink -f "$0")")/household-common.sh"
 image="$(deployed_image)"
 [ -n "$image" ] || { echo "deploy once first, so there is an app to restore into" >&2; exit 1; }
 export HOUSEHOLD_IMAGE="$image"
-COMPOSE="${HOUSEHOLD_COMPOSE[*]}" "$HOUSEHOLD_LIB/restore.sh" "${1:?usage: household-restore <backup directory>}"
+"$HOUSEHOLD_LIB/restore.sh" "${1:?usage: household-restore <backup directory>}"

@@ -17,7 +17,7 @@ const zService = z.looseObject({
   network_mode: z.string().optional(),
   volumes: z.array(z.string()).optional(),
 });
-const zCompose = z.looseObject({ name: z.string().optional(), services: z.record(z.string(), zService) });
+const zCompose = z.looseObject({ name: z.string().optional(), "x-memory": z.record(z.string(), z.string()).optional(), services: z.record(z.string(), zService) });
 
 const read = (file: string) => readFileSync(new URL(file, import.meta.url), "utf8");
 const main = zCompose.parse(parse(read("compose.yml"), { merge: true }));
@@ -49,9 +49,13 @@ describe("the production compose project", () => {
     }
     const total = services.reduce((sum, [, s]) => sum + megabytes(s.mem_limit ?? "0g"), 0);
     expect(total).toBeLessThanOrEqual(560);
-    // The caps are set in one place (x-memory) and only referred to by the services.
-    const lines = read("compose.yml").split("\n").filter((l) => /^\s+(mem_limit|memswap_limit):/.test(l));
-    for (const line of lines) expect(line, "a cap set outside x-memory").toMatch(/:\s+\*[a-z]+-memory$/);
+    // The caps are set in one place: change a value in x-memory and that service's cap changes with it.
+    const caps = main["x-memory"] ?? {};
+    expect(Object.keys(caps).sort()).toEqual(services.map(([name]) => name).sort());
+    const edited = zCompose.parse(parse(read("compose.yml").replace(/^(\s+app: &app-memory )\S+$/m, "$11g"), { merge: true }));
+    expect(edited.services["app"]?.mem_limit).toBe("1g");
+    expect(edited.services["app"]?.memswap_limit).toBe("1g");
+    for (const [name, s] of services) expect(s.mem_limit, `${name}'s cap is not its x-memory value`).toBe(caps[name]);
   });
 
   it("[PRV-6] opens only 80 and 443 to the internet; anything else would have to bind to localhost", () => {
@@ -74,14 +78,16 @@ describe("the production compose project", () => {
       expect(s.privileged ?? false).toBe(false);
       for (const v of s.volumes ?? []) expect(v, `${name} mounts the Docker socket`).not.toContain("docker.sock");
     }
-    expect(main.services["app"]?.image).toBe("${HOUSEHOLD_IMAGE:?household-deploy sets HOUSEHOLD_IMAGE}");
+    // The app runs whatever image household-deploy names, and compose refuses to start without one.
+    expect(main.services["app"]?.image).toMatch(/^\$\{HOUSEHOLD_IMAGE:\?.*\}$/);
     expect(main.services["app"]?.["environment"]).toMatchObject({ PRACTICE: "false", HELPER_URL: "" });
     expect(Object.keys(main.services)).not.toContain("helper");
   });
 
   it("[PLT-8] serves one domain, set in one place", () => {
-    expect(read("Caddyfile")).toContain("{$HOUSEHOLD_DOMAIN} {");
-    expect(main.services["caddy"]?.["environment"]).toMatchObject({ HOUSEHOLD_DOMAIN: expect.stringContaining("${HOUSEHOLD_DOMAIN:?") });
-    expect(main.services["app"]?.["environment"]).toMatchObject({ PUBLIC_URL: "https://${HOUSEHOLD_DOMAIN}" });
+    // Caddy serves the site named by HOUSEHOLD_DOMAIN, and the app's public URL is that same domain.
+    expect(read("Caddyfile")).toMatch(/^\{\$HOUSEHOLD_DOMAIN\}\s*\{/m);
+    expect(main.services["caddy"]?.["environment"]).toMatchObject({ HOUSEHOLD_DOMAIN: expect.stringMatching(/^\$\{HOUSEHOLD_DOMAIN[:?}]/) });
+    expect(main.services["app"]?.["environment"]).toMatchObject({ PUBLIC_URL: expect.stringMatching(/^https:\/\/\$\{HOUSEHOLD_DOMAIN\}$/) });
   });
 });

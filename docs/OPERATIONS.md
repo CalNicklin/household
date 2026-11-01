@@ -65,8 +65,9 @@ SeaweedFS and the app have no host ports. The server never builds anything; CI b
 pushes it to GHCR.
 
 - **Shopping helper:** not on the VPS (Waitrose blocks data-centre addresses); it will run at home. Until
-  then shopping requests are kept and show that nothing was added, and the app says
-  `shopping (no helper: requests wait)` at start.
+  then each shopping request is recorded and fails at once, showing that nothing was added (nothing
+  retries it later), and the app says
+  `shopping (no helper: nothing is added)` at start.
 - **Hindsight:** the existing instance, not a second copy. It publishes only on the host's 127.0.0.1:8888,
   which no container can reach, so the app joins Hindsight's own Docker network and calls
   `http://hindsight:8888`. `deploy/install.sh` finds that network (`docker inspect hindsight`) and writes
@@ -84,7 +85,10 @@ pushes it to GHCR.
   else. The compose file, Caddyfile and commands are the ones `install.sh` put on the server, so a push
   to `main` can change what runs inside the containers but not how they run. If the image's `deploy/`
   files differ, the deploy says so; re-run `install.sh` to take them. A deploy that doesn't come up
-  healthy rolls back to the previous image.
+  healthy rolls back to the previous image. Before then nothing in the databases changes: the setup
+  check reads only, and migrations run only when the new app starts. A rollback doesn't undo migrations
+  the new app already ran. If the old image can't run on the newer schema, restore last night's backup
+  (below) or deploy a fix.
 - **Secrets:** generated on the server into `/srv/household/.env` (root only, mode 600) by
   `pnpm env:init --real`, run by `install.sh`. GitHub holds only the SSH key, host and known_hosts. The
   job passes its own short-lived token on stdin so the server can pull a private image; the server

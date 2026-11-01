@@ -72,7 +72,7 @@ code="$(curl -s -o /dev/null -w '%{http_code}' http://localhost/healthz)"
 [ "$code" = 308 ] || fail "plain HTTP answered $code, not a redirect to HTTPS"
 login="$(curl -sk -D - -o /dev/null -H 'content-type: application/json' -d "{\"username\":\"sam\",\"password\":\"$password\"}" https://localhost/api/login)"
 grep -qi '^set-cookie: .*; Secure' <<< "$login" || fail "sam could not log in with the generated password over HTTPS"
-docker logs household-app-1 2>&1 | grep -q 'ports-missing-credentials.*shopping (no helper: requests wait)' || fail "the app did not say it runs without a helper"
+docker logs household-app-1 2>&1 | grep -q 'ports-missing-credentials.*shopping (no helper: nothing is added)' || fail "the app did not say it runs without a helper"
 echo "healthy behind Caddy; login works; no helper"
 
 step "a broken image never replaces a working one: household-deploy rolls back"
