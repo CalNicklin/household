@@ -6,7 +6,7 @@ import { blockingSeverities, ModelProvider, ReviewStage } from "@household/contr
 import { z } from "zod";
 import { languageModel } from "../server/agent/model.ts";
 import { commentableLines, diffBase, prDiff } from "./review/diff.ts";
-import { GitHub, publish, readPrior, type RunSummary } from "./review/github.ts";
+import { dollars, GitHub, publish, readPrior, type RunSummary, totalCost } from "./review/github.ts";
 import { DEFAULT_REVIEW_MODEL, GitTrees, reviewContext, runStage, stagePrompt, type StageResult, toStageAnswer, zModelAnswer } from "./review/model.ts";
 import { type Answers, merge, priorFor, zReviewState } from "./review/state.ts";
 
@@ -57,7 +57,7 @@ const zAnswersFile = z.object({
   prior: z.string(),
   base: z.string(),
   model: z.string(),
-  stages: z.array(z.object({ stage: z.enum(ReviewStage), answer: zModelAnswer, costMicros: z.number(), steps: z.number().int(), usage: z.object({ input: z.number(), cacheRead: z.number(), cacheWrite: z.number(), output: z.number() }) })),
+  stages: z.array(z.object({ stage: z.enum(ReviewStage), answer: zModelAnswer, costMicros: z.number().nullable(), steps: z.number().int(), usage: z.object({ input: z.number(), cacheRead: z.number(), cacheWrite: z.number(), output: z.number() }) })),
 });
 
 const zEvent = z.object({ pull_request: z.object({ title: z.string(), body: z.string().nullable() }) });
@@ -89,14 +89,14 @@ async function reviewCommand(): Promise<void> {
   const results: StageResult[] = [await first, ...(await rest)];
   const out = { sha: trees.head, base: trees.base, prior: digest(prior.state), model: modelId, stages: results.map(({ stage, answer, costMicros, steps, usage }) => ({ stage, answer, costMicros, steps, usage })) };
   writeFileSync(need("out"), JSON.stringify(out, null, 1));
-  const total = results.reduce((s, r) => s + r.costMicros, 0);
+  const total = totalCost(results);
   summary(
     [
-      `### Agent review cost: $${(total / 1_000_000).toFixed(4)} (${modelId})`,
+      `### Agent review cost: ${dollars(total, 4)} (${modelId})`,
       "",
       "| Stage | Steps | Input | Cache read | Cache write | Output | Cost |",
       "|---|---|---|---|---|---|---|",
-      ...results.map((r) => `| ${r.stage} | ${r.steps} | ${r.usage.input} | ${r.usage.cacheRead} | ${r.usage.cacheWrite} | ${r.usage.output} | $${(r.costMicros / 1_000_000).toFixed(4)} |`),
+      ...results.map((r) => `| ${r.stage} | ${r.steps} | ${r.usage.input} | ${r.usage.cacheRead} | ${r.usage.cacheWrite} | ${r.usage.output} | ${dollars(r.costMicros, 4)} |`),
     ].join("\n"),
   );
 }

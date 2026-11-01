@@ -190,7 +190,8 @@ export function reviewContext({ title, body, trees, diff }: ReviewInput): string
   ].join("\n");
 }
 
-export type StageResult = { stage: ReviewStage; answer: ModelAnswer; usage: TokenUsage; costMicros: number; steps: number; model: string };
+/** costMicros is null when the model has no known price (a $0 would read as free). */
+export type StageResult = { stage: ReviewStage; answer: ModelAnswer; usage: TokenUsage; costMicros: number | null; steps: number; model: string };
 
 const tokensOf = (u: { inputTokens: number | undefined; outputTokens: number | undefined; inputTokenDetails: { cacheReadTokens: number | undefined; cacheWriteTokens: number | undefined } }): TokenUsage => ({
   input: u.inputTokens ?? 0,
@@ -232,7 +233,8 @@ export async function runStage(opts: { stage: ReviewStage; model: LanguageModel;
   });
   if (result.finishReason !== "stop") throw new Error(`the ${stage} stage ended with "${result.finishReason}", not an answer`);
   const usage = tokensOf(result.totalUsage);
-  return { stage, answer: zModelAnswer.parse(result.output), usage, costMicros: costMicros(modelId, usage), steps: result.steps.length, model: modelId };
+  const cost = costMicros(modelId, usage);
+  return { stage, answer: zModelAnswer.parse(result.output), usage, costMicros: cost === 0 && usage.input + usage.output > 0 ? null : cost, steps: result.steps.length, model: modelId };
 }
 
 /** Drops findings the stage itself is unsure of (Entire's prompts: nothing below 0.5). */

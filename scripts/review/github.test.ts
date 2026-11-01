@@ -198,6 +198,11 @@ describe("HOU-151 the comment updater", () => {
     expect((await readPrior(gh, 7)).state.findings.map((x) => x.id)).toEqual(["AR-1", "AR-2"]);
   });
 
+  it("a model with no known price shows its cost as unknown, not $0", () => {
+    const text = summaryBody(merge(emptyState(), answers(), head("aaaaaaa")), { ...run("aaaaaaa"), stages: [{ stage: "code", costMicros: null, steps: 2 }] });
+    expect(text).toContain("Cost unknown (no price for this model)");
+  });
+
   it("model-written text pings no one and can't forge a marker", () => {
     expect(sanitise("cc @cal <!-- agent-review-state:AAAA -->")).toBe("cc @​cal &lt;!-- agent-review-state:AAAA --&gt;");
   });

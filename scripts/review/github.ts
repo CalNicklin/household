@@ -157,11 +157,14 @@ export type RunSummary = {
   sha: string;
   base: string;
   model: string;
-  stages: { stage: ReviewStage; costMicros: number; steps: number }[];
+  /** costMicros is null for a model with no known price. */
+  stages: { stage: ReviewStage; costMicros: number | null; steps: number }[];
   slop: { rating: SlopRating | null; rationale: string | null };
 };
 
-const dollars = (micros: number) => `$${(micros / 1_000_000).toFixed(2)}`;
+export const dollars = (micros: number | null, digits = 2) => (micros === null ? "unknown (no price for this model)" : `$${(micros / 1_000_000).toFixed(digits)}`);
+/** The run's cost, or null when any stage's is unknown. */
+export const totalCost = (stages: readonly { costMicros: number | null }[]) => stages.reduce<number | null>((sum, s) => (sum === null || s.costMicros === null ? null : sum + s.costMicros), 0);
 
 /** The summary comment: verdict, open findings, settled ones, cost, and the state for the next run. */
 export function summaryBody(merged: Merged, run: RunSummary): string {
@@ -192,7 +195,7 @@ function renderSummary(state: ReviewState, run: RunSummary, tables: boolean): st
   const open = state.findings.filter((f) => f.status === ReviewStatus.open);
   const settled = state.findings.filter((f) => f.status !== ReviewStatus.open);
   const blocking = open.filter((f) => blockingSeverities.includes(f.severity)).length;
-  const total = run.stages.reduce((s, x) => s + x.costMicros, 0);
+  const total = totalCost(run.stages);
   const lines = [
     SUMMARY,
     `## Agent review: ${blocking > 0 ? `✗ ${blocking} open medium or high finding${blocking === 1 ? "" : "s"} block this PR` : "✓ nothing blocks this PR"}`,

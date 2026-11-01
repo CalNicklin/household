@@ -5,6 +5,7 @@ import path from "node:path";
 import { ModelProvider, ReviewStage } from "@household/contracts";
 import { languageModel } from "../server/agent/model.ts";
 import { prDiff } from "./review/diff.ts";
+import { dollars, totalCost } from "./review/github.ts";
 import { DEFAULT_REVIEW_MODEL, GitTrees, reviewContext, runStage, stagePrompt, type StageResult, toStageAnswer } from "./review/model.ts";
 import { type Answers, emptyState, merge } from "./review/state.ts";
 
@@ -75,13 +76,13 @@ export function basketTotal(prices: readonly number[], percent: number): number 
   const answers: Answers = { code: toStageAnswer(code.answer), security: toStageAnswer(security.answer), slop: toStageAnswer(slop.answer) };
   const merged = merge(emptyState(), answers, { sha: head, read: (f) => trees.show("head", f), diff });
 
-  const total = results.reduce((s, r) => s + r.costMicros, 0);
+  const total = totalCost(results);
   for (const r of results) {
-    process.stdout.write(`\n## ${r.stage}: ${r.steps} steps, signal ${String(r.answer.signal)}, $${(r.costMicros / 1_000_000).toFixed(4)} (input ${r.usage.input}, cache read ${r.usage.cacheRead}, cache write ${r.usage.cacheWrite}, output ${r.usage.output})\n`);
+    process.stdout.write(`\n## ${r.stage}: ${r.steps} steps, signal ${String(r.answer.signal)}, ${dollars(r.costMicros, 4)} (input ${r.usage.input}, cache read ${r.usage.cacheRead}, cache write ${r.usage.cacheWrite}, output ${r.usage.output})\n`);
     if (r.answer.rating !== null) process.stdout.write(`rating ${r.answer.rating}: ${r.answer.rationale ?? ""}\n`);
     for (const f of r.answer.findings) process.stdout.write(`- [${f.severity}, ${f.confidence}] ${f.file}:${f.line ?? "-"} ${f.summary.split("\n")[0] ?? ""}\n`);
   }
-  process.stdout.write(`\ntotal $${(total / 1_000_000).toFixed(4)} in ${((Date.now() - started) / 1000).toFixed(0)}s; blocking: ${String(merged.blocking)}; open: ${merged.open.map((f) => `${f.id} ${f.stage} ${f.severity} ${f.file}:${f.line ?? "-"}`).join(", ")}\n`);
+  process.stdout.write(`\ntotal ${dollars(total, 4)} in ${((Date.now() - started) / 1000).toFixed(0)}s; blocking: ${String(merged.blocking)}; open: ${merged.open.map((f) => `${f.id} ${f.stage} ${f.severity} ${f.file}:${f.line ?? "-"}`).join(", ")}\n`);
 
   const bug = merged.open.find((f) => f.stage === ReviewStage.code && f.file === "src/discount.ts" && f.severity !== "low");
   if (bug === undefined || !merged.blocking) {
