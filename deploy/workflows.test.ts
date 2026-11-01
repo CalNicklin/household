@@ -56,7 +56,7 @@ describe("the deploy key", () => {
  * the Anthropic key, and it has no GitHub token; the job that writes comments holds no secret; nothing
  * from the PR's checkout runs, and the scripts and prompts come from the base.
  */
-const zStep = z.looseObject({ name: z.string().optional(), uses: z.string().optional(), run: z.string().optional(), with: z.record(z.string(), z.unknown()).optional(), env: z.record(z.string(), z.unknown()).optional(), "working-directory": z.string().optional() });
+const zStep = z.looseObject({ id: z.string().optional(), if: z.string().optional(), name: z.string().optional(), uses: z.string().optional(), run: z.string().optional(), with: z.record(z.string(), z.unknown()).optional(), env: z.record(z.string(), z.unknown()).optional(), "working-directory": z.string().optional() });
 const zJob = z.looseObject({ if: z.string(), permissions: z.record(z.string(), z.string()), "timeout-minutes": z.number(), steps: z.array(zStep) });
 const review = (() => {
   const w = workflows.find((x) => x.file === "agent-review.yml");
@@ -87,13 +87,16 @@ describe("HOU-151 the agent review workflow", () => {
     expect(review.text.match(/secrets\.\w+/g)?.sort()).toEqual(["secrets.REVIEW_ANTHROPIC_API_KEY", "secrets.REVIEW_ANTHROPIC_API_KEY"]);
   });
 
-  it("checks out the base's scripts at the root and the PR's head only into pr/, with no token left in either", () => {
+  it("checks out the base's scripts at the root (the PR's own only while the base has none) and the PR's head into pr/, with no token left", () => {
     for (const job of Object.values(review.jobs)) {
       const checkouts = job.steps.filter((s) => s.uses?.startsWith("actions/checkout@") === true);
-      expect(checkouts.map((s) => [s.with?.["ref"], s.with?.["path"] ?? "."])).toEqual([
-        ["${{ github.event.pull_request.base.sha }}", "."],
-        ["${{ github.event.pull_request.head.sha }}", "pr"],
+      expect(checkouts.map((s) => [s.with?.["ref"], s.with?.["path"] ?? ".", s["if"]])).toEqual([
+        ["${{ github.event.pull_request.base.sha }}", ".", expect.any(String)],
+        ["${{ github.event.pull_request.head.sha }}", ".", "steps.base.outputs.from == 'head'"],
+        ["${{ github.event.pull_request.head.sha }}", "pr", expect.any(String)],
       ]);
+      const decides = job.steps.find((s) => s.id === "base");
+      expect(decides?.run).toContain("if [ -f scripts/agent-review.ts ] && [ -f .github/review/code.md ]; then echo \"from=base\"");
       for (const c of checkouts) expect(c.with?.["persist-credentials"]).toBe(false);
       for (const s of job.steps) {
         expect(s["working-directory"]).toBeUndefined();

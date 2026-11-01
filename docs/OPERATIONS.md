@@ -509,7 +509,9 @@ left out) fails the review: split it.
 - **What runs:** the scripts and prompts come from a checkout of the PR's *base* commit, so a PR that
   changes them is still reviewed with `main`'s (the change takes effect once it is on `main`). The
   workflow file itself is the PR's own, though (GitHub runs a `pull_request` workflow from the PR), so a
-  PR that edits it can change its own review: see "Secret exposure" below. The PR's head is a second
+  PR that edits it can change its own review: see "Secret exposure" below. The one exception to the base
+  rule is the bootstrap: while the base has no review at all (only for the PR that added it), the PR's
+  own scripts and prompts run, with a notice saying so. The PR's head is a second
   checkout that is only read, through git (`git show`, `git grep`, `git diff`, `git log`): nothing in it
   is installed, built or run, and no symlink is followed. Neither checkout keeps a token in `.git`.
 - **Prompt injection:** the diff, the PR's title and description, and replies are untrusted data in user
