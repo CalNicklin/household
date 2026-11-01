@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 
-/** What makes this build behave as it does: the server, the contracts, the lockfile, and the built web app. */
+/** What makes this build behave as it does: the server, the contracts, the lockfile, and the built web app (not its tests). */
 const SOURCES = ["server", "contracts/src", "practice", "pnpm-lock.yaml"];
 
 function files(entry: string, out: string[]): void {
@@ -14,7 +14,7 @@ function files(entry: string, out: string[]): void {
     return;
   }
   for (const name of names.toSorted()) {
-    if (name === "node_modules" || name.startsWith(".")) continue;
+    if (name === "node_modules" || name.startsWith(".") || name === "testing" || /\.test\.tsx?$/.test(name)) continue;
     files(path.join(entry, name), out);
   }
 }
