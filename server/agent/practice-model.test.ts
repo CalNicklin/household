@@ -30,6 +30,14 @@ describe("HOU-148: the practice model routes the household's phrases the way a p
     expect((await toolsFor(text)).tools).toEqual(["shop"]);
   });
 
+  test.each(["get the car MOT booked", "buy a birthday present for Jess", "get the boiler looked at", "get the bins out"])("[CAP-1] a named thing after the verb is a job: %s", async (text) => {
+    expect((await toolsFor(text)).tools).toEqual(["capture"]);
+  });
+
+  test("[AUT-1] 'need new potatoes' is shopping", async () => {
+    expect(await toolsFor("need new potatoes")).toEqual({ tools: ["shop"], inputs: [{ items: ["new potatoes"] }] });
+  });
+
   test("[CAP-1] 'prioritise the boiler service' is a job to capture, not a question", async () => {
     expect((await toolsFor("prioritise the boiler service")).tools).toEqual(["capture"]);
   });

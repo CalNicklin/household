@@ -42,10 +42,15 @@ const cleanCapture = (text: string) =>
     .replace(/^./, (c) => c.toUpperCase());
 
 const SHOP_OUT = /\b(?:we(?:'re| are|'ve| have)?|i(?:'m| am)?)\s+(?:out of|running low on|low on|run out of|nearly out of)\s+(.+)$/i;
-const SHOP_NEED = /^(?:we )?(?:need|buy|get|grab|pick up)\s+(?:some |more )?(?!to\b)(.+?)(?:\s+from the (?:shop|supermarket))?$/i;
-// HOU-148: "get the printer working", "buy a new kettle" are jobs, not groceries: they are captured
-// whole, never split into shop items.
-const JOB = /\b(working|fixed|repaired|serviced|sorted|connected|set up|installed|replaced|new|done)\b/i;
+// HOU-148: "get the printer working", "buy a new kettle", "get the bins out" are jobs, not groceries:
+// a named thing ("the", "a", "my"…) after the verb is something to do, captured whole and never split
+// into shop items — unless it is a grocery quantity ("a loaf of bread", "a pint of milk").
+const QUANTITY = "(?:a|an)\\s+(?:loaf|pint|litre|dozen|bag|bottle|box|pack|packet|tin|jar|tub|carton|bunch)\\b";
+const SHOP_NEED = new RegExp(
+  `^(?:we )?(?:need|buy|get|grab|pick up)\\s+(?:some |more )?(?!to\\b)(?!(?!${QUANTITY})(?:the|a|an|my|our|your|his|her|their|this|that)\\b)(.+?)(?:\\s+from the (?:shop|supermarket))?$`,
+  "i",
+);
+const JOB = /\b(working|fixed|repaired|serviced|sorted|connected|set up|installed|replaced|done)\b/i;
 const SHOP_ADD = /\b(?:add|put)\s+(.+?)\s+(?:to|in|on)\s+the\s+(?:next\s+)?(?:shop|shopping|basket|order|ocado|supermarket)\b/i;
 const LIST_ADD = /\badd\s+(.+?)\s+to\s+(?:the\s+)?(.+?)\s+list\b/i;
 
