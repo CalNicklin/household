@@ -1,4 +1,4 @@
-import { AttachmentKind, Channel, zInboundEmail } from "@household/contracts";
+import { AttachmentKind, Channel, Limits, zInboundEmail } from "@household/contracts";
 import { accept, dropUnknown, identify } from "../../coordinator/accept.ts";
 import { looksLikeOrder } from "../../rules/orders.ts";
 import type { Runtime } from "../../runtime.ts";
@@ -36,7 +36,8 @@ export async function handleEmail(rt: Runtime, raw: unknown): Promise<EmailOutco
     person,
     channel: Channel.email,
     // One line: the agent prompt carries the message as a single `Message:` line.
-    text: `From: ${email.from} | Subject: ${email.subject} | ${email.text.replace(/\s*\n\s*/g, " ")}`,
+    // The whole line fits an inbound message (zInboundMessage), however long the email.
+    text: `From: ${email.from} | Subject: ${email.subject} | ${email.text.replace(/\s*\n\s*/g, " ")}`.slice(0, Limits.maxInboundTextChars.value),
     attachments: [{ kind: AttachmentKind.email, orderLike: true }],
     dedupeKey: `email:${email.messageId}`,
     receivedAt: rt.ports.clock.now().toISOString(),

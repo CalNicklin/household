@@ -1,3 +1,4 @@
+import { Limits } from "@household/contracts";
 import type { Hono } from "hono";
 import { afterAll, beforeAll, describe, expect, test } from "vitest";
 import type { TestHousehold } from "../../testing/household.ts";
@@ -75,6 +76,13 @@ describe("email adapter", () => {
     expect(await (await post(claimsPriya)).json()).toEqual({ outcome: "dropped" });
     expect(await messageByKey(h.rt, "email:<sf-spoof@screwfix.com>")).toBeNull();
     expect(await h.rt.system("test").jobs.dropped()).toContainEqual({ channel: "email", address: "mallory@evil.test", reason: "unknown sender" });
+  });
+
+  test("[CAP-9] an order email as long as an inbound message may be still becomes a job, From and Subject included", async () => {
+    const long = { ...screwfix, messageId: "<sf-long@screwfix.com>", text: `${screwfix.text}\n${"Terms and conditions apply. ".repeat(400)}`.slice(0, Limits.maxInboundTextChars.value) };
+    expect(await (await post(long)).json()).toEqual({ outcome: "accepted" });
+    const { job } = await jobForKey(h.rt, "email:<sf-long@screwfix.com>");
+    expect(job.status).toBe("succeeded");
   });
 
   test("[PRV-6] the email webhook rejects a missing or wrong secret", async () => {
