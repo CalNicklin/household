@@ -18,9 +18,9 @@ const STATUS_LINE: Record<ShoppingStatus, (r: ShoppingRequest) => string> = {
 };
 
 /** A request that went nowhere can be dismissed with one tap, no guilt (HOU-148). */
-const DISMISSABLE: ReadonlySet<ShoppingStatus> = new Set([ShoppingStatus.failed, ShoppingStatus.saved]);
+// HOU-158: the same requests can be deleted (failed or saved), from one list in contracts.
+const DISMISSABLE: ReadonlySet<ShoppingStatus> = new Set(DeletableShoppingStatuses);
 
-const DELETABLE: ReadonlySet<ShoppingStatus> = new Set(DeletableShoppingStatuses);
 const requestKey = (id: string) => `shopping:${id}`;
 
 /** HOU-158: "…" then Delete, with Undo, on a request that went nowhere. Only a person's tap (PRV-1). */
@@ -52,7 +52,7 @@ function Request({ request }: { request: ShoppingRequest }) {
       title={request.item}
       meta={STATUS_LINE[request.status](request)}
       tone={request.status === ShoppingStatus.added ? "suggestion" : "muted"}
-      {...(DELETABLE.has(request.status) ? { menu: <DeleteMenu request={request} /> } : {})}
+      {...(DISMISSABLE.has(request.status) ? { menu: <DeleteMenu request={request} /> } : {})}
     >
       {request.status === ShoppingStatus.needsChoice ? (
         <Row>

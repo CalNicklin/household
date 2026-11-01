@@ -96,8 +96,8 @@ describe("A person can delete, the house cannot", () => {
     expect(await offered()).not.toContain(id);
   });
 
-  test("[PRV-1][AUT-4] a shopping request the helper is still working on, or whose item is in the basket, cannot be deleted", async () => {
-    for (const status of [ShoppingStatus.queued, ShoppingStatus.needsChoice, ShoppingStatus.added]) {
+  test("[PRV-1][AUT-4] only a shopping request that went nowhere (failed or saved) can be deleted; one the helper is working on, or in the basket, cannot", async () => {
+    for (const status of [ShoppingStatus.queued, ShoppingStatus.needsChoice, ShoppingStatus.added, ShoppingStatus.dismissed]) {
       const request = await shoppingRequest(`Bread ${status}`, status);
       await expect(priya().shopping.remove({ id: request.id })).rejects.toThrow(/went nowhere/);
       expect(await system().shopping.get({ id: request.id })).not.toBeNull();

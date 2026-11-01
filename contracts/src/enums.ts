@@ -362,11 +362,12 @@ export type ShoppingStatus = ValueOf<typeof ShoppingStatus>;
 export const zShoppingStatus = z.enum(ShoppingStatus);
 
 /**
- * HOU-158: the shopping requests a person can delete — ones that went nowhere. One being looked for,
- * waiting on a choice or in the basket is still the helper's to finish, and what it added is how it
- * knows what it may remove (AUT-4), so those stay.
+ * HOU-158: the shopping requests a person can delete — ones that went nowhere, the same ones the Shop
+ * screen offers to dismiss. One being looked for, waiting on a choice or in the basket is still the
+ * helper's to finish, and what it added is how it knows what it may remove (AUT-4), so those stay. A
+ * dismissed one is no longer shown, so there is nothing to tap.
  */
-export const DeletableShoppingStatuses: readonly ShoppingStatus[] = [ShoppingStatus.failed, ShoppingStatus.saved, ShoppingStatus.dismissed];
+export const DeletableShoppingStatuses: readonly ShoppingStatus[] = [ShoppingStatus.failed, ShoppingStatus.saved];
 
 /** HOU-158: what a person deleted, as the log line names it. */
 export const DeletedThing = {
