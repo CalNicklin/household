@@ -25,8 +25,9 @@ describe("closing a domain's pool", () => {
         if (new Set(pids).size !== db.$client.totalCount) uncounted.push(round);
         await closePool(db.$client);
         // The pool's own backends, by pid: an autovacuum worker analysing the shared pg_database
-        // catalog can briefly connect to a fresh database too, and it is not one of the pool's.
-        const open = await admin.query<{ n: number }>("select count(*)::int as n from pg_stat_activity where datname = $1 and pid = any($2::int[])", [name, pids]);
+        // catalog can briefly connect to a fresh database too, and it is not one of the pool's (nor
+        // is one that reuses a closed backend's pid, hence backend_type).
+        const open = await admin.query<{ n: number }>("select count(*)::int as n from pg_stat_activity where datname = $1 and pid = any($2::int[]) and backend_type = 'client backend'", [name, pids]);
         stillOpen.push(open.rows[0]?.n ?? -1);
         await dropDatabases(url, prefix);
       }
