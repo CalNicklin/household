@@ -102,6 +102,15 @@ describe("a new or quiet house", () => {
     expect(latest?.pick?.why).toMatch(/oldest|fifteen minutes/);
   });
 
+  test("[HOME-4] (HOU-149) 'Not now' on a Getting started card hides it, and nothing is learned or remembered from it", async () => {
+    tick();
+    const a = await h.tap("start:ask", "not-today");
+    await h.wait(a);
+    expect((await h.rt.system("t").jobs.replyFor({ id: a.messageId }))?.text).toBe("Okay, not now.");
+    expect((await screenView(h.rt, "priya", today())).blocks.map((b) => b.id)).not.toContain("start:ask");
+    expect([...h.ports.memory.banks.values()].flat().filter((m) => m.includes("Ask “if I do one thing"))).toEqual([]);
+  });
+
   test("[HOME-3] (HOU-149) saying a job redraws today at once, so 'the backlog is empty' is never left up", async () => {
     const ids = (await screenView(h.rt, "priya", today())).blocks.map((b) => b.id);
     expect(ids).not.toContain("start:backlog");
