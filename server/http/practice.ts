@@ -2,7 +2,7 @@ import { TimerKind, zTimerKind } from "@household/contracts";
 import type { Hono } from "hono";
 import { z } from "zod";
 import { PRACTICE_START } from "../../practice/data.ts";
-import { InMemoryEpisodicMemory, PracticeCalendar, PracticeClock, PracticeLists, PracticeMessenger } from "../../practice/fakes.ts";
+import { InMemoryEpisodicMemory, PracticeCalendar, PracticeClock, PracticeMessenger } from "../../practice/fakes.ts";
 import { truncateAndSeed } from "../../practice/seed.ts";
 import { acceptTimer } from "../coordinator/accept.ts";
 import type { HttpEnv } from "../adapters/registry.ts";
@@ -31,7 +31,6 @@ export function practiceRoutes(rt: Runtime) {
       ports.clock.set(body.at, true);
       if (ports.calendar instanceof PracticeCalendar) ports.calendar.reset();
       if (ports.messenger instanceof PracticeMessenger) ports.messenger.sent.length = 0;
-      if (ports.lists instanceof PracticeLists) ports.lists.reset();
       if (ports.memory instanceof InMemoryEpisodicMemory) ports.memory.banks.clear();
       await truncateAndSeed(rt.env, new Date(body.at));
       const accepted = await acceptTimer(rt, TimerKind.morningPlan, new Date(body.at));

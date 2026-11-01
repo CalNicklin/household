@@ -1,5 +1,5 @@
 import { createTool } from "@mastra/core/tools";
-import { ActionKind, type BacklogTag, LongTool, type ModeKind as Mode, ModeKind, Urgency, zActionKind, zBacklogTag } from "@household/contracts";
+import { ActionKind, type BacklogTag, ListWriteOutcome, LongTool, type ModeKind as Mode, ModeKind, Urgency, zActionKind, zBacklogTag } from "@household/contracts";
 import { z } from "zod";
 import { gatherFacts, oneThingCandidates } from "../planner/gather.ts";
 import { adultsOf, contextLine, eventsOn } from "../rules/day.ts";
@@ -52,16 +52,22 @@ export function houseTools(scope: JobScope) {
     }),
   });
 
+  /**
+   * CAP-6: add one item to a shared list in the lists domain. The router lets a job only add, from the
+   * message it is handling (PRV-1); it never creates a list or changes what is already there.
+   */
   const addToList = createTool({
     id: "add_to_list",
-    description: "Add to one of the household's shared lists in their lists app (not groceries).",
-    inputSchema: z.object({ list: z.string(), item: z.string() }),
+    description: "Add one item to one of the household's shared lists, named by the person: 'add batteries to the shopping list', 'add wrapping paper to the presents list'. Groceries with no list named ('we're out of oat milk', 'add it to the shop') go to shop instead.",
+    inputSchema: z.object({ list: z.string(), item: z.string().min(1) }),
     execute: record("add_to_list", async (input: { list: string; item: string }) => {
-      const lists = await rt.ports.lists.lists();
-      const match = lists.find((l) => l.name.toLowerCase() === input.list.toLowerCase()) ?? lists.find((l) => l.name.toLowerCase().includes(input.list.toLowerCase()));
-      if (match === undefined) return { say: `There's no ${input.list} list in your lists app.` };
-      await rt.ports.lists.add(match.name, input.item);
-      return { say: `Added ${input.item} to ${match.name}.` };
+      const wanted = input.list.trim().toLowerCase().replace(/\s+list$/, "");
+      const lists = await api.lists.list();
+      const match = lists.find((l) => l.name.toLowerCase() === wanted) ?? lists.find((l) => l.name.toLowerCase().includes(wanted));
+      if (match === undefined) return { say: `There's no ${input.list} list. You can start one on the Lists screen.` };
+      const result = await api.lists.addItem({ listId: match.id, text: input.item, sourceMessage: scope.messageId });
+      if (result.outcome === ListWriteOutcome.duplicate) return { id: result.item.id, say: `${result.item.text} is already on ${match.name}${result.item.checked ? ", ticked" : ""}.` };
+      return { id: result.item.id, say: `Added ${result.item.text} to ${match.name}.` };
     }),
   });
 

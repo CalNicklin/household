@@ -17,7 +17,7 @@ describe("real ports", () => {
     expect(ports.calendar).toBeInstanceOf(PracticeCalendar);
     expect(ports.messenger).toBeInstanceOf(PracticeMessenger);
     expect(ports.weather).toBeInstanceOf(OpenMeteoWeather);
-    expect(missing).toEqual(expect.arrayContaining(["calendar", "messenger", "objects", "memory", "shopping", "transcriber", "lists"]));
+    expect(missing).toEqual(expect.arrayContaining(["calendar", "messenger", "objects", "memory", "shopping", "transcriber"]));
   });
 
   it("uses the real adapters once their settings are present", () => {
@@ -45,6 +45,6 @@ describe("real ports", () => {
     expect(ports.memory).toBeInstanceOf(HindsightMemory);
     expect(ports.objects).toBeInstanceOf(S3ObjectStore);
     expect(missing).not.toContain("calendar");
-    expect(missing).toContain("lists");
+    expect(missing).not.toContain("lists");
   });
 });

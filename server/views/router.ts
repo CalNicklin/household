@@ -8,6 +8,12 @@ import {
   zHealthEntryInput,
   zHouseholdSettingsPatch,
   zIdInput,
+  zListCreateInput,
+  zListItemAddInput,
+  zListItemCheckInput,
+  zListItemRenameInput,
+  zListsView,
+  zListUpdateInput,
   zMe,
   zPersonSettingsPatch,
   zRunLogView,
@@ -50,8 +56,10 @@ export function viewsRouter(rt: Runtime) {
     backlog: personProcedure.output(zBacklogScreen).query(async () => backlogScreen(rt)),
     shop: personProcedure.output(zShopView).query(async () => {
       const basket = await rt.ports.shopping.basket();
-      return { basket: basket.items, deliveryDate: basket.deliveryDate, changeUrl: basket.changeUrl, requests: await rt.system("views").shopping.recent(), lists: await rt.ports.lists.lists() };
+      return { basket: basket.items, deliveryDate: basket.deliveryDate, changeUrl: basket.changeUrl, requests: await rt.system("views").shopping.recent() };
     }),
+    /** CAP-6: the shared lists. Every change publishes `lists`, so every open screen refetches this. */
+    lists: personProcedure.output(zListsView).query(async () => rt.system("views").lists.list()),
     settings: personProcedure.output(zSettingsView).query(async ({ ctx }) => {
       const api = rt.system("views");
       const today = localDate(rt.ports.clock.now(), rt.timeZone);
@@ -91,6 +99,14 @@ export function viewsRouter(rt: Runtime) {
     }),
     addWellbeingIdea: personProcedure.input(zWellbeingIdeaInput).mutation(async ({ ctx, input }) => me(ctx.actor.person).household.addWellbeingIdea(input)),
     removeWellbeingIdea: personProcedure.input(zIdInput).mutation(async ({ ctx, input }) => me(ctx.actor.person).household.removeWellbeingIdea(input)),
+    // CAP-6: a person's own taps on the Lists screen, as that person (PRV-1).
+    createList: personProcedure.input(zListCreateInput).mutation(async ({ ctx, input }) => me(ctx.actor.person).lists.createList(input)),
+    updateList: personProcedure.input(zListUpdateInput).mutation(async ({ ctx, input }) => me(ctx.actor.person).lists.updateList(input)),
+    removeList: personProcedure.input(zIdInput).mutation(async ({ ctx, input }) => me(ctx.actor.person).lists.removeList(input)),
+    addListItem: personProcedure.input(zListItemAddInput.omit({ sourceMessage: true })).mutation(async ({ ctx, input }) => me(ctx.actor.person).lists.addItem({ ...input, sourceMessage: null })),
+    setListItemChecked: personProcedure.input(zListItemCheckInput).mutation(async ({ ctx, input }) => me(ctx.actor.person).lists.setChecked(input)),
+    renameListItem: personProcedure.input(zListItemRenameInput).mutation(async ({ ctx, input }) => me(ctx.actor.person).lists.renameItem(input)),
+    removeListItem: personProcedure.input(zIdInput).mutation(async ({ ctx, input }) => me(ctx.actor.person).lists.removeItem(input)),
     addHealthEntry: personProcedure.input(zHealthEntryInput).mutation(async ({ ctx, input }) => me(ctx.actor.person).health.add(input)),
   });
 }

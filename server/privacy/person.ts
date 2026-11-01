@@ -13,6 +13,7 @@ export async function exportPerson(rt: Runtime, person: string): Promise<Record<
     [Domain.jobs]: await api.jobs.exportPerson({ person }),
     [Domain.health]: await api.health.exportPerson({ person }),
     [Domain.shopping]: await api.shopping.exportPerson({ person }),
+    [Domain.lists]: await api.lists.exportPerson({ person }),
     memory: await rt.ports.memory.recall({ household: rt.env.HOUSEHOLD_ID, person }, ""),
   };
   return out;
@@ -28,6 +29,7 @@ export async function deletePerson(rt: Runtime, person: string): Promise<void> {
   await api.jobs.deletePerson({ person });
   await api.health.deletePerson({ person });
   await api.shopping.deletePerson({ person });
+  await api.lists.deletePerson({ person });
   await api.household.deletePerson({ person });
   await rt.ports.memory.forget({ household: rt.env.HOUSEHOLD_ID, person });
 }

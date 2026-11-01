@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AppShellRouteImport } from './routes/app-shell'
 import { Route as BacklogRouteImport } from './routes/backlog'
+import { Route as ListsRouteImport } from './routes/lists'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as ShopRouteImport } from './routes/shop'
@@ -34,6 +35,11 @@ const AppShellRoute = AppShellRouteImport.update({
 const BacklogRoute = BacklogRouteImport.update({
   id: '/backlog',
   path: '/backlog',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ListsRoute = ListsRouteImport.update({
+  id: '/lists',
+  path: '/lists',
   getParentRoute: () => rootRouteImport,
 } as any)
 const LoginRoute = LoginRouteImport.update({
@@ -81,6 +87,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/app-shell': typeof AppShellRoute
   '/backlog': typeof BacklogRoute
+  '/lists': typeof ListsRoute
   '/login': typeof LoginRoute
   '/settings': typeof SettingsRoute
   '/shop': typeof ShopRoute
@@ -94,6 +101,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/app-shell': typeof AppShellRoute
   '/backlog': typeof BacklogRoute
+  '/lists': typeof ListsRoute
   '/login': typeof LoginRoute
   '/settings': typeof SettingsRoute
   '/shop': typeof ShopRoute
@@ -108,6 +116,7 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/app-shell': typeof AppShellRoute
   '/backlog': typeof BacklogRoute
+  '/lists': typeof ListsRoute
   '/login': typeof LoginRoute
   '/settings': typeof SettingsRoute
   '/shop': typeof ShopRoute
@@ -123,6 +132,7 @@ export interface FileRouteTypes {
     | '/'
     | '/app-shell'
     | '/backlog'
+    | '/lists'
     | '/login'
     | '/settings'
     | '/shop'
@@ -136,6 +146,7 @@ export interface FileRouteTypes {
     | '/'
     | '/app-shell'
     | '/backlog'
+    | '/lists'
     | '/login'
     | '/settings'
     | '/shop'
@@ -149,6 +160,7 @@ export interface FileRouteTypes {
     | '/'
     | '/app-shell'
     | '/backlog'
+    | '/lists'
     | '/login'
     | '/settings'
     | '/shop'
@@ -163,6 +175,7 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AppShellRoute: typeof AppShellRoute
   BacklogRoute: typeof BacklogRoute
+  ListsRoute: typeof ListsRoute
   LoginRoute: typeof LoginRoute
   SettingsRoute: typeof SettingsRoute
   ShopRoute: typeof ShopRoute
@@ -194,6 +207,13 @@ declare module '@tanstack/react-router' {
       path: '/backlog'
       fullPath: '/backlog'
       preLoaderRoute: typeof BacklogRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/lists': {
+      id: '/lists'
+      path: '/lists'
+      fullPath: '/lists'
+      preLoaderRoute: typeof ListsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/login': {
@@ -259,6 +279,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AppShellRoute: AppShellRoute,
   BacklogRoute: BacklogRoute,
+  ListsRoute: ListsRoute,
   LoginRoute: LoginRoute,
   SettingsRoute: SettingsRoute,
   ShopRoute: ShopRoute,

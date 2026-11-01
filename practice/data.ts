@@ -118,6 +118,27 @@ export const backlog: { text: string; tags: BacklogTag[]; createdBy: string; day
   { text: "Write thank-you cards", tags: [BacklogTag.quick, BacklogTag.noKids], createdBy: "priya", daysAgo: 3 },
 ];
 
+/** CAP-6: the shared lists, as Family Lists held them (one ticked item, to show it stays struck through). */
+export const lists = [
+  {
+    name: "Shopping",
+    emoji: "🛒",
+    items: [
+      { text: "washing-up liquid", checked: false, createdBy: "priya" },
+      { text: "bin bags", checked: false, createdBy: "tom" },
+      { text: "kitchen roll", checked: true, createdBy: "priya" },
+    ],
+  },
+  {
+    name: "Christmas presents",
+    emoji: "🎁",
+    items: [
+      { text: "Lego for Noah", checked: false, createdBy: "priya" },
+      { text: "Book for Ivy", checked: false, createdBy: "tom" },
+    ],
+  },
+] as const;
+
 export const parcels = [
   { shop: "Screwfix", expectedDate: "2026-11-02", window: "by 6pm", needsSomeoneIn: false },
   { shop: "Ocado", expectedDate: "2026-11-03", window: "7–8pm", needsSomeoneIn: true },

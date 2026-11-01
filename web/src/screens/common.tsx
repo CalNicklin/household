@@ -11,6 +11,7 @@ const ALL: readonly NavLink[] = [
   { to: "/", label: "Today" },
   { to: "/backlog", label: "Backlog" },
   { to: "/shop", label: "Shop" },
+  { to: "/lists", label: "Lists" },
   { to: "/week", label: "Week" },
   { to: "/settings", label: "Settings" },
 ];

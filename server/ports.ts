@@ -28,12 +28,6 @@ export interface MessengerTransport {
   send(address: string, text: string, buttons: OutboundButton[]): Promise<{ externalId: string }>;
 }
 
-/** CAP-6: the shared lists app stays the source of truth; we read and append, never copy. */
-export interface ListsApp {
-  lists(): Promise<{ name: string; items: string[] }[]>;
-  add(list: string, item: string): Promise<void>;
-}
-
 export interface ObjectStore {
   put(key: string, body: Uint8Array, contentType: string): Promise<void>;
   get(key: string): Promise<{ body: Uint8Array; contentType: string } | null>;
@@ -70,7 +64,6 @@ export type Ports = {
   calendar: CalendarSource;
   weather: WeatherSource;
   messenger: MessengerTransport;
-  lists: ListsApp;
   objects: ObjectStore;
   memory: EpisodicMemory;
   shopping: ShoppingHelper;

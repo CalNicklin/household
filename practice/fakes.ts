@@ -6,7 +6,6 @@ import type {
   ExternalEvent,
   HelperResult,
   HourlyForecast,
-  ListsApp,
   MemoryScope,
   MessengerTransport,
   ObjectStore,
@@ -107,26 +106,6 @@ export class PracticeMessenger implements MessengerTransport {
   }
 }
 
-export class PracticeLists implements ListsApp {
-  readonly #lists = new Map<string, string[]>();
-  constructor() {
-    this.reset();
-  }
-  reset(): void {
-    this.#lists.clear();
-    this.#lists.set("Shopping", ["washing-up liquid", "bin bags"]);
-    this.#lists.set("Christmas presents", ["Lego for Noah", "Book for Ivy"]);
-  }
-  async lists() {
-    return [...this.#lists.entries()].map(([name, items]) => ({ name, items: [...items] }));
-  }
-  async add(list: string, item: string) {
-    const items = this.#lists.get(list) ?? [];
-    if (!items.includes(item)) items.push(item);
-    this.#lists.set(list, items);
-  }
-}
-
 export class MemoryObjectStore implements ObjectStore {
   readonly objects = new Map<string, { body: Uint8Array; contentType: string }>();
   async put(key: string, body: Uint8Array, contentType: string) {
@@ -205,7 +184,6 @@ export type PracticePorts = Ports & {
   calendar: PracticeCalendar;
   weather: PracticeWeather;
   messenger: PracticeMessenger;
-  lists: PracticeLists;
   objects: MemoryObjectStore;
   memory: InMemoryEpisodicMemory;
 };
@@ -217,7 +195,6 @@ export function practicePorts(options: { start?: string; frozen?: boolean; shopp
     calendar: new PracticeCalendar(),
     weather: new PracticeWeather(),
     messenger: new PracticeMessenger(clock),
-    lists: new PracticeLists(),
     objects: new MemoryObjectStore(),
     memory: new InMemoryEpisodicMemory(),
     shopping: options.shopping ?? new PracticeShoppingHelper(),

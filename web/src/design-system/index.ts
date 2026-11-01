@@ -11,6 +11,7 @@ export const themeColour: string = tokens.color.ground;
 export const fontsHref = "https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&display=swap";
 
 export { AlertCard, ArrivalRow, BacklogPickCard, BacklogRow, Card, type CardAction, EventCard, EventRow, ListCard, ModeCard, SuggestionCard } from "./cards.tsx";
+export { AddItemField, ChecklistCard, ChecklistTitle, ChecklistTitleEditor, CheckRow, Confirm, Menu } from "./checklist.tsx";
 export { Composer, Reply } from "./composer.tsx";
 export { Button, Chip, Chips, Field, Form, Segmented, Stepper, TextInput, Toggle } from "./controls.tsx";
 export { Columns, Focus, Footer, Grid3, Header, type NavLink, Page, PageBody, Row, Section, Stack } from "./layout.tsx";
