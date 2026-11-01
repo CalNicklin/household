@@ -1,7 +1,12 @@
 // HOME-6: the kitchen iPad keeps showing today's plan even if the network blips.
-// Shell and assets: cache, refreshed in the background. Views (/api/trpc/*): network first,
-// falling back to the last good answer. Nothing else is cached; messages always go to the network.
-const SHELL = "household-shell-v1";
+// HOU-154: pages are network first, so a reload after a deploy gets the new build; the cache is only
+// the offline fallback. Hashed assets are cache first (a new build has new names); icons refresh in
+// the background. Views (/api/trpc/*): network first, falling back to the last good answer. Nothing
+// else is cached; messages always go to the network.
+// The server writes its build id over __BUILD__ (server/http/app.ts), so every deploy is a new worker:
+// it installs, takes over, drops the older build's shell cache, and the open page reloads once.
+const BUILD = "__BUILD__";
+const SHELL = `household-shell-${BUILD}`;
 const VIEWS = "household-views-v1";
 
 self.addEventListener("install", (event) => {
@@ -29,6 +34,15 @@ async function networkFirst(request, cacheName) {
     if (cached !== undefined) return cached;
     throw error;
   }
+}
+
+async function cacheFirst(request) {
+  const cache = await caches.open(SHELL);
+  const cached = await cache.match(request);
+  if (cached !== undefined) return cached;
+  const response = await fetch(request);
+  if (response.ok) await cache.put(request, response.clone());
+  return response;
 }
 
 async function staleWhileRevalidate(request) {
@@ -63,5 +77,6 @@ self.addEventListener("fetch", (event) => {
     );
     return;
   }
-  if (url.pathname.startsWith("/assets/") || url.pathname.startsWith("/icon")) event.respondWith(staleWhileRevalidate(request));
+  if (url.pathname.startsWith("/assets/")) event.respondWith(cacheFirst(request));
+  else if (url.pathname.startsWith("/icon")) event.respondWith(staleWhileRevalidate(request));
 });

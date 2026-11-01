@@ -5,8 +5,10 @@ import { streamSSE } from "hono/streaming";
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { type Adapter, type HttpEnv } from "../adapters/registry.ts";
+import { buildId } from "../build.ts";
 import { acceptTimer } from "../coordinator/accept.ts";
 import type { Runtime } from "../runtime.ts";
+import { localDate } from "../time.ts";
 import { viewsRouter } from "../views/router.ts";
 import { clearCookie, personFromCookie, sessionCookie } from "./session.ts";
 
@@ -22,7 +24,14 @@ export function createApp(rt: Runtime, adapters: Adapter[], extra?: (app: Hono<H
   const app = new Hono<HttpEnv>();
   const secure = rt.env.PUBLIC_URL.startsWith("https://");
   // HOU-149: a screen asked for with no plan for today starts one, through the coordinator, at most once an hour.
-  const views = viewsRouter(rt, { planToday: () => acceptTimer(rt, TimerKind.catchUpPlan, startOfHour(rt.ports.clock.now())) });
+  // HOU-154: a plan made by an older build is redone once for this build and day.
+  const views = viewsRouter(rt, {
+    planToday: (build) => {
+      const now = rt.ports.clock.now();
+      if (build === null) return acceptTimer(rt, TimerKind.catchUpPlan, startOfHour(now));
+      return acceptTimer(rt, TimerKind.catchUpPlan, now, `timer:${TimerKind.catchUpPlan}:${localDate(now, rt.timeZone)}:build:${build}`);
+    },
+  });
 
   app.get("/healthz", (c) => c.text("ok"));
 
@@ -103,6 +112,16 @@ export function createApp(rt: Runtime, adapters: Adapter[], extra?: (app: Hono<H
   extra?.(app);
 
   const dist = path.resolve(rt.env.WEB_DIST);
+  const build = buildId(rt.env.WEB_DIST);
+  /**
+   * HOU-154: the service worker carries this build's id, so every deploy is a new worker: the browser
+   * installs it, it takes over, and the open page reloads once (web/src/data/sw.ts). Never cached.
+   */
+  app.get("/sw.js", (c) => {
+    const file = path.join(dist, "sw.js");
+    if (!existsSync(file)) return c.notFound();
+    return new Response(readFileSync(file, "utf8").replaceAll("__BUILD__", build), { headers: { "content-type": "text/javascript", "cache-control": "no-cache" } });
+  });
   app.get("*", (c) => {
     const file = path.join(dist, c.req.path);
     if (file.startsWith(dist) && c.req.path !== "/" && existsSync(file) && !file.endsWith("/")) {
@@ -112,7 +131,8 @@ export function createApp(rt: Runtime, adapters: Adapter[], extra?: (app: Hono<H
     const shell = path.join(dist, "_shell.html");
     const index = existsSync(shell) ? shell : path.join(dist, "index.html");
     if (!existsSync(index)) return c.text("web app not built: run pnpm --dir web build", 503);
-    return c.html(readFileSync(index, "utf8"));
+    // HOU-154: the build that served this page, so a person (or a test) can tell which one is running.
+    return c.html(readFileSync(index, "utf8").replace("</head>", `<meta name="household-build" content="${build}"></head>`), 200, { "cache-control": "no-cache" });
   });
 
   return app;

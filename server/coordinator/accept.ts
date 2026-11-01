@@ -29,14 +29,14 @@ export async function identify(rt: Runtime, channel: InboundMessage["channel"], 
 }
 
 /** CH-5: a timer is a message like any other — household, no person, the timer channel, a dedupe key. */
-export async function acceptTimer(rt: Runtime, timer: TimerKind, scheduledFor: Date): Promise<Accepted> {
+export async function acceptTimer(rt: Runtime, timer: TimerKind, scheduledFor: Date, dedupeKey = `timer:${timer}:${scheduledFor.toISOString()}`): Promise<Accepted> {
   return accept(rt, {
     household: rt.env.HOUSEHOLD_ID,
     person: null,
     channel: Channel.timer,
     text: timer,
     attachments: [{ kind: AttachmentKind.timer, timer, scheduledFor: scheduledFor.toISOString() }],
-    dedupeKey: `timer:${timer}:${scheduledFor.toISOString()}`,
+    dedupeKey,
     receivedAt: rt.ports.clock.now().toISOString(),
   });
 }

@@ -8,7 +8,10 @@ import * as schema from "./schema.ts";
 
 export type PlansDb = DomainDb<typeof schema>;
 
-const toPlan = (r: typeof schema.plans.$inferSelect): Plan => ({ date: r.date, version: r.version, createdAt: iso(r.createdAt), blocks: r.blocks });
+const toPlan = (r: typeof schema.plans.$inferSelect): Plan => {
+  const build = r.inputs["build"];
+  return { date: r.date, version: r.version, createdAt: iso(r.createdAt), blocks: r.blocks, build: typeof build === "string" ? build : null };
+};
 const toResponse = (r: typeof schema.responses.$inferSelect): Response => ({ id: r.id, ref: r.ref, action: r.action, person: r.person, channel: r.channel, date: r.date, value: r.value, at: iso(r.at) });
 
 export function plansRouter(db: PlansDb) {

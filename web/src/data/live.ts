@@ -1,6 +1,7 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect } from "react";
 import { flushOutbox } from "./send.ts";
+import { checkForUpdate } from "./sw.ts";
 
 function localDay(): string {
   return new Date().toDateString();
@@ -24,6 +25,8 @@ export function useLive(): void {
     source.addEventListener("hello", () => {
       refresh();
       void flushOutbox();
+      // HOU-154: a reconnect is often a deploy (the server restarted); see if a new build is out.
+      checkForUpdate();
     });
 
     let day = localDay();
