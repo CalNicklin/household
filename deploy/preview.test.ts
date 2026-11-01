@@ -46,6 +46,10 @@ const workflow = z
   })
   .parse(parse(read("../.github/workflows/preview.yml")));
 
+const zSteps = z.looseObject({
+  jobs: z.looseObject({ image: z.looseObject({ steps: z.array(z.looseObject({ id: z.string().optional(), uses: z.string().optional(), with: z.record(z.string(), z.unknown()).optional() })) }) }),
+});
+
 /** The budget household-preview uses unless household.conf says otherwise (household-common.sh). */
 const DEFAULT_BUDGET_MB = Number(/PREVIEW_BUDGET_MB="\$\{PREVIEW_BUDGET_MB:-(\d+)\}"/.exec(read("household-common.sh"))?.[1]);
 
@@ -172,10 +176,17 @@ describe("the preview workflow", () => {
     expect(text).toContain("push: ${{ needs.ready.outputs.configured == 'true' }}");
     expect(text).toContain("pushed: ${{ needs.ready.outputs.configured }}");
     expect(workflow.jobs["deploy"]?.if).toBe("needs.image.outputs.pushed == 'true'");
-    // The same build as deploy.yml's: its build step is the same action, builder, context and Dockerfile.
-    const build = (file: string) => /- uses: docker\/setup-buildx-action@v3\n[\s\S]*?uses: (docker\/build-push-action@v\d+)\n\s+with:\n\s+context: (\S+)/.exec(read(file))?.slice(1);
+    // The same build as deploy.yml's: the same buildx setup and build action, given the same inputs but
+    // where it pushes and what it is called.
+    const build = (file: string) => {
+      const steps = zSteps.parse(parse(read(file))).jobs.image.steps;
+      const setup = steps.filter((s) => s.uses?.startsWith("docker/setup-buildx-action@"));
+      const push = steps.find((s) => s.id === "build");
+      const { tags: _tags, push: _push, ...inputs } = push?.with ?? {};
+      return { setup, uses: push?.uses, inputs };
+    };
     expect(build("../.github/workflows/preview.yml")).toEqual(build("../.github/workflows/deploy.yml"));
-    expect(build("../.github/workflows/deploy.yml")).toEqual(["docker/build-push-action@v6", "."]);
+    expect(build("../.github/workflows/deploy.yml")).toMatchObject({ uses: "docker/build-push-action@v6", inputs: { context: "." } });
   });
 
   it("[FB-5] asks the server for only the two preview forms, with the preview key, never the deploy key", () => {
