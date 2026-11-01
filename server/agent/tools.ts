@@ -10,7 +10,7 @@ import { addLocalDays, clock, localDate, longDate, nextLocalMidnight } from "../
 import { respond, subjectFor } from "./respond.ts";
 import type { JobScope } from "./scope.ts";
 
-const NOTHING_PRESSING = { title: "Nothing pressing today", why: "Have a rest, or tell me a few jobs and I'll find gaps for them." } as const;
+const NOTHING_PRESSING = { title: "Nothing pressing today", why: "No rule, calendar entry or quick backlog job needs doing now." } as const;
 
 /** The household's tools. Each runs as the agent actor for this job's person (PRV-1 is enforced by the routers). */
 export function houseTools(scope: JobScope) {

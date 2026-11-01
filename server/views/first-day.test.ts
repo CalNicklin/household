@@ -83,9 +83,9 @@ describe("a new or quiet house", () => {
     await h.wait(await h.tap(washing !== undefined && "ref" in washing ? washing.ref : "", "not-today"));
     tick();
     const a = await h.sayAndWait("what should I prioritise today?");
-    expect((await h.rt.system("t").jobs.replyFor({ id: a.messageId }))?.text).toBe("Nothing pressing today. Have a rest, or tell me a few jobs and I'll find gaps for them.");
+    expect((await h.rt.system("t").jobs.replyFor({ id: a.messageId }))?.text).toBe("Nothing pressing today. No rule, calendar entry or quick backlog job needs doing now.");
     const [latest] = await conversationView(h.rt, "priya");
-    expect(latest?.pick).toEqual({ title: "Nothing pressing today", why: "Have a rest, or tell me a few jobs and I'll find gaps for them." });
+    expect(latest?.pick).toEqual({ title: "Nothing pressing today", why: "No rule, calendar entry or quick backlog job needs doing now." });
   });
 
   test("[MOM-2] (HOU-149) once a few jobs are said, the one thing is the oldest small one, with its reason", async () => {

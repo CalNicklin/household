@@ -36,6 +36,6 @@ export function firstDayBlocks(fill: HouseFill): Block[] {
   if (fill.backlogItems === 0)
     out.push(startBlock("backlog", "Say a few jobs into the box below", "The backlog is empty, so there is nothing to fit into today's gaps yet. Type or talk: “fix the gate”, “book the boiler service”."));
   if (!fill.calendarConnected) out.push(startBlock("calendar", "Connect the shared calendar in Settings", "No calendar is connected yet, so Now, Later today and Tomorrow have nothing from it."));
-  if (out.length > 0) out.push(startBlock("ask", "Ask “if I do one thing, what should it be?”", "You get one answer and the reason for it, from what the house knows so far."));
+  if (out.length > 0) out.push(startBlock("ask", "Ask “if I do one thing, what should it be?”", "The house has little in it yet, so this screen shows little on its own; asking gets one answer with its reason."));
   return out;
 }
