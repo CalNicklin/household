@@ -23,16 +23,27 @@ export function practiceRoutes(rt: Runtime) {
       const accepted = await acceptTimer(rt, body.timer, body.at === undefined ? rt.ports.clock.now() : new Date(body.at));
       return c.json(accepted);
     });
-    /** FB-5 / FB-6: a fresh practice household in place, for previews and e2e. */
+    /**
+     * FB-5 / FB-6: a fresh practice household in place, for previews and e2e. With `empty`, a
+     * brand-new house instead (HOU-149): the people and logins only, and no plan until someone looks.
+     */
     app.post("/api/practice/reset", async (c) => {
-      const body = z.object({ at: z.iso.datetime({ offset: true }).default(PRACTICE_START) }).parse(await c.req.json().catch(() => ({})));
+      const body = z.object({ at: z.iso.datetime({ offset: true }).default(PRACTICE_START), empty: z.boolean().default(false) }).parse(await c.req.json().catch(() => ({})));
       const ports = rt.ports;
       if (!(ports.clock instanceof PracticeClock)) return c.json({ error: "not the practice household" }, 400);
       ports.clock.set(body.at, true);
-      if (ports.calendar instanceof PracticeCalendar) ports.calendar.reset();
+      if (ports.calendar instanceof PracticeCalendar) {
+        if (body.empty) ports.calendar.clear();
+        else ports.calendar.reset();
+      }
       if (ports.messenger instanceof PracticeMessenger) ports.messenger.sent.length = 0;
       if (ports.memory instanceof InMemoryEpisodicMemory) ports.memory.banks.clear();
-      await truncateAndSeed(rt.env, new Date(body.at));
+      await truncateAndSeed(rt.env, new Date(body.at), { empty: body.empty });
+      if (body.empty) {
+        ports.clock.set(body.at, false);
+        rt.bus.publish("plan");
+        return c.json({ jobId: null });
+      }
       const accepted = await acceptTimer(rt, TimerKind.morningPlan, new Date(body.at));
       ports.clock.set(body.at, false);
       rt.bus.publish("plan");

@@ -71,9 +71,13 @@ export class PracticeCalendar implements CalendarSource {
   constructor() {
     this.reset();
   }
-  reset(): void {
+  /** HOU-149: no events at all, as a brand-new house's Google Calendar would look before anyone adds one. */
+  clear(): void {
     this.#events.clear();
     this.#version = 0;
+  }
+  reset(): void {
+    this.clear();
     for (const e of calendar) this.upsert(e);
   }
   /** Add or change one calendar's copy (the shared calendar's unless `calendar` names a person). */

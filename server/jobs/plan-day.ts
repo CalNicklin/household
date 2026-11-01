@@ -3,7 +3,7 @@ import { Channel, type LocalDate, type Plan } from "@household/contracts";
 import { HouseAgent } from "../agent/agent.ts";
 import { jobScope } from "../agent/scope.ts";
 import { compose } from "../planner/compose.ts";
-import { gatherFacts, otherAdultOf, pickCandidates, screenNotes } from "../planner/gather.ts";
+import { gatherFacts, houseFill, otherAdultOf, pickCandidates, screenNotes } from "../planner/gather.ts";
 import { allRules } from "../rules/nudges.ts";
 import { dayPartOf } from "../agent/respond.ts";
 import { localDate, localHour } from "../time.ts";
@@ -24,7 +24,8 @@ async function planDayImpl(date: LocalDate, trigger: string, parentJob: string |
       const facts = await gatherFacts(rt, date, 7);
       const signals = await planningSignals(rt, date, now, facts);
       const candidates = await pickCandidates(rt, facts, date, now, signals);
-      return { now: now.toISOString(), facts, signals, candidates };
+      const fill = await houseFill(rt);
+      return { now: now.toISOString(), facts, signals, candidates, fill };
     },
     { name: "gather" },
   );
@@ -59,6 +60,7 @@ async function planDayImpl(date: LocalDate, trigger: string, parentJob: string |
         shopping,
         avoid: new Set<string>(),
         otherAdult: otherAdultOf(facts),
+        fill: gathered.fill,
       });
       const api = rt.system("planner");
       if (choice.pick !== null) await api.plans.recordOffer({ itemId: choice.pick.itemId, date, person: choice.pick.person });

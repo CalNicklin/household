@@ -85,13 +85,15 @@ async function handleMessageImpl(messageId: string): Promise<void> {
         async () => {
           const api = rt.system("calendar-sync");
           // HOME-1: every calendar the house reads, each from its own sync token.
-          const changes = await rt.ports.calendar.changes(await api.calendar.syncTokens());
-          return api.calendar.applySync({
+          const tokens = await api.calendar.syncTokens();
+          const changes = await rt.ports.calendar.changes(tokens);
+          const applied = await api.calendar.applySync({
             upserts: changes.upserts,
             deletedExternalIds: changes.deletedExternalIds,
             syncTokens: changes.nextSyncTokens,
             calendarIds: rt.ports.calendar.calendars.map((c) => c.calendarId),
           });
+          return { ...applied, firstSync: Object.keys(tokens).length === 0 };
         },
         { name: "calendar-sync" },
       );
@@ -99,8 +101,10 @@ async function handleMessageImpl(messageId: string): Promise<void> {
       const effects = emptyEffects();
       const today = localDate(rt.ports.clock.now(), rt.timeZone);
       effects.replan = changed.changedDates.filter((d) => d >= today);
+      // HOU-149: the first sync connects the calendar, which today's "Getting started" cards talk about.
+      if (changed.firstSync && !effects.replan.includes(today)) effects.replan.unshift(today);
       usage = await applyEffects(jobId, effects, null);
-      toolCalls = [{ tool: "calendar-sync", input: {}, output: changed }];
+      toolCalls = [{ tool: "calendar-sync", input: {}, output: { changedDates: changed.changedDates } }];
     } else {
       const step = await DBOS.runStep(() => agentStep(jobId, messageId, meta), { name: "agent" });
       intent = step.intent;

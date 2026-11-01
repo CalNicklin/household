@@ -24,9 +24,11 @@ import {
 import { addLocalDays, atLocal, clock, localDate, longDate } from "../time.ts";
 import { contextLine, eventsOn, type HouseFacts, nameOf } from "../rules/day.ts";
 import type { RuleItem } from "../rules/nudges.ts";
+import { firstDayBlocks, type HouseFill } from "./first-day.ts";
 
 export type BacklogPick = { itemId: string; title: string; why: string; person: string | null };
-export type OneThing = { ref: string; title: string; why: string; actions: NotifyAction[] };
+/** `fallback`: the thin-house answer (HOU-149), offered only when nothing else is, and not in quiet hours. */
+export type OneThing = { ref: string; title: string; why: string; actions: NotifyAction[]; fallback?: true };
 
 export type ComposeInput = {
   date: LocalDate;
@@ -44,6 +46,8 @@ export type ComposeInput = {
   /** Day parts in which a subject's suggestions are not offered (LRN-5). */
   avoid: ReadonlySet<string>;
   otherAdult: (person: string) => string | null;
+  /** HOU-149: how much the house has in it, for the first-day blocks; null for Week's unsaved days (Week hides them anyway). */
+  fill: HouseFill | null;
 };
 
 const placementOf: Record<(typeof Section)[keyof typeof Section], (typeof Placement)[keyof typeof Placement]> = {
@@ -51,6 +55,7 @@ const placementOf: Record<(typeof Section)[keyof typeof Section], (typeof Placem
   [Section.now]: Placement.main,
   [Section.later]: Placement.main,
   [Section.tomorrow]: Placement.main,
+  [Section.start]: Placement.main,
   [Section.arriving]: Placement.aside,
   [Section.fits]: Placement.aside,
   [Section.focus]: Placement.focus,
@@ -133,7 +138,7 @@ function tomorrowEvents(input: ComposeInput): Block[] {
 }
 
 const sortKey = (b: Block): string => (b.type === BlockType.event ? (b.time ?? "00:00") : "");
-const sectionOrder: readonly string[] = [Section.now, Section.later, Section.tomorrow, Section.arriving, Section.fits];
+const sectionOrder: readonly string[] = [Section.start, Section.now, Section.later, Section.tomorrow, Section.arriving, Section.fits];
 const typeRank = (b: Block): number => (b.type === BlockType.alert ? 0 : b.type === BlockType.suggestion ? 1 : 2);
 
 function modeHeading(mode: Mode, facts: HouseFacts): string {
@@ -221,7 +226,7 @@ export function compose(input: ComposeInput): Block[] {
     return composeMode(input, mode, header);
   }
 
-  const body: Block[] = [...input.rules.map(ruleBlock), ...calendarBlocks(input), ...tomorrowEvents(input)];
+  const body: Block[] = [...(input.fill === null ? [] : firstDayBlocks(input.fill)), ...input.rules.map(ruleBlock), ...calendarBlocks(input), ...tomorrowEvents(input)];
   for (const n of input.screenNotes) {
     body.push({
       id: `note:${n.id}`,
