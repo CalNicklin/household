@@ -1,3 +1,4 @@
+import type { Provenance } from "@household/contracts";
 import type { ReactNode } from "react";
 import { Button, type ButtonVariant } from "./controls.tsx";
 import { AlertIcon, CalendarIcon, ParcelIcon, RuleIcon, SunIcon } from "./icons.tsx";
@@ -34,21 +35,17 @@ function Actions({ actions, variants, large = false }: { actions: readonly CardA
 
 const selectedClass = (selected: boolean | undefined) => (selected === true ? " ds-selected" : "");
 
-export type StillHappening = { id: string; text: string; provenance: "calendar" | "email" | "rule" | "planner" };
-type Provenance = StillHappening["provenance"];
+export type StillHappening = { id: string; text: string; provenance: Provenance };
 
 /** Where a fact came from, as an icon. Used wherever something has no time to show (SlowDay canvas). */
 function ProvenanceIcon({ provenance, size }: { provenance: Provenance; size: number }) {
-  switch (provenance) {
-    case "calendar":
-      return <CalendarIcon size={size} />;
-    case "email":
-      return <ParcelIcon size={size} />;
-    case "rule":
-      return <RuleIcon size={size} />;
-    case "planner":
-      return <SunIcon size={size} />;
-  }
+  const icons: Record<Provenance, ReactNode> = {
+    calendar: <CalendarIcon size={size} />,
+    email: <ParcelIcon size={size} />,
+    rule: <RuleIcon size={size} />,
+    planner: <SunIcon size={size} />,
+  };
+  return icons[provenance];
 }
 
 const NO_TIME_LABEL: Record<Provenance, string> = {
