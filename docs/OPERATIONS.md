@@ -248,7 +248,8 @@ house's `.env`, so the token and the secret are never on a command line and neve
 - `/setprivacy`, pick the bot, **Enable** (the default). If it were ever in a group, it would see only
   messages meant for it.
 
-**2. The token.** On the server, `sudo nano /srv/household/.env` and set `TELEGRAM_BOT_TOKEN=<the token>`
+**2. The token.** Once per server, take the new `household-telegram` command: in the server's checkout,
+`git pull && sudo deploy/install.sh` (no options; it keeps everything else). Then `sudo nano /srv/household/.env` and set `TELEGRAM_BOT_TOKEN=<the token>`
 (one line, no quotes). Then redeploy so the app sends through Telegram:
 `sudo household-deploy "$(sudo cut -d@ -f2 /srv/household/image)"`.
 
