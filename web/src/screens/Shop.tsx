@@ -1,5 +1,5 @@
 import { ActionKind, type ShoppingRequest, ShoppingStatus } from "@household/contracts";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { say } from "../data/send.ts";
 import { useTRPC } from "../data/trpc.ts";
@@ -11,11 +11,19 @@ const STATUS_LINE: Record<ShoppingStatus, (r: ShoppingRequest) => string> = {
   [ShoppingStatus.added]: (r) => (r.chosen === null ? "Added" : `Added ${r.chosen.name} · ${r.chosen.price}`),
   [ShoppingStatus.needsChoice]: () => "No exact match — which one?",
   [ShoppingStatus.failed]: () => "Couldn't find it; nothing was added",
+  // HOU-148: with no shopping helper connected nothing was looked for, so it never says it couldn't find it.
+  [ShoppingStatus.saved]: () => "Saved for when shopping is connected",
+  [ShoppingStatus.dismissed]: () => "Dismissed",
 };
+
+/** A request that went nowhere can be dismissed with one tap, no guilt (HOU-148). */
+const DISMISSABLE: ReadonlySet<ShoppingStatus> = new Set([ShoppingStatus.failed, ShoppingStatus.saved]);
 
 /** AUT-3: no exact match → one question with two or three options to tap. */
 function Request({ request }: { request: ShoppingRequest }) {
   const queryClient = useQueryClient();
+  const trpc = useTRPC();
+  const dismiss = useMutation(trpc.dismissShopping.mutationOptions({ onSettled: () => queryClient.invalidateQueries() }));
   const choose = (sku: string, name: string) => {
     void say({ text: name, ref: `shopping:${request.id}`, action: ActionKind.answer, value: sku }).then(() => queryClient.invalidateQueries());
   };
@@ -28,6 +36,13 @@ function Request({ request }: { request: ShoppingRequest }) {
               {`${o.name} · ${o.price}`}
             </Button>
           ))}
+        </Row>
+      ) : null}
+      {DISMISSABLE.has(request.status) ? (
+        <Row>
+          <Button variant="ghost" label={`Dismiss ${request.item}`} disabled={dismiss.isPending} onClick={() => dismiss.mutate({ id: request.id })}>
+            Dismiss
+          </Button>
         </Row>
       ) : null}
       {request.runId === null ? null : (

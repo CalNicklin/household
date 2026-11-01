@@ -1,9 +1,9 @@
 import { type ShoppingRequest, ShoppingStatus, zBasketAddInput, zIdInput, zPersonInput, zShoppingRequest, zShoppingRequestInput, zShoppingRequestUpdate, zShoppingRun, zShoppingRunInput, zSummaryInput } from "@household/contracts";
-import { desc, eq, gt } from "drizzle-orm";
+import { desc, eq, gt, ne } from "drizzle-orm";
 import { z } from "zod";
 import type { DomainDb } from "../../db/index.ts";
 import { iso } from "../../db/map.ts";
-import { actingPerson, actorProcedure, forbid, readProcedure, router, systemProcedure } from "../../trpc.ts";
+import { actingPerson, actorProcedure, forbid, personProcedure, readProcedure, router, systemProcedure } from "../../trpc.ts";
 import * as schema from "./schema.ts";
 
 export type ShoppingDb = DomainDb<typeof schema>;
@@ -35,7 +35,22 @@ export function shoppingRouter(db: ShoppingDb) {
       const row = await db.query.requests.findFirst({ where: eq(schema.requests.id, input.id) });
       return row === undefined ? null : toRequest(row);
     }),
-    recent: readProcedure.output(z.array(zShoppingRequest)).query(async () => Promise.all((await db.select().from(schema.requests).orderBy(desc(schema.requests.createdAt)).limit(50)).map(toRequest))),
+    recent: readProcedure.output(z.array(zShoppingRequest)).query(async () =>
+      Promise.all((await db.select().from(schema.requests).where(ne(schema.requests.status, ShoppingStatus.dismissed)).orderBy(desc(schema.requests.createdAt)).limit(50)).map(toRequest)),
+    ),
+    /**
+     * HOU-148: a person dismisses a request that went nowhere (saved, or not found) from the Shop
+     * screen. The row is kept as dismissed, never deleted; anything else is left as it is.
+     */
+    dismiss: personProcedure.input(zIdInput).output(zShoppingRequest).mutation(async ({ ctx, input }) => {
+      const row = await db.query.requests.findFirst({ where: eq(schema.requests.id, input.id) });
+      if (row === undefined) forbid("no such request");
+      if (row.status !== ShoppingStatus.failed && row.status !== ShoppingStatus.saved) forbid("only a request that went nowhere can be dismissed");
+      const [updated] = await db.update(schema.requests).set({ status: ShoppingStatus.dismissed }).where(eq(schema.requests.id, input.id)).returning();
+      if (updated === undefined) throw new Error("no request");
+      ctx.publish("shopping");
+      return toRequest(updated);
+    }),
     addRun: systemProcedure.input(zShoppingRunInput).output(z.string()).mutation(async ({ ctx, input }) => {
       const [row] = await db.insert(schema.runs).values({ ...input, createdAt: ctx.now }).returning();
       if (row === undefined) throw new Error("insert failed");

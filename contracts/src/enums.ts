@@ -341,6 +341,10 @@ export const ShoppingStatus = {
   added: "added",
   needsChoice: "needs-choice",
   failed: "failed",
+  /** No shopping helper is connected: the request is kept, and nothing was looked for (HOU-148). */
+  saved: "saved",
+  /** A person dismissed it from the Shop screen; it is kept but no longer shown. */
+  dismissed: "dismissed",
 } as const;
 export type ShoppingStatus = ValueOf<typeof ShoppingStatus>;
 export const zShoppingStatus = z.enum(ShoppingStatus);

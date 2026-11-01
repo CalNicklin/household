@@ -1,0 +1,32 @@
+import { readFileSync } from "node:fs";
+import { describe, expect, test } from "vitest";
+import { z } from "zod";
+import { practiceModel } from "./practice-model.ts";
+
+const zPhrases = z.object({ phrases: z.array(z.object({ text: z.string(), expect: z.array(z.array(z.string())) })) });
+const { phrases } = zPhrases.parse(JSON.parse(readFileSync(new URL("../../practice/phrases/routing.json", import.meta.url), "utf8")));
+
+/** The tools the practice model calls for one message, as the agent would prompt it. */
+async function toolsFor(text: string): Promise<{ tools: string[]; inputs: unknown[] }> {
+  const prompt = `Person: Priya\nChannel: app\nTime: 2026-11-02T07:00:00.000Z\nMessage: ${text}`;
+  const result = await practiceModel("practice-1").doGenerate({ prompt: [{ role: "user", content: [{ type: "text", text: prompt }] }] });
+  const calls = result.content.flatMap((c) => (c.type === "tool-call" ? [c] : []));
+  return { tools: calls.map((c) => c.toolName), inputs: calls.map((c) => JSON.parse(c.input) as unknown) };
+}
+
+describe("HOU-148: the practice model routes the household's phrases the way a person would expect", () => {
+  test.each(phrases)("[CAP-1][AUT-1][MOM-2] $text", async ({ text, expect: acceptable }) => {
+    const { tools } = await toolsFor(text);
+    expect(acceptable.map((a) => a.join("+"))).toContain(tools.join("+"));
+  });
+
+  test("[CAP-1] Cal's printer sentence is one capture of the whole sentence, never split into shop items", async () => {
+    const { tools, inputs } = await toolsFor("get the canon printer working and connected to laptop so we can print loads of photos up to A3");
+    expect(tools).toEqual(["capture"]);
+    expect(inputs[0]).toMatchObject({ text: "Get the canon printer working and connected to laptop so we can print loads of photos up to A3" });
+  });
+
+  test("[AUT-1] groceries in one sentence are still separate shop items", async () => {
+    expect(await toolsFor("we're out of oat milk and bread")).toEqual({ tools: ["shop"], inputs: [{ items: ["oat milk", "bread"] }] });
+  });
+});

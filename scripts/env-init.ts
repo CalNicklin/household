@@ -22,6 +22,9 @@ const values: Record<string, string> = {
   DB_PREFIX: keep("DB_PREFIX", () => (real ? "home" : "practice")),
   // PLT-6: the household's Hindsight banks are named after it (household-<id>-person-<person>).
   HOUSEHOLD_ID: keep("HOUSEHOLD_ID", () => (real ? "home" : "practice")),
+  // HOU-148: the real house needs a real model; left unset it would read messages with the practice model's patterns.
+  MODEL_PROVIDER: keep("MODEL_PROVIDER", () => (real ? "anthropic" : "practice")),
+  MODEL_ID: keep("MODEL_ID", () => (real ? "claude-opus-5-5" : "practice-1")),
   POSTGRES_PASSWORD: keep("POSTGRES_PASSWORD", () => random()),
   SESSION_SECRET: keep("SESSION_SECRET", () => random(32)),
   STORAGE_KEY: keep("STORAGE_KEY", () => randomBytes(32).toString("hex")),

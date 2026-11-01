@@ -144,6 +144,7 @@ const toOption = (p: (typeof supermarket.catalogue)[number]): ProductOption => (
 
 /** The practice supermarket's matching rules, used in-process by unit tests. */
 export class PracticeShoppingHelper implements ShoppingHelper {
+  readonly connected = true;
   readonly basketItems = new Map<string, number>(supermarket.basket.map((b) => [b.sku, b.quantity]));
   #find(item: string): { exact: ProductOption | null; options: ProductOption[] } {
     const q = item.toLowerCase().trim();
