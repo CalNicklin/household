@@ -9,7 +9,7 @@ const dirs: string[] = [];
 afterEach(() => {
   for (const d of dirs.splice(0)) rmSync(d, { recursive: true, force: true });
 });
-function envInit(env: string | null, ...args: string[]): { out: string; env: string; rewritten: boolean } {
+function envInit(env: string | null, ...args: string[]): { out: string; env: string; rewritten: boolean; mode: number } {
   const dir = mkdtempSync(path.join(tmpdir(), "env-init-"));
   dirs.push(dir);
   if (env !== null) writeFileSync(path.join(dir, ".env"), env);
@@ -17,10 +17,7 @@ function envInit(env: string | null, ...args: string[]): { out: string; env: str
   const out = execFileSync(process.execPath, [script, ...args], { cwd: dir, encoding: "utf8" });
   expect(readdirSync(dir).filter((f) => f.startsWith(".env.tmp"))).toEqual([]);
   const after = statSync(path.join(dir, ".env"));
-  const rewritten = before !== after.ino;
-  // A .env it writes is readable by its owner only.
-  if (rewritten) expect(after.mode & 0o777).toBe(0o600);
-  return { out, env: readFileSync(path.join(dir, ".env"), "utf8"), rewritten };
+  return { out, env: readFileSync(path.join(dir, ".env"), "utf8"), rewritten: before !== after.ino, mode: after.mode & 0o777 };
 }
 
 // A .env as install.sh wrote it before HOU-148: no MODEL_PROVIDER or MODEL_ID, credentials filled in by hand.
@@ -65,6 +62,9 @@ describe("env-init", () => {
     // Nothing to add: .env is not written at all (not even rewritten with the same bytes).
     expect(twice.rewritten).toBe(false);
     expect(once.rewritten).toBe(true);
+    // A .env it writes is readable by its owner only.
+    expect(once.mode).toBe(0o600);
+    expect(envInit("PRACTICE=false\n", "--real")).toMatchObject({ rewritten: true, mode: 0o600 });
     expect(twice.out).toContain("added to .env: nothing");
     const emptied = envInit(once.env.replace(/^MCP_TOKEN=.*$/m, "MCP_TOKEN=").replace(/^MODEL_ID=.*\n/m, ""), "--real");
     expect(emptied.out).toContain("added to .env: MODEL_ID, MCP_TOKEN");
