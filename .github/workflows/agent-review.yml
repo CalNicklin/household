@@ -10,8 +10,9 @@
 # file, which is why docs/OPERATIONS.md says what the key can reach). `agent-review` alone can write PR
 # comments; it validates the findings and posts them, and never calls the model.
 #
-# Until the REVIEW_ANTHROPIC_API_KEY secret exists it skips with a notice and passes. While the base
-# branch has no review (only the PR that adds it), the PR's own scripts and prompts review it. The model is the
+# Until the REVIEW_ANTHROPIC_API_KEY secret exists it skips with a notice and passes. While the default
+# branch has no review (only the PR that adds it), a PR into it is reviewed with its own scripts and
+# prompts; a PR into another branch without the review is skipped. The model is the
 # REVIEW_MODEL repository variable, defaulting to the latest Claude model (scripts/review/model.ts).
 name: agent-review
 on:
@@ -35,7 +36,7 @@ jobs:
       contents: read
       pull-requests: read
     outputs:
-      ran: ${{ steps.ready.outputs.ran }}
+      ran: ${{ (steps.base.outputs.from == 'base' || steps.base.outputs.from == 'head') && 'true' || 'false' }}
     steps:
       - name: Check the key and the base's scripts
         id: ready
@@ -55,10 +56,18 @@ jobs:
       - name: Is the review on the base branch yet?
         id: base
         if: steps.ready.outputs.ran == 'true'
+        env:
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
         run: |
-          if [ -f scripts/agent-review.ts ] && [ -f .github/review/code.md ]; then echo "from=base" >> "$GITHUB_OUTPUT"; else
+          if [ -f scripts/agent-review.ts ] && [ -f .github/review/code.md ]; then
+            echo "from=base" >> "$GITHUB_OUTPUT"
+          elif [ "$BASE_REF" = "$DEFAULT_BRANCH" ]; then
             echo "from=head" >> "$GITHUB_OUTPUT"
-            echo "::notice title=Agent review bootstrap::The base branch has no agent review yet, so this PR is reviewed with its own scripts and prompts. Once one is on the base, a PR never reviews itself."
+            echo "::notice title=Agent review bootstrap::The default branch has no agent review yet, so this PR is reviewed with its own scripts and prompts. Once one is on it, a PR never reviews itself."
+          else
+            echo "from=none" >> "$GITHUB_OUTPUT"
+            echo "::notice title=Agent review skipped::This PR's base branch has no agent review; only a PR into the default branch is reviewed with its own scripts."
           fi
       # Bootstrap only (the PR that adds the review): its own scripts and prompts. It could edit this file anyway.
       - if: steps.base.outputs.from == 'head'
@@ -67,37 +76,37 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha }}
           persist-credentials: false
       # The PR's head, only ever read through git; nothing from it runs.
-      - if: steps.ready.outputs.ran == 'true'
+      - if: steps.base.outputs.from == 'base' || steps.base.outputs.from == 'head'
         uses: actions/checkout@v4
         with:
           ref: ${{ github.event.pull_request.head.sha }}
           path: pr
           fetch-depth: 0
           persist-credentials: false
-      - if: steps.ready.outputs.ran == 'true'
+      - if: steps.base.outputs.from == 'base' || steps.base.outputs.from == 'head'
         uses: pnpm/action-setup@v4
-      - if: steps.ready.outputs.ran == 'true'
+      - if: steps.base.outputs.from == 'base' || steps.base.outputs.from == 'head'
         uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: pnpm
-      - if: steps.ready.outputs.ran == 'true'
+      - if: steps.base.outputs.from == 'base' || steps.base.outputs.from == 'head'
         run: pnpm install --frozen-lockfile --ignore-scripts
       - name: Read the last run's findings and the replies to them
-        if: steps.ready.outputs.ran == 'true'
+        if: steps.base.outputs.from == 'base' || steps.base.outputs.from == 'head'
         env:
           GH_TOKEN: ${{ github.token }}
           PR: ${{ github.event.pull_request.number }}
         run: node scripts/agent-review.ts prior --pr "$PR" --out "$RUNNER_TEMP/prior.json"
       - name: Review (the model; this step has the Anthropic key and no GitHub token)
-        if: steps.ready.outputs.ran == 'true'
+        if: steps.base.outputs.from == 'base' || steps.base.outputs.from == 'head'
         env:
           ANTHROPIC_API_KEY: ${{ secrets.REVIEW_ANTHROPIC_API_KEY }}
           REVIEW_MODEL: ${{ vars.REVIEW_MODEL }}
           BASE: ${{ github.event.pull_request.base.sha }}
           HEAD: ${{ github.event.pull_request.head.sha }}
         run: node scripts/agent-review.ts review --checkout pr --base "$BASE" --head "$HEAD" --prior "$RUNNER_TEMP/prior.json" --out "$RUNNER_TEMP/answers.json"
-      - if: steps.ready.outputs.ran == 'true'
+      - if: steps.base.outputs.from == 'base' || steps.base.outputs.from == 'head'
         uses: actions/upload-artifact@v4
         with:
           name: agent-review-answers
@@ -129,10 +138,18 @@ jobs:
       - name: Is the review on the base branch yet?
         id: base
         if: steps.ran.outputs.skipped != 'true'
+        env:
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
         run: |
-          if [ -f scripts/agent-review.ts ] && [ -f .github/review/code.md ]; then echo "from=base" >> "$GITHUB_OUTPUT"; else
+          if [ -f scripts/agent-review.ts ] && [ -f .github/review/code.md ]; then
+            echo "from=base" >> "$GITHUB_OUTPUT"
+          elif [ "$BASE_REF" = "$DEFAULT_BRANCH" ]; then
             echo "from=head" >> "$GITHUB_OUTPUT"
-            echo "::notice title=Agent review bootstrap::The base branch has no agent review yet, so this PR is reviewed with its own scripts and prompts. Once one is on the base, a PR never reviews itself."
+            echo "::notice title=Agent review bootstrap::The default branch has no agent review yet, so this PR is reviewed with its own scripts and prompts. Once one is on it, a PR never reviews itself."
+          else
+            echo "from=none" >> "$GITHUB_OUTPUT"
+            echo "::notice title=Agent review skipped::This PR's base branch has no agent review; only a PR into the default branch is reviewed with its own scripts."
           fi
       - if: steps.base.outputs.from == 'head'
         uses: actions/checkout@v4

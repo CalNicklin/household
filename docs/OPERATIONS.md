@@ -594,8 +594,9 @@ left out) fails the review: split it.
   changes them is still reviewed with `main`'s (the change takes effect once it is on `main`). The
   workflow file itself is the PR's own, though (GitHub runs a `pull_request` workflow from the PR), so a
   PR that edits it can change its own review: see "Secret exposure" below. The one exception to the base
-  rule is the bootstrap: while the base has no review at all (only for the PR that added it), the PR's
-  own scripts and prompts run, with a notice saying so. The PR's head is a second
+  rule is the bootstrap: while the default branch has no review at all (only for the PR that added it),
+  a PR into it runs its own scripts and prompts, with a notice saying so. A PR into another branch that
+  has no review is skipped with a notice. The PR's head is a second
   checkout that is only read, through git (`git show`, `git grep`, `git diff`, `git log`): nothing in it
   is installed, built or run, and no symlink is followed. Neither checkout keeps a token in `.git`.
 - **Prompt injection:** the diff, the PR's title and description, and replies are untrusted data in user

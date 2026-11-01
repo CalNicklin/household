@@ -96,7 +96,7 @@ describe("HOU-151 the agent review workflow", () => {
         ["${{ github.event.pull_request.head.sha }}", "pr", expect.any(String)],
       ]);
       const decides = job.steps.find((s) => s.id === "base");
-      expect(decides?.run).toContain("if [ -f scripts/agent-review.ts ] && [ -f .github/review/code.md ]; then echo \"from=base\"");
+      expect(decides?.run).toContain('elif [ "$BASE_REF" = "$DEFAULT_BRANCH" ]; then');
       for (const c of checkouts) expect(c.with?.["persist-credentials"]).toBe(false);
       for (const s of job.steps) {
         expect(s["working-directory"]).toBeUndefined();
