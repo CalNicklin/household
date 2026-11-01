@@ -140,3 +140,28 @@ test("[CAP-6] tick then untick quickly on a slow connection: the last tap is wha
   await expect(shopping.getByRole("checkbox", { name: "Tick bin bags", exact: true })).toBeVisible();
   await phoneCtx.close();
 });
+
+test("[CAP-6] changing a list's emoji on one device keeps a rename made on the other meanwhile", async ({ page, browser }) => {
+  await login(page);
+  await page.goto("/lists");
+  const phoneCtx = await browser.newContext();
+  const phone = await phoneCtx.newPage();
+  await login(phone, "tom");
+  await phone.goto("/lists");
+
+  // The iPad opens the editor first.
+  await list(page, "Christmas presents").getByRole("button", { name: "Actions for Christmas presents" }).click();
+  await page.getByRole("menuitem", { name: "Rename / emoji" }).click();
+  // The phone renames the list while the iPad's editor is still open.
+  await list(phone, "Christmas presents").getByRole("button", { name: "Actions for Christmas presents" }).click();
+  await phone.getByRole("menuitem", { name: "Rename / emoji" }).click();
+  await phone.getByRole("textbox", { name: "List name" }).fill("Presents");
+  await phone.getByRole("button", { name: "Save" }).click();
+  await expect(list(phone, "Presents")).toBeVisible(live);
+  // The iPad changes only the emoji.
+  await page.getByRole("textbox", { name: "List emoji" }).fill("🎄");
+  await page.getByRole("button", { name: "Save" }).click();
+  await expect(list(phone, "Presents").getByRole("heading", { name: "Presents" })).toContainText("🎄", live);
+  await expect(list(page, "Presents").getByRole("heading", { name: "Presents" })).toContainText("🎄", live);
+  await phoneCtx.close();
+});

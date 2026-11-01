@@ -29,8 +29,23 @@ export function ChecklistTitle({ emoji, name, menu }: { emoji: string; name: str
   );
 }
 
-/** Rename a list and change its emoji in place. Enter saves, Escape puts it back. */
-export function ChecklistTitleEditor({ emoji, name, onSave, onCancel }: { emoji: string; name: string; onSave: (next: { emoji: string; name: string }) => void; onCancel: () => void }) {
+/**
+ * Rename a list and change its emoji in place. Enter saves, Escape puts it back. `onSave` gets only
+ * the fields the person changed from what the editor opened with.
+ */
+export function ChecklistTitleEditor({
+  emoji,
+  name,
+  onSave,
+  onCancel,
+}: {
+  emoji: string;
+  name: string;
+  onSave: (changed: { emoji?: string; name?: string }) => void;
+  onCancel: () => void;
+}) {
+  // What it opened with: a rename arriving from another phone while it is open is not this person's change.
+  const [opened] = useState({ emoji, name });
   const [nextEmoji, setEmoji] = useState(emoji);
   const [nextName, setName] = useState(name);
   const nameRef = useRef<HTMLInputElement>(null);
@@ -41,7 +56,9 @@ export function ChecklistTitleEditor({ emoji, name, onSave, onCancel }: { emoji:
       aria-label={`Rename ${name}`}
       onSubmit={(e) => {
         e.preventDefault();
-        onSave({ emoji: nextEmoji.trim() === "" ? emoji : nextEmoji.trim(), name: nextName.trim() === "" ? name : nextName.trim() });
+        const typedEmoji = nextEmoji.trim();
+        const typedName = nextName.trim();
+        onSave({ ...(typedEmoji === "" || typedEmoji === opened.emoji ? {} : { emoji: typedEmoji }), ...(typedName === "" || typedName === opened.name ? {} : { name: typedName }) });
       }}
       onKeyDown={(e) => {
         if (e.key === "Escape") onCancel();

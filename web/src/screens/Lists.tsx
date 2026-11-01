@@ -1,4 +1,4 @@
-import { type List, type ListItem, type ListsView, ListWriteOutcome } from "@household/contracts";
+import { type List, type ListItem, type ListsView, ListWriteOutcome, type ListWriteResult } from "@household/contracts";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRef, useState } from "react";
 import { useTRPC } from "../data/trpc.ts";
@@ -14,8 +14,6 @@ const NOT_SAVED = "That didn't save — check the connection and try again.";
  * message instead of being lost; the list is refetched either way.
  */
 type Refusal = string | null;
-/** What a queued write leaves behind for the next one: only that it finished. */
-type Settled = unknown;
 async function saved(write: () => Promise<{ outcome: ListWriteOutcome }>, text: string): Promise<Refusal> {
   try {
     return (await write()).outcome === ListWriteOutcome.duplicate ? alreadyThere(text) : null;
@@ -34,26 +32,38 @@ function useListsCache() {
   return { patchItem, refresh: () => queryClient.invalidateQueries({ queryKey: key }) };
 }
 
+/** What one of an item's writes resolves to: a tick, a rename, or a delete. */
+type ItemWrite = ListItem | ListWriteResult | void;
+
 function ListPanel({ list }: { list: List }) {
   const trpc = useTRPC();
   const { patchItem, refresh } = useListsCache();
   const settle = { onSettled: refresh };
   const add = useMutation(trpc.addListItem.mutationOptions(settle));
-  const check = useMutation(trpc.setListItemChecked.mutationOptions(settle));
-  const rename = useMutation(trpc.renameListItem.mutationOptions(settle));
-  const removeItem = useMutation(trpc.removeListItem.mutationOptions(settle));
+  // An item's own writes refresh when its queue empties (inOrder), not after each one.
+  const check = useMutation(trpc.setListItemChecked.mutationOptions());
+  const rename = useMutation(trpc.renameListItem.mutationOptions());
+  const removeItem = useMutation(trpc.removeListItem.mutationOptions());
   const update = useMutation(trpc.updateList.mutationOptions(settle));
   const removeList = useMutation(trpc.removeList.mutationOptions(settle));
   const [editing, setEditing] = useState(false);
   const [deleting, setDeleting] = useState(false);
   /**
    * One item's writes reach the server in the order they were made: tick then untick quickly and the
-   * untick is sent only after the tick has landed, so the last tap is what both screens show.
+   * untick is sent only after the tick has landed, so the last tap is what both screens show. The
+   * list is refetched once the item's last queued write is done, so a tap waiting its turn is not
+   * flipped back by the answer to the one before it.
    */
-  const pending = useRef(new Map<string, Promise<Settled>>());
-  const inOrder = <T,>(id: string, write: () => Promise<T>): Promise<T> => {
+  const pending = useRef(new Map<string, Promise<ItemWrite>>());
+  const inOrder = <T extends ItemWrite>(id: string, write: () => Promise<T>): Promise<T> => {
     const next = (pending.current.get(id) ?? Promise.resolve()).catch(() => undefined).then(write);
     pending.current.set(id, next);
+    void (async () => {
+      await next.catch(() => undefined);
+      if (pending.current.get(id) !== next) return;
+      pending.current.delete(id);
+      await refresh();
+    })();
     return next;
   };
 
@@ -62,9 +72,10 @@ function ListPanel({ list }: { list: List }) {
       emoji={list.emoji}
       name={list.name}
       onCancel={() => setEditing(false)}
-      onSave={(next) => {
+      onSave={(changed) => {
         setEditing(false);
-        if (next.name !== list.name || next.emoji !== list.emoji) update.mutate({ id: list.id, name: next.name, emoji: next.emoji });
+        // Only what this person changed, so a rename made on another phone meanwhile is not undone.
+        if (changed.name !== undefined || changed.emoji !== undefined) update.mutate({ id: list.id, ...changed });
       }}
     />
   ) : (
