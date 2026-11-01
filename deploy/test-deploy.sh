@@ -30,7 +30,6 @@ step() { printf '\n== %s\n' "$*"; }
 fail() { echo "FALSE PLT-8: $*" >&2; exit 1; }
 
 step "the image, built as deploy.yml and preview.yml build it"
-# The small images below are built FROM it, so on the Docker daemon's own builder, which can see it (not BUILDX_BUILDER).
 "$repo/deploy/build-image.sh" "$local_image" "$ref"
 
 step "a registry standing in for GHCR, holding the image CI would have pushed"
@@ -95,6 +94,7 @@ docker logs household-app-1 2>&1 | grep -q 'ports-missing-credentials.*shopping 
 echo "healthy behind Caddy; login works; no helper"
 
 step "HOU-160: a .env the new image refuses never takes the house down: the old container keeps running"
+# Built FROM the image above, so on the Docker daemon's own builder, which can see it (not BUILDX_BUILDER's).
 printf 'FROM %s\nLABEL household.test=next\n' "$local_image" | env -u BUILDX_BUILDER docker build -q -t localhost:5000/household:next - > /dev/null
 docker push -q localhost:5000/household:next > /dev/null
 next="$(docker image inspect --format '{{index .RepoDigests 0}}' localhost:5000/household:next | cut -d@ -f2)"
@@ -141,6 +141,7 @@ grep -qx "model: anthropic claude-opus-5-5 (ANTHROPIC_API_KEY set)" "$work/statu
 docker logs household-app-1 2>&1 | grep -q '"event":"listening".*"model":"anthropic claude-opus-5-5 (ANTHROPIC_API_KEY set)"' || fail "the app did not log its model at start"
 
 step "a broken image never replaces a working one: household-deploy rolls back"
+# On the daemon's own builder, like the image above (it is built FROM the local image).
 printf 'FROM %s\nCMD ["node", "-e", "process.exit(1)"]\n' "$local_image" | env -u BUILDX_BUILDER docker build -q -t localhost:5000/household:broken - > /dev/null
 docker push -q localhost:5000/household:broken > /dev/null
 broken="$(docker image inspect --format '{{index .RepoDigests 0}}' localhost:5000/household:broken | cut -d@ -f2)"
