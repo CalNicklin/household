@@ -18,7 +18,7 @@ test("[CAP-6] shopping and simple lists live in the app: tick, add, rename, dele
 
   const shopping = list(page, "Shopping");
   const tomShopping = list(phone, "Shopping");
-  await expect(tomShopping.getByRole("checkbox", { name: "Untick kitchen roll" })).toBeVisible();
+  await expect(tomShopping.getByRole("checkbox", { name: "Untick kitchen roll", exact: true })).toBeVisible();
 
   // Add with Enter; the other phone sees it.
   await shopping.getByRole("textbox", { name: "Add an item to Shopping" }).fill("Batteries");
@@ -31,12 +31,12 @@ test("[CAP-6] shopping and simple lists live in the app: tick, add, rename, dele
   await expect(shopping.getByRole("alert")).toContainText("is already on this list");
 
   // Tick: it stays, struck through, on both screens. Untick from the phone.
-  await shopping.getByRole("checkbox", { name: "Tick bin bags" }).click();
-  await expect(tomShopping.getByRole("checkbox", { name: "Untick bin bags" })).toBeVisible(live);
+  await shopping.getByRole("checkbox", { name: "Tick bin bags", exact: true }).click();
+  await expect(tomShopping.getByRole("checkbox", { name: "Untick bin bags", exact: true })).toBeVisible(live);
   await expect(tomShopping.getByRole("button", { name: "bin bags", exact: true })).toHaveCSS("text-decoration-line", "line-through");
   await evidence(phone, "CAP-6-lists-ticked-on-the-other-phone");
-  await tomShopping.getByRole("checkbox", { name: "Untick bin bags" }).click();
-  await expect(shopping.getByRole("checkbox", { name: "Tick bin bags" })).toBeVisible(live);
+  await tomShopping.getByRole("checkbox", { name: "Untick bin bags", exact: true }).click();
+  await expect(shopping.getByRole("checkbox", { name: "Tick bin bags", exact: true })).toBeVisible(live);
 
   // Rename by tapping the words.
   await shopping.getByRole("button", { name: "Batteries", exact: true }).click();
@@ -109,4 +109,34 @@ test("[CAP-6] on a slow connection a rename cannot be typed over while it saves,
   await add.fill("Candles");
   await expect(shopping.getByRole("button", { name: "Matches", exact: true })).toBeVisible();
   await expect(add).toHaveValue("Candles");
+});
+
+test("[CAP-6] tick then untick quickly on a slow connection: the last tap is what both screens keep", async ({ page, browser }) => {
+  await login(page);
+  await page.goto("/lists");
+  // The first write is slow and the second is quick, so they would land in the wrong order if both were sent at once.
+  let calls = 0;
+  await page.route(/\/api\/trpc\/setListItemChecked/, async (route) => {
+    calls += 1;
+    if (calls === 1) await new Promise((resolve) => setTimeout(resolve, 1000));
+    await route.continue();
+  });
+  let answered = 0;
+  page.on("response", (r) => {
+    if (r.url().includes("/api/trpc/setListItemChecked")) answered += 1;
+  });
+  const shopping = list(page, "Shopping");
+  await shopping.getByRole("checkbox", { name: "Tick bin bags", exact: true }).click();
+  await shopping.getByRole("checkbox", { name: "Untick bin bags", exact: true }).click();
+  // Both writes have been answered before anyone looks.
+  await expect.poll(() => answered).toBe(2);
+  expect(calls).toBe(2);
+  const phoneCtx = await browser.newContext();
+  const phone = await phoneCtx.newPage();
+  await login(phone, "tom");
+  await phone.goto("/lists");
+  await expect(list(phone, "Shopping").getByRole("checkbox", { name: "Tick bin bags", exact: true })).toBeVisible();
+  await page.reload();
+  await expect(shopping.getByRole("checkbox", { name: "Tick bin bags", exact: true })).toBeVisible();
+  await phoneCtx.close();
 });

@@ -1,6 +1,6 @@
 import { type List, type ListItem, type ListsView, ListWriteOutcome } from "@household/contracts";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useTRPC } from "../data/trpc.ts";
 import { AddItemField, Button, ChecklistCard, ChecklistTitle, ChecklistTitleEditor, CheckRow, Confirm, Grid3, Header, Menu, Page, Row, Text } from "../design-system/index.ts";
 import { FooterComposer, navFor } from "./common.tsx";
@@ -14,6 +14,8 @@ const NOT_SAVED = "That didn't save — check the connection and try again.";
  * message instead of being lost; the list is refetched either way.
  */
 type Refusal = string | null;
+/** What a queued write leaves behind for the next one: only that it finished. */
+type Settled = unknown;
 async function saved(write: () => Promise<{ outcome: ListWriteOutcome }>, text: string): Promise<Refusal> {
   try {
     return (await write()).outcome === ListWriteOutcome.duplicate ? alreadyThere(text) : null;
@@ -44,6 +46,16 @@ function ListPanel({ list }: { list: List }) {
   const removeList = useMutation(trpc.removeList.mutationOptions(settle));
   const [editing, setEditing] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  /**
+   * One item's writes reach the server in the order they were made: tick then untick quickly and the
+   * untick is sent only after the tick has landed, so the last tap is what both screens show.
+   */
+  const pending = useRef(new Map<string, Promise<Settled>>());
+  const inOrder = <T,>(id: string, write: () => Promise<T>): Promise<T> => {
+    const next = (pending.current.get(id) ?? Promise.resolve()).catch(() => undefined).then(write);
+    pending.current.set(id, next);
+    return next;
+  };
 
   const title = editing ? (
     <ChecklistTitleEditor
@@ -104,12 +116,12 @@ function ListPanel({ list }: { list: List }) {
           checked={item.checked}
           onToggle={(checked) => {
             patchItem(item.id, (i) => ({ ...i, checked }));
-            check.mutate({ id: item.id, checked });
+            inOrder(item.id, () => check.mutateAsync({ id: item.id, checked })).catch(() => undefined);
           }}
-          onRename={(text) => saved(() => rename.mutateAsync({ id: item.id, text }), text)}
+          onRename={(text) => saved(() => inOrder(item.id, () => rename.mutateAsync({ id: item.id, text })), text)}
           onRemove={() => {
             patchItem(item.id, () => null);
-            removeItem.mutate({ id: item.id });
+            inOrder(item.id, () => removeItem.mutateAsync({ id: item.id })).catch(() => undefined);
           }}
         />
       ))}
