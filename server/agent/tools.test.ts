@@ -88,3 +88,22 @@ describe("CAP-1 through the real tool", () => {
     expect(mine.map((i) => i.text).sort()).toEqual(["Fix the gate", "Paint the shed"]);
   });
 });
+
+describe("CAP-1 through the real tool, captures in parallel", () => {
+  test("[CAP-1] two captures the model makes at once for one message both reach the Backlog", async () => {
+    const scope = jobScope(h.rt, "job-parallel", "msg-parallel", "priya", "app");
+    const execute = houseTools(scope).capture.execute;
+    if (execute === undefined) throw new Error("capture has no execute");
+    const [a, b] = await Promise.all([execute({ text: "Oil the hinges" }, {}), execute({ text: "Sweep the path" }, {})]);
+    expect(idOf(a)).not.toBe(idOf(b));
+    const texts = (await h.rt.system("t").backlog.list()).map((i) => i.text);
+    expect(texts).toEqual(expect.arrayContaining(["Oil the hinges", "Sweep the path"]));
+    // A retry of the same job finds both again and writes nothing new.
+    const before = (await h.rt.system("t").backlog.list()).length;
+    const retry = houseTools(jobScope(h.rt, "job-parallel", "msg-parallel", "priya", "app")).capture.execute;
+    if (retry === undefined) throw new Error("capture has no execute");
+    const again = [idOf(await retry({ text: "Oil the hinges" }, {})), idOf(await retry({ text: "Sweep the path" }, {}))];
+    expect(again.sort()).toEqual([idOf(a), idOf(b)].sort());
+    expect((await h.rt.system("t").backlog.list()).length).toBe(before);
+  });
+});

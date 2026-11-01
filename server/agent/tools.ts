@@ -31,14 +31,17 @@ export function houseTools(scope: JobScope) {
     if (!scope.effects.replan.includes(today())) scope.effects.replan.push(today());
   };
 
+  // HOU-148: each capture claims its position before awaiting anything, so captures the model makes
+  // in parallel for one message get distinct positions (a retried job builds a fresh counter).
+  let captures = 0;
   const capture = createTool({
     id: "capture",
     description: "Put a thought on the shared backlog: a job with no date, including fixing, setting up, booking or buying anything that is not groceries ('get the printer working', 'buy a new kettle'). One sentence is one item unless it clearly lists separate jobs. Guess tags for what it needs.",
     inputSchema: z.object({ text: z.string().min(1), tags: z.array(zBacklogTag).optional() }),
     execute: record("capture", async (input: { text: string; tags?: BacklogTag[] | undefined }) => {
+      const index = captures++;
       const hints = await rt.system("tags").household.tagHints();
       const tags = input.tags !== undefined && input.tags.length > 0 ? input.tags : guessTags(input.text, hints);
-      const index = scope.toolCalls.filter((c) => c.tool === "capture").length;
       const item = await api.backlog.create({ text: input.text, tags, createdVia: scope.channel, sourceMessage: scope.messageId, index });
       // HOU-149: today's plan says whether the backlog is empty ("Getting started"), so redraw it now.
       replanToday();
