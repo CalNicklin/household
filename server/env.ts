@@ -76,6 +76,11 @@ export function houseCalendars(env: Pick<Env, "GOOGLE_CALENDARS" | "GOOGLE_CALEN
   return out;
 }
 
+/** HOME-1: calendar owners in GOOGLE_CALENDARS that are neither `shared` nor one of these people (a typo). */
+export function unknownCalendarOwners(calendars: readonly HouseCalendar[], personIds: readonly string[]): string[] {
+  return calendars.map((c) => c.owner).filter((o) => o !== CalendarOwnerKind.shared && !personIds.includes(o));
+}
+
 export function loadEnv(source: Record<string, string | undefined> = process.env): Env {
   // A setting written as `NAME=` is unset, not an empty URL or token (compose's HELPER_URL: "" says "no helper").
   const env = zEnv.parse(Object.fromEntries(Object.entries(source).filter(([, v]) => v !== "")));
