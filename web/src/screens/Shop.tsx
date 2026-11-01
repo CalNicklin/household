@@ -1,6 +1,7 @@
 import { ActionKind, DeletableShoppingStatuses, type ShoppingRequest, ShoppingStatus } from "@household/contracts";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
+import { useState } from "react";
 import { say } from "../data/send.ts";
 import { useTRPC } from "../data/trpc.ts";
 import { useUndo } from "../data/undo.tsx";
@@ -38,10 +39,14 @@ function DeleteMenu({ request }: { request: ShoppingRequest }) {
 }
 
 /** AUT-3: no exact match → one question with two or three options to tap. */
-function Request({ request }: { request: ShoppingRequest }) {
+function Request({ request, helperConnected, onDismiss }: { request: ShoppingRequest; helperConnected: boolean; onDismiss: (id: string) => void }) {
+  // HOU-157: with no helper connected nothing was looked for, whatever an older request says.
+  const status = !helperConnected && request.status === ShoppingStatus.failed ? ShoppingStatus.saved : request.status;
   const queryClient = useQueryClient();
   // HOU-148: a tap like any other (CH-8), so it is dismissed everywhere and the reply says what happened.
+  // HOU-157: the row goes at once on the screen that was tapped (HOME-4); other screens follow live.
   const dismiss = () => {
+    onDismiss(request.id);
     void say({ text: "Dismiss", ref: `shopping:${request.id}`, action: ActionKind.notToday }).then(() => queryClient.invalidateQueries());
   };
   const choose = (sku: string, name: string) => {
@@ -50,7 +55,7 @@ function Request({ request }: { request: ShoppingRequest }) {
   return (
     <BacklogRow
       title={request.item}
-      meta={STATUS_LINE[request.status](request)}
+      meta={STATUS_LINE[status](request)}
       tone={request.status === ShoppingStatus.added ? "suggestion" : "muted"}
       {...(DISMISSABLE.has(request.status) ? { menu: <DeleteMenu request={request} /> } : {})}
     >
@@ -86,7 +91,9 @@ export function ShopScreen() {
   const shop = useQuery(trpc.shop.queryOptions());
   const { isDeleted } = useUndo();
   const data = shop.data;
-  const requests = (data?.requests ?? []).filter((r) => !isDeleted(requestKey(r.id)));
+  const [dismissed, setDismissed] = useState<ReadonlySet<ShoppingRequest["id"]>>(new Set());
+  const onDismiss = (id: string) => setDismissed((d) => new Set([...d, id]));
+  const requests = (data?.requests ?? []).filter((r) => !dismissed.has(r.id) && !isDeleted(requestKey(r.id)));
   return (
     <Page label="Shop">
       <Header title="Shop" line={data?.deliveryDate === null || data === undefined ? "No delivery booked" : `Next delivery ${new Date(data.deliveryDate).toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long" })}`} nav={navFor("/shop")} />
@@ -95,7 +102,7 @@ export function ShopScreen() {
         <Section label="Asked for" tone="suggestion">
           <ListCard label="Asked for">
             {requests.map((r) => (
-              <Request key={r.id} request={r} />
+              <Request key={r.id} request={r} helperConnected={data?.helperConnected ?? true} onDismiss={onDismiss} />
             ))}
           </ListCard>
           {data !== undefined && requests.length === 0 ? <Text tone="muted">Nothing asked for yet.</Text> : null}
