@@ -1,5 +1,5 @@
 import { createTool } from "@mastra/core/tools";
-import { ActionKind, type BacklogTag, type ModeKind as Mode, ModeKind, Urgency, zActionKind, zBacklogTag } from "@household/contracts";
+import { ActionKind, type BacklogTag, LongTool, type ModeKind as Mode, ModeKind, Urgency, zActionKind, zBacklogTag } from "@household/contracts";
 import { z } from "zod";
 import { gatherFacts, oneThingCandidates } from "../planner/gather.ts";
 import { adultsOf, contextLine, eventsOn } from "../rules/day.ts";
@@ -44,7 +44,7 @@ export function houseTools(scope: JobScope) {
       const ids: string[] = [];
       for (const item of input.items) {
         const request = await api.shopping.request({ item, sourceMessage: `${scope.messageId}:${item}` });
-        scope.effects.shopping.push({ requestId: request.id, sku: null });
+        scope.effects.long.push({ tool: LongTool.shop, requestId: request.id, sku: null });
         ids.push(request.id);
       }
       // Nothing is in the basket yet: the helper adds it afterwards, or asks if there's no exact match (AUT-3).

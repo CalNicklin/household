@@ -1,10 +1,11 @@
-import { ActorKind, type Channel, type LocalDate, type NotifyInput } from "@household/contracts";
+import { ActorKind, type Channel, type LocalDate, type LongStep, type NotifyInput } from "@household/contracts";
 import type { Api, Runtime } from "../runtime.ts";
 
 /** Things a job must do after the agent step, durably and in order (PLT-10). */
 export type Effects = {
   replan: LocalDate[];
-  shopping: { requestId: string; sku: string | null }[];
+  /** PLT-10: tools' long steps, each run in a child workflow that reports back to this job. */
+  long: LongStep[];
   notify: NotifyInput[];
   closeRefs: { ref: string; status: "dismissed" | "done" }[];
   /** PRV-8: the only outside people the app may message are the named sitters. */
@@ -28,7 +29,7 @@ export type JobScope = {
 };
 
 export function emptyEffects(): Effects {
-  return { replan: [], shopping: [], notify: [], closeRefs: [], sitterAsk: [], remember: [] };
+  return { replan: [], long: [], notify: [], closeRefs: [], sitterAsk: [], remember: [] };
 }
 
 export function jobScope(rt: Runtime, jobId: string, messageId: string, person: string | null, channel: Channel): JobScope {
