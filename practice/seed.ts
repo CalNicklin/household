@@ -5,6 +5,7 @@ import type { Env } from "../server/env.ts";
 import { connectAll, schemas } from "../server/runtime.ts";
 import { personDefaults } from "../server/setup/house.ts";
 import * as data from "./data.ts";
+import { practiceCopy } from "./fakes.ts";
 
 const H = schemas.household;
 const B = schemas.backlog;
@@ -58,20 +59,12 @@ export async function seedPractice(env: Env, now: Date = new Date(data.PRACTICE_
       })),
     );
     // The first calendar sync, as if Google had been read once (later changes arrive by webhook, CH-6).
-    const [sync] = await dbs.calendar.insert(C.syncs).values({ syncToken: String(data.calendar.length), at: now }).returning();
+    const [sync] = await dbs.calendar.insert(C.syncs).values({ syncTokens: Object.fromEntries(data.calendars.map((c) => [c.calendarId, String(data.calendar.length)])), at: now }).returning();
     await dbs.calendar.insert(C.events).values(
-      data.calendar.map((e) => ({
-        externalId: e.externalId,
-        title: e.title,
-        start: new Date(e.start),
-        end: new Date(e.end),
-        allDay: e.allDay ?? false,
-        attendees: e.attendees,
-        away: e.away ?? [],
-        work: e.work ?? false,
-        soloWithKids: e.soloWithKids ?? null,
-        syncId: sync?.id ?? null,
-      })),
+      data.calendar.map((e) => {
+        const copy = practiceCopy(e);
+        return { ...copy, start: new Date(copy.start), end: new Date(copy.end), syncId: sync?.id ?? null };
+      }),
     );
     // CAP-6: the shared lists live in the lists domain; the house only ever adds to them.
     for (const [position, l] of data.lists.entries()) {

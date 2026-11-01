@@ -84,9 +84,14 @@ async function handleMessageImpl(messageId: string): Promise<void> {
       const changed = await DBOS.runStep(
         async () => {
           const api = rt.system("calendar-sync");
-          const token = await api.calendar.syncToken();
-          const changes = await rt.ports.calendar.changes(token);
-          return api.calendar.applySync({ upserts: changes.upserts, deletedExternalIds: changes.deletedExternalIds, syncToken: changes.nextSyncToken });
+          // HOME-1: every calendar the house reads, each from its own sync token.
+          const changes = await rt.ports.calendar.changes(await api.calendar.syncTokens());
+          return api.calendar.applySync({
+            upserts: changes.upserts,
+            deletedExternalIds: changes.deletedExternalIds,
+            syncTokens: changes.nextSyncTokens,
+            calendarIds: rt.ports.calendar.calendars.map((c) => c.calendarId),
+          });
         },
         { name: "calendar-sync" },
       );

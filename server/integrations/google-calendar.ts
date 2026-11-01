@@ -2,11 +2,21 @@
  * Google Calendar, read-only (PRV-1). The source asks for the `calendar.readonly` scope and only
  * ever issues GET requests to the Calendar API; nothing here can create, move or delete an event.
  *
- * How a Google event becomes a household event. These are conventions, chosen so the shared
- * calendar needs no new fields; the household can change them here:
- * - attendees: the organizer plus every attendee who has not declined, mapped from email to a
- *   person with `personForEmail`; unknown emails (friends, colleagues) are ignored.
- * - away: everyone attending is out of the house, unless the description carries `#home`.
+ * HOME-1: the house reads several calendars through one sign-in (Cal's): Cal's own, Chloe's (shared
+ * with Cal's account) and the shared one, each named with its owner (GOOGLE_CALENDARS). Each
+ * calendar's copy of an event is kept separately and read back merged by `uid` (calendar/merge.ts).
+ *
+ * How a Google event becomes a household event. These are conventions, chosen so the calendars need
+ * no new fields; the household can change them here:
+ * - attendees: on a person's own calendar, that person (unless they declined it, when it isn't
+ *   theirs). On the shared calendar, the organizer plus every attendee who has not declined, mapped
+ *   from email to a person with `personForEmail`; unknown emails (friends, colleagues) are ignored.
+ * - uid: Google's iCalUID plus, for one instance of a recurring event, its original start. The same
+ *   invite on Cal's and Chloe's calendars (or a copy on the shared one) has the same uid.
+ * - busy: on a calendar shared as free/busy only (or a private event on it) Google gives no title;
+ *   the copy is "Busy" for its owner.
+ * - away: everyone attending is out of the house, unless the description carries `#home` or the event
+ *   is marked "free" in Google (a reminder, a birthday).
  * - work: the summary or description carries `#work`, or the event comes from a calendar listed
  *   in `workCalendarIds`.
  * - soloWithKids: the description carries `#solo:<person>` (e.g. `#solo:tom`) when that person has
@@ -14,8 +24,9 @@
  * - all-day events start and end at local midnight in the house's time zone.
  * - cancelled events are reported as deleted.
  */
+import { CalendarOwnerKind, type HouseCalendar } from "@household/contracts";
 import { z } from "zod";
-import type { CalendarPush, CalendarSource, Clock, ExternalEvent } from "../ports.ts";
+import type { CalendarChanges, CalendarPush, CalendarSource, Clock, ExternalEvent } from "../ports.ts";
 import { startOfLocalDay } from "../time.ts";
 import { defaultFetch, expectOk, type Fetch, IntegrationError } from "./http.ts";
 
@@ -26,19 +37,23 @@ const zDateTime = z.object({ dateTime: z.string().optional(), date: z.string().o
 const zEvent = z.object({
   id: z.string(),
   status: z.string().optional(),
+  iCalUID: z.string().optional(),
+  originalStartTime: zDateTime.optional(),
+  transparency: z.string().optional(),
   summary: z.string().optional(),
   description: z.string().optional(),
   location: z.string().optional(),
   start: zDateTime.optional(),
   end: zDateTime.optional(),
   organizer: z.object({ email: z.string().optional() }).optional(),
-  attendees: z.array(z.object({ email: z.string().optional(), responseStatus: z.string().optional() })).optional(),
+  attendees: z.array(z.object({ email: z.string().optional(), responseStatus: z.string().optional(), self: z.boolean().optional() })).optional(),
 });
 type GoogleEvent = z.infer<typeof zEvent>;
 const zList = z.object({ items: z.array(zEvent).optional(), nextPageToken: z.string().optional(), nextSyncToken: z.string().optional() });
 
 export type GoogleCalendarOptions = {
-  calendarId: string;
+  /** Every calendar the house reads, each with its owner (a person ID, or `shared`). */
+  calendars: readonly HouseCalendar[];
   getAccessToken: () => Promise<string>;
   personForEmail: (email: string) => string | null;
   timeZone: string;
@@ -53,33 +68,73 @@ const DAY_MS = 86_400_000;
 const FIRST_SYNC_PAST_DAYS = 1;
 const FIRST_SYNC_FUTURE_DAYS = 60;
 
+/** A copy's ID in the house: the same Google event ID can be on two calendars (an invite). */
+const copyId = (calendarId: string, eventId: string): string => `${calendarId}/${eventId}`;
+
+/** Google's iCalUID, plus the original start for one instance of a recurring event. */
+function uidOf(item: GoogleEvent): string | null {
+  if (item.iCalUID === undefined) return null;
+  const original = item.originalStartTime;
+  const at = original?.dateTime === undefined ? original?.date : new Date(original.dateTime).toISOString();
+  return at === undefined ? item.iCalUID : `${item.iCalUID}@${at}`;
+}
+
 export class GoogleCalendarSource implements CalendarSource {
   readonly #o: GoogleCalendarOptions;
   readonly #fetch: Fetch;
   readonly #baseUrl: string;
+  readonly calendars: readonly HouseCalendar[];
   constructor(options: GoogleCalendarOptions) {
     this.#o = options;
+    this.calendars = options.calendars;
     this.#fetch = options.fetch ?? defaultFetch;
     this.#baseUrl = options.baseUrl ?? CALENDAR_API;
   }
 
-  async changes(syncToken: string | null): Promise<{ upserts: ExternalEvent[]; deletedExternalIds: string[]; nextSyncToken: string | null }> {
+  /**
+   * Every calendar's changes since its token. One calendar that can't be read (not shared with this
+   * account yet, say) is logged and keeps its token and its copies; the others still sync. If none
+   * can be read, the sync fails.
+   */
+  async changes(syncTokens: Readonly<Record<string, string>>): Promise<CalendarChanges> {
+    const out: CalendarChanges = { upserts: [], deletedExternalIds: [], nextSyncTokens: {} };
+    let failure: unknown = null;
+    let read = 0;
+    for (const calendar of this.calendars) {
+      const token = syncTokens[calendar.calendarId] ?? null;
+      try {
+        const one = await this.#calendarChanges(calendar, token);
+        out.upserts.push(...one.upserts);
+        out.deletedExternalIds.push(...one.deletedExternalIds);
+        if (one.nextSyncToken !== null) out.nextSyncTokens[calendar.calendarId] = one.nextSyncToken;
+        read += 1;
+      } catch (error) {
+        failure = error;
+        if (token !== null) out.nextSyncTokens[calendar.calendarId] = token;
+        console.warn(JSON.stringify({ event: "calendar-read-failed", owner: calendar.owner, calendarId: calendar.calendarId, error: error instanceof Error ? error.message : String(error) }));
+      }
+    }
+    if (read === 0 && failure !== null) throw failure;
+    return out;
+  }
+
+  async #calendarChanges(calendar: HouseCalendar, syncToken: string | null) {
     try {
-      return await this.#list(syncToken);
+      return await this.#list(calendar, syncToken);
     } catch (error) {
       // 410 Gone: the sync token expired; Google says to start again with a full sync.
-      if (error instanceof IntegrationError && error.status === 410 && syncToken !== null) return this.#list(null);
+      if (error instanceof IntegrationError && error.status === 410 && syncToken !== null) return this.#list(calendar, null);
       throw error;
     }
   }
 
-  async #list(syncToken: string | null) {
+  async #list(calendar: HouseCalendar, syncToken: string | null) {
     const upserts: ExternalEvent[] = [];
     const deletedExternalIds: string[] = [];
     let pageToken: string | undefined;
     let nextSyncToken: string | null = null;
     do {
-      const url = new URL(`${this.#baseUrl}/calendars/${encodeURIComponent(this.#o.calendarId)}/events`);
+      const url = new URL(`${this.#baseUrl}/calendars/${encodeURIComponent(calendar.calendarId)}/events`);
       url.searchParams.set("singleEvents", "true");
       if (syncToken === null) {
         const now = this.#o.clock.now().getTime();
@@ -93,11 +148,9 @@ export class GoogleCalendarSource implements CalendarSource {
       await expectOk(response, "Google Calendar events.list");
       const page = zList.parse(await response.json());
       for (const item of page.items ?? []) {
-        if (item.status === "cancelled") deletedExternalIds.push(item.id);
-        else {
-          const event = this.toExternal(item);
-          if (event !== null) upserts.push(event);
-        }
+        const event = item.status === "cancelled" ? "gone" : this.toExternal(item, calendar);
+        if (event === "gone") deletedExternalIds.push(copyId(calendar.calendarId, item.id));
+        else if (event !== null) upserts.push(event);
       }
       pageToken = page.nextPageToken;
       nextSyncToken = page.nextSyncToken ?? nextSyncToken;
@@ -105,34 +158,47 @@ export class GoogleCalendarSource implements CalendarSource {
     return { upserts, deletedExternalIds, nextSyncToken };
   }
 
-  /** Map one Google event using the conventions at the top of this file. */
-  toExternal(item: GoogleEvent): ExternalEvent | null {
+  /**
+   * Map one calendar's copy of a Google event using the conventions at the top of this file: null when
+   * it has no usable times, "gone" when the owner of a personal calendar declined it (so it is not theirs).
+   */
+  toExternal(item: GoogleEvent, calendar: HouseCalendar): ExternalEvent | "gone" | null {
     const start = this.#instant(item.start);
     const end = this.#instant(item.end);
     if (start === null || end === null) return null;
+    const attendees = this.#attendees(item, calendar);
+    if (attendees === "gone") return attendees;
+    const busy = calendar.owner !== CalendarOwnerKind.shared && item.summary === undefined;
     const description = item.description ?? "";
-    const summary = item.summary ?? "(no title)";
-    const emails = [item.organizer?.email, ...(item.attendees ?? []).filter((a) => a.responseStatus !== "declined").map((a) => a.email)];
-    const attendees: string[] = [];
-    for (const email of emails) {
-      if (email === undefined) continue;
-      const person = this.#o.personForEmail(email.toLowerCase());
-      if (person !== null && !attendees.includes(person)) attendees.push(person);
-    }
-    const home = /#home\b/i.test(description);
-    const work = /#work\b/i.test(`${summary} ${description}`) || (this.#o.workCalendarIds ?? []).includes(this.#o.calendarId);
-    const solo = /#solo:([a-z0-9_-]+)/i.exec(description)?.[1]?.toLowerCase() ?? null;
+    const summary = item.summary ?? (busy ? "Busy" : "(no title)");
+    const stayHome = /#home\b/i.test(description) || item.transparency === "transparent";
     return {
-      externalId: item.id,
+      externalId: copyId(calendar.calendarId, item.id),
+      calendarId: calendar.calendarId,
+      owner: calendar.owner,
+      uid: uidOf(item),
+      busy,
       title: summary,
       start: start.toISOString(),
       end: end.toISOString(),
       allDay: item.start?.date !== undefined,
       attendees,
-      away: home ? [] : [...attendees],
-      work,
-      soloWithKids: solo,
+      away: stayHome ? [] : [...attendees],
+      work: /#work\b/i.test(`${summary} ${description}`) || (this.#o.workCalendarIds ?? []).includes(calendar.calendarId),
+      soloWithKids: /#solo:([a-z0-9_-]+)/i.exec(description)?.[1]?.toLowerCase() ?? null,
     };
+  }
+
+  /** The owner on their own calendar (unless they declined); on the shared one, by attendee email. */
+  #attendees(item: GoogleEvent, calendar: HouseCalendar): string[] | "gone" {
+    const invited = item.attendees ?? [];
+    if (calendar.owner !== CalendarOwnerKind.shared) return invited.some((a) => a.self === true && a.responseStatus === "declined") ? "gone" : [calendar.owner];
+    const attendees: string[] = [];
+    for (const email of [item.organizer?.email, ...invited.filter((a) => a.responseStatus !== "declined").map((a) => a.email)]) {
+      const person = email === undefined ? null : this.#o.personForEmail(email.toLowerCase());
+      if (person !== null && !attendees.includes(person)) attendees.push(person);
+    }
+    return attendees;
   }
 
   #instant(t: z.infer<typeof zDateTime> | undefined): Date | null {
@@ -164,20 +230,20 @@ export function refreshingTokenProvider(options: { clientId: string; clientSecre
 }
 
 /**
- * CH-6: Google's push notifications for one calendar. `open` is `events.watch`, which creates a
- * notification channel, not an event; Google then calls `address` with `token` echoed in
+ * CH-6: Google's push notifications, one channel per calendar. `open` is `events.watch`, which creates
+ * a notification channel, not an event; Google then calls `address` with `token` echoed in
  * X-Goog-Channel-Token. `close` is `channels.stop`. Neither can create, move or delete an event (PRV-1).
  */
 export class GoogleCalendarPush implements CalendarPush {
-  readonly #o: { calendarId: string; getAccessToken: () => Promise<string>; baseUrl: string; fetch: Fetch };
-  readonly calendarId: string;
-  constructor(options: { calendarId: string; getAccessToken: () => Promise<string>; baseUrl?: string; fetch?: Fetch }) {
-    this.calendarId = options.calendarId;
-    this.#o = { calendarId: options.calendarId, getAccessToken: options.getAccessToken, baseUrl: options.baseUrl ?? CALENDAR_API, fetch: options.fetch ?? defaultFetch };
+  readonly #o: { getAccessToken: () => Promise<string>; baseUrl: string; fetch: Fetch };
+  readonly calendarIds: readonly string[];
+  constructor(options: { calendarIds: readonly string[]; getAccessToken: () => Promise<string>; baseUrl?: string; fetch?: Fetch }) {
+    this.calendarIds = options.calendarIds;
+    this.#o = { getAccessToken: options.getAccessToken, baseUrl: options.baseUrl ?? CALENDAR_API, fetch: options.fetch ?? defaultFetch };
   }
 
-  async open(channel: { id: string; address: string; token: string }): Promise<{ resourceId: string; expiresAt: string }> {
-    const response = await this.#post(`/calendars/${encodeURIComponent(this.#o.calendarId)}/events/watch`, { id: channel.id, type: "web_hook", address: channel.address, token: channel.token });
+  async open(calendarId: string, channel: { id: string; address: string; token: string }): Promise<{ resourceId: string; expiresAt: string }> {
+    const response = await this.#post(`/calendars/${encodeURIComponent(calendarId)}/events/watch`, { id: channel.id, type: "web_hook", address: channel.address, token: channel.token });
     await expectOk(response, "Google Calendar events.watch");
     // Google gives the expiry as milliseconds since the epoch, in a string.
     const body = z.object({ resourceId: z.string(), expiration: z.string().regex(/^\d+$/) }).parse(await response.json());

@@ -1,4 +1,4 @@
-import { ModelProvider, zModelProvider } from "@household/contracts";
+import { CalendarOwnerKind, type HouseCalendar, ModelProvider, zModelProvider } from "@household/contracts";
 import { z } from "zod";
 
 // The app reads the same POSTGRES_PASSWORD the database container gets from .env, and hands it to
@@ -23,6 +23,13 @@ const zEnv = z.object({
   TELEGRAM_API_BASE: z.string().default("https://api.telegram.org"),
   EMAIL_WEBHOOK_SECRET: z.string().default("practice-email-secret"),
   CALENDAR_WEBHOOK_TOKEN: z.string().default("practice-calendar-token"),
+  /**
+   * HOME-1: the calendars the house reads and whose each is, `owner:calendarId` separated by commas,
+   * e.g. `cal:cal@gmail.com,chloe:chloe@gmail.com,shared:abc@group.calendar.google.com`. An owner is a
+   * person's ID in the household, or `shared`.
+   */
+  GOOGLE_CALENDARS: z.string().optional(),
+  /** Before GOOGLE_CALENDARS: the shared calendar only. Ignored when GOOGLE_CALENDARS is set. */
   GOOGLE_CALENDAR_ID: z.string().optional(),
   GOOGLE_ACCESS_TOKEN_FILE: z.string().optional(),
   /** Google Calendar API v3; only tests point it elsewhere (a stand-in Google). */
@@ -48,9 +55,31 @@ export type Env = z.infer<typeof zEnv>;
  */
 const MUST_BE_SET_FOR_REAL = ["SESSION_SECRET", "STORAGE_KEY", "TELEGRAM_WEBHOOK_SECRET", "EMAIL_WEBHOOK_SECRET", "CALENDAR_WEBHOOK_TOKEN", "MCP_TOKEN", "HELPER_TOKEN"] as const;
 
+/**
+ * HOME-1: the Google calendars the house reads, each with its owner: GOOGLE_CALENDARS, or else
+ * GOOGLE_CALENDAR_ID as the shared calendar alone (the setup before personal calendars), or none.
+ */
+export function houseCalendars(env: Pick<Env, "GOOGLE_CALENDARS" | "GOOGLE_CALENDAR_ID">): HouseCalendar[] {
+  if (env.GOOGLE_CALENDARS === undefined) return env.GOOGLE_CALENDAR_ID === undefined ? [] : [{ calendarId: env.GOOGLE_CALENDAR_ID, owner: CalendarOwnerKind.shared }];
+  const out: HouseCalendar[] = [];
+  for (const raw of env.GOOGLE_CALENDARS.split(",")) {
+    const entry = raw.trim();
+    if (entry === "") continue;
+    const colon = entry.indexOf(":");
+    const owner = entry.slice(0, colon).trim().toLowerCase();
+    const calendarId = entry.slice(colon + 1).trim();
+    if (colon < 1 || !/^[a-z0-9_-]+$/.test(owner) || calendarId === "") throw new Error(`HOME-1: GOOGLE_CALENDARS entry "${entry}" is not owner:calendarId (e.g. chloe:chloe@gmail.com)`);
+    if (out.some((c) => c.calendarId === calendarId)) throw new Error(`HOME-1: GOOGLE_CALENDARS lists ${calendarId} twice; each calendar has one owner`);
+    out.push({ calendarId, owner });
+  }
+  if (out.length === 0) throw new Error("HOME-1: GOOGLE_CALENDARS is set but names no calendar");
+  return out;
+}
+
 export function loadEnv(source: Record<string, string | undefined> = process.env): Env {
   // A setting written as `NAME=` is unset, not an empty URL or token (compose's HELPER_URL: "" says "no helper").
   const env = zEnv.parse(Object.fromEntries(Object.entries(source).filter(([, v]) => v !== "")));
+  houseCalendars(env);
   if (env.PRACTICE) return env;
   const practice = zEnv.parse({});
   const unset = MUST_BE_SET_FOR_REAL.filter((name) => env[name] === practice[name]);

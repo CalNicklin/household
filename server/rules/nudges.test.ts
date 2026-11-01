@@ -77,7 +77,7 @@ describe("PRO-8 / QA-7: every reminder is a plain rule with a plain test", () =>
     // Friday: dry until midday, so 7–12 is five hours: fine. At 10am only two hours are left.
     expect(washingFor(facts, "2026-11-06", at("2026-11-06", 10)).items).toHaveLength(0);
     // Nobody home: no suggestion.
-    const empty: HouseFacts = { ...facts, events: [...facts.events, { id: "x", externalId: "x", title: "Away", start: at(MON, 6).toISOString(), end: at(MON, 20).toISOString(), allDay: false, attendees: ["priya", "tom"], away: ["priya", "tom"], work: false, soloWithKids: null }] };
+    const empty: HouseFacts = { ...facts, events: [...facts.events, { id: "x", externalId: "x", title: "Away", start: at(MON, 6).toISOString(), end: at(MON, 20).toISOString(), allDay: false, attendees: ["priya", "tom"], away: ["priya", "tom"], work: false, soloWithKids: null, calendars: ["shared"] }] };
     expect(washingFor(empty, MON, at(MON, 7)).items).toHaveLength(0);
   });
 

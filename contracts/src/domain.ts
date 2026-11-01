@@ -138,16 +138,45 @@ export const zCalendarEvent = z.object({
   work: z.boolean(),
   /** Someone has the kids alone during this event (for WB-1). */
   soloWithKids: z.string().nullable(),
+  /**
+   * HOME-1: whose calendars it is on, in the configured order: person IDs and/or `shared`
+   * (CalendarOwnerKind). An event on several calendars is one event with every owner here.
+   */
+  calendars: z.array(z.string()),
 });
 export type CalendarEvent = z.infer<typeof zCalendarEvent>;
 
 /**
- * CH-6: the Google push-notification channel the house has open on the shared calendar. A channel is
+ * HOME-1: one Google calendar the house reads, and whose it is: a person ID, or `shared`
+ * (CalendarOwnerKind.shared).
+ */
+export const zHouseCalendar = z.object({ calendarId: z.string().min(1), owner: z.string().min(1) });
+export type HouseCalendar = z.infer<typeof zHouseCalendar>;
+
+/**
+ * HOME-1: one calendar's copy of an event, as the house stores it. Copies of the same event on several
+ * calendars share `uid` (Google's iCalUID plus the recurrence instance) and are read back as one
+ * CalendarEvent with every owner on it.
+ */
+export const zCalendarCopy = zCalendarEvent.omit({ id: true, calendars: true }).extend({
+  /** Unique per copy: `<calendarId>/<Google event id>`. */
+  externalId: z.string(),
+  calendarId: z.string(),
+  owner: z.string(),
+  /** The same event on another calendar has the same uid; null when Google gave none. */
+  uid: z.string().nullable(),
+  /** Only free/busy is visible: no title, no attendees, just that the owner is busy. */
+  busy: z.boolean(),
+});
+export type CalendarCopy = z.infer<typeof zCalendarCopy>;
+
+/**
+ * CH-6: a Google push-notification channel the house has open on one of its calendars. A channel is
  * a subscription, not an event; opening one changes nothing in the calendar (PRV-1).
  */
 export const zCalendarWatch = z.object({
   channelId: z.string(),
-  /** The Google calendar the channel watches (GOOGLE_CALENDAR_ID when it was opened). */
+  /** The Google calendar the channel watches (one channel per calendar the house reads). */
   calendarId: z.string(),
   resourceId: z.string(),
   /** Where Google sends the notifications: `${PUBLIC_URL}/webhooks/calendar`. */
@@ -155,6 +184,8 @@ export const zCalendarWatch = z.object({
   /** When Google stops the channel unless it is renewed. */
   expiresAt: zIsoDateTime,
   openedAt: zIsoDateTime,
+  /** When the house closed it (replaced, or its calendar is no longer read); null while in use. */
+  closedAt: zIsoDateTime.nullable(),
 });
 export type CalendarWatch = z.infer<typeof zCalendarWatch>;
 

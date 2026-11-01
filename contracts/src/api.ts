@@ -1,7 +1,7 @@
 /** Router inputs (CODE-5). Outputs are the records in domain.ts and blocks.ts. */
 import { z } from "zod";
 import { zBlock } from "./blocks.ts";
-import { zArrival, zCalendarEvent, zJob, zLearningEvent, zListItem, zNurseryEvent, zPersonSettings, zProductOption, zQuestion, zRhythm, zRuleSpec } from "./domain.ts";
+import { zArrival, zCalendarCopy, zCalendarWatch, zJob, zLearningEvent, zListItem, zNurseryEvent, zPersonSettings, zProductOption, zQuestion, zRhythm, zRuleSpec } from "./domain.ts";
 import { LongTool, zActionKind, zBacklogTag, zChannel, zDeliveryChannel, zListWriteOutcome, zLongTool, zModeKind, zModelProvider, zNotificationStatus, zShoppingStatus, zTimerKind } from "./enums.ts";
 import { zInboundMessage, zNotifyInput } from "./message.ts";
 
@@ -57,8 +57,18 @@ export const zSavePlanInput = z.object({ date: z.iso.date(), blocks: z.array(zBl
 export const zRespondInput = z.object({ ref: z.string(), action: zActionKind, channel: zChannel, date: z.iso.date(), value: z.string().nullable() });
 export const zHandOverInput = z.object({ ref: z.string(), title: z.string(), to: z.string() });
 export const zOfferInput = z.object({ itemId: z.string(), date: z.iso.date(), person: z.string().nullable() });
-export const zExternalEvent = zCalendarEvent.omit({ id: true });
-export const zCalendarSyncInput = z.object({ upserts: z.array(zExternalEvent), deletedExternalIds: z.array(z.string()), syncToken: z.string().nullable() });
+/**
+ * HOME-1 / CH-6: one sync of every calendar the house reads. `calendarIds` are the calendars read now;
+ * copies from any other calendar are dropped. `syncTokens` holds each calendar's next sync token.
+ */
+export const zCalendarSyncInput = z.object({
+  upserts: z.array(zCalendarCopy),
+  deletedExternalIds: z.array(z.string()),
+  syncTokens: z.record(z.string(), z.string()),
+  calendarIds: z.array(z.string()).min(1),
+});
+/** CH-6: record a push channel the house just opened (it is in use until closed). */
+export const zRecordWatchInput = zCalendarWatch.omit({ closedAt: true });
 export const zCalendarSyncOutput = z.object({ changedDates: z.array(z.iso.date()) });
 export const zArrivalInput = zArrival.omit({ id: true, createdAt: true }).extend({ sourceKey: z.string() });
 
