@@ -1,4 +1,7 @@
-import { readdirSync, readFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import { Limits } from "@household/contracts";
 import { describe, expect, it } from "vitest";
 import { parse } from "yaml";
@@ -65,6 +68,24 @@ const review = (() => {
   return { text: w.text, ...doc };
 })();
 
+// Runs a job's decision step (whose scripts review the PR) as the runner would, in a checkout with or without the review.
+const decide = (run: string, hasReview: boolean, baseRef: string) => {
+  const checkout = mkdtempSync(path.join(tmpdir(), "agent-review-base-"));
+  try {
+    if (hasReview) {
+      mkdirSync(path.join(checkout, "scripts"));
+      mkdirSync(path.join(checkout, ".github/review"), { recursive: true });
+      writeFileSync(path.join(checkout, "scripts/agent-review.ts"), "");
+      writeFileSync(path.join(checkout, ".github/review/code.md"), "");
+    }
+    const out = path.join(checkout, "output");
+    execFileSync("bash", ["-e", "-c", run], { cwd: checkout, env: { PATH: process.env["PATH"], GITHUB_OUTPUT: out, BASE_REF: baseRef, DEFAULT_BRANCH: "main" }, stdio: "pipe" });
+    return readFileSync(out, "utf8").trim();
+  } finally {
+    rmSync(checkout, { recursive: true, force: true });
+  }
+};
+
 describe("HOU-151 the agent review workflow", () => {
   it("runs for this repository's PRs only, with no permission unless a job asks for it", () => {
     expect(review.permissions).toEqual({});
@@ -95,17 +116,30 @@ describe("HOU-151 the agent review workflow", () => {
         ["${{ github.event.pull_request.head.sha }}", ".", "steps.base.outputs.from == 'head'"],
         ["${{ github.event.pull_request.head.sha }}", "pr", expect.any(String)],
       ]);
-      const decides = job.steps.find((s) => s.id === "base");
-      expect(decides?.run).toContain('elif [ "$BASE_REF" = "$DEFAULT_BRANCH" ]; then');
       for (const c of checkouts) expect(c.with?.["persist-credentials"]).toBe(false);
       for (const s of job.steps) {
         expect(s["working-directory"]).toBeUndefined();
         // pr/ is only ever passed to the scripts as the repository git reads.
         expect((s.run ?? "").replaceAll("--checkout pr ", "")).not.toMatch(/\bpr\//);
       }
-      const installs = job.steps.filter((s) => s.run?.includes("pnpm install") === true);
-      expect(installs.map((s) => s.run)).toEqual(["pnpm install --frozen-lockfile --ignore-scripts"]);
+      // Installs run no package's scripts.
+      for (const s of job.steps.filter((x) => x.run?.includes("pnpm install") === true)) expect(s.run).toContain("--ignore-scripts");
     }
+  });
+
+  it("only a PR into the default branch, while it has no review, is reviewed with its own scripts", () => {
+    for (const job of Object.values(review.jobs)) {
+      const step = job.steps.find((s) => s.id === "base");
+      expect(step?.env).toEqual({ BASE_REF: "${{ github.event.pull_request.base.ref }}", DEFAULT_BRANCH: "${{ github.event.repository.default_branch }}" });
+      const run = step?.run ?? "";
+      expect(decide(run, true, "main")).toBe("from=base");
+      expect(decide(run, true, "release")).toBe("from=base");
+      expect(decide(run, false, "main")).toBe("from=head");
+      expect(decide(run, false, "release")).toBe("from=none");
+    }
+    // In the review job, nothing past the decision runs when it says none.
+    const after = review.jobs.review.steps.slice(review.jobs.review.steps.findIndex((s) => s.id === "base") + 1);
+    for (const s of after) expect(s["if"]).toMatch(/steps\.base\.outputs\.from == 'head'/);
   });
 
   it("[CODE-13] the review job's timeout is the cited limit", () => {
