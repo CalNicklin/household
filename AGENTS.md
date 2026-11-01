@@ -4,7 +4,8 @@ Read `README.md` once. `VERIFICATIONS.md` is the only spec.
 
 ## Pick work
 1. Query Linear for issues in this project that are unblocked and unassigned. Take the lowest-numbered gate first, then anything else.
-2. Assign yourself. Branch from `main` named after the issue ID (e.g. `HOME-3`).
+2. Assign yourself. One cloud session per Linear issue; the session's branch is the issue's branch.
+3. Never open a second PR from a branch that already had one. Entire tracks a trail by head branch, and a reused branch belongs to a closed trail, so Entire never reviews the new PR (PRs #6 and #7).
 
 ## Make it true
 - Types and enumerated values go in `contracts/` first; schemas, routers and the UI take them from there.
@@ -20,6 +21,8 @@ Read `README.md` once. `VERIFICATIONS.md` is the only spec.
 ## Hand it over
 - One PR per issue. Commit messages end with the Entire checkpoint trailer; CI rejects commits without one.
 - PR body: the verification line verbatim, the evidence, anything you had to assume.
+- Entire reviews every PR: its trail's agents (Code review, Security review) review each push, and its gates post an `Entire Gates` check on the PR. Fix every finding.
+- Merge it yourself, with a merge commit, only when `Entire Gates` and `check` are both green on the PR's latest commit and it has no conflicts. Never bypass a gate. If `Entire Gates` says no trail tracks the branch, don't merge; report it.
 - If a verification line is wrong or impossible, say so on the issue and stop. Do not reinterpret it.
 
 ## Never
