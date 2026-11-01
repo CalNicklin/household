@@ -1,4 +1,4 @@
-import { useQueryClient } from "@tanstack/react-query";
+import { type Query, type QueryClient, useQueryClient } from "@tanstack/react-query";
 import { useEffect } from "react";
 import { flushOutbox } from "./send.ts";
 
@@ -7,30 +7,28 @@ function localDay(): string {
 }
 
 /**
- * HOU-161: run `task` one at a time. A burst of changes (a job and the re-plan it starts) would
- * otherwise cancel every in-flight fetch on each change, so a slow screen like Shop never landed
- * until the burst ended. Calls made while it runs are folded into one more run after it.
+ * HOU-161: refetch every active query, but never cancel one already on its way. A burst of changes
+ * (a job and the re-plan it starts) used to cancel every in-flight fetch on each change, so a slow
+ * screen like Shop never landed until the burst ended. A query still fetching (retrying or paused
+ * included) is owed one more fetch, made the moment it settles: it may be carrying an answer from
+ * before the change (HOME-1). Each query waits only on itself, so a failing one holds up no other.
  */
-function oneAtATime(task: () => Promise<void>): () => void {
-  let running = false;
-  let again = false;
-  return () => {
-    if (running) {
-      again = true;
-      return;
+function refresher(queryClient: QueryClient): { refresh: () => void; stop: () => void } {
+  const owed = new Set<string>();
+  const refetch = (query: Query) => void queryClient.refetchQueries({ queryKey: query.queryKey, exact: true, type: "active" }, { cancelRefetch: false });
+  const stop = queryClient.getQueryCache().subscribe((event) => {
+    if (event.type !== "updated" || (event.action.type !== "success" && event.action.type !== "error")) return;
+    if (owed.delete(event.query.queryHash)) refetch(event.query);
+  });
+  const refresh = () => {
+    // Stale everywhere, so an inactive screen refetches when it is next shown; nothing refetched here.
+    void queryClient.invalidateQueries({ refetchType: "none" });
+    for (const query of queryClient.getQueryCache().findAll({ type: "active" })) {
+      if (query.state.fetchStatus === "idle") refetch(query);
+      else owed.add(query.queryHash);
     }
-    running = true;
-    void (async () => {
-      try {
-        do {
-          again = false;
-          await task();
-        } while (again);
-      } finally {
-        running = false;
-      }
-    })();
   };
+  return { refresh, stop };
 }
 
 /**
@@ -41,12 +39,7 @@ function oneAtATime(task: () => Promise<void>): () => void {
 export function useLive(): void {
   const queryClient = useQueryClient();
   useEffect(() => {
-    // Cancel first: a query still on its first load ignores invalidation and keeps the answer it is
-    // fetching, so a change landing while the screen opens would otherwise never be shown (HOME-1).
-    const refresh = oneAtATime(async () => {
-      await queryClient.cancelQueries();
-      await queryClient.invalidateQueries();
-    });
+    const { refresh, stop } = refresher(queryClient);
     const source = new EventSource("/api/live");
     source.addEventListener("change", refresh);
     source.addEventListener("hello", () => {
@@ -77,6 +70,7 @@ export function useLive(): void {
     window.addEventListener("online", onOnline);
     return () => {
       source.close();
+      stop();
       window.clearInterval(timer);
       document.removeEventListener("visibilitychange", onVisible);
       window.removeEventListener("online", onOnline);
