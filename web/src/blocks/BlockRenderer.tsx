@@ -51,7 +51,7 @@ function BlockView({ block, handlers, nav }: { block: Block; handlers: BlockHand
         />
       );
     case BlockType.event:
-      return <EventCard time={block.time} title={block.title} detail={block.detail} onSelect={select({ ref: block.ref, title: block.title })} selected={isSelected(block.ref)} />;
+      return <EventCard time={block.time} title={block.title} detail={block.detail} provenance={block.provenance} onSelect={select({ ref: block.ref, title: block.title })} selected={isSelected(block.ref)} />;
     case BlockType.suggestion:
       return <SuggestionBlock block={block} handlers={handlers} />;
     case BlockType.alert:
@@ -93,7 +93,7 @@ function RunView({ run, handlers, nav }: { run: Run; handlers: BlockHandlers; na
         return (
           <ListCard key={piece.blocks.map((b) => b.id).join()} label={SectionLabel[run.section]}>
             {piece.blocks.map((b) => (
-              <EventRow key={b.id} time={b.time} title={b.title} detail={b.detail} onSelect={select({ ref: b.ref, title: b.title })} selected={isSelected(b.ref)} />
+              <EventRow key={b.id} time={b.time} title={b.title} detail={b.detail} provenance={b.provenance} onSelect={select({ ref: b.ref, title: b.title })} selected={isSelected(b.ref)} />
             ))}
           </ListCard>
         );

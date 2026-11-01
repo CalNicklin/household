@@ -34,16 +34,48 @@ function Actions({ actions, variants, large = false }: { actions: readonly CardA
 
 const selectedClass = (selected: boolean | undefined) => (selected === true ? " ds-selected" : "");
 
-/** A calendar fact on its own (grey provenance): time, title, who. */
-export function EventCard({ time, title, detail, onSelect, selected }: { time: string | null; title: string; detail: string } & Selectable) {
+export type StillHappening = { id: string; text: string; provenance: "calendar" | "email" | "rule" | "planner" };
+type Provenance = StillHappening["provenance"];
+
+/** Where a fact came from, as an icon. Used wherever something has no time to show (SlowDay canvas). */
+function ProvenanceIcon({ provenance, size }: { provenance: Provenance; size: number }) {
+  switch (provenance) {
+    case "calendar":
+      return <CalendarIcon size={size} />;
+    case "email":
+      return <ParcelIcon size={size} />;
+    case "rule":
+      return <RuleIcon size={size} />;
+    case "planner":
+      return <SunIcon size={size} />;
+  }
+}
+
+/**
+ * HOU-153: a card whose layout follows its own width (a CSS container), not the viewport. In a
+ * narrow column or on a phone its actions sit under the text, as on the Phone canvas and the
+ * "Could fit this week" card on the Main canvas.
+ */
+function RowCard({ tone, selected, children }: { tone?: "suggestion" | "alert"; selected: boolean | undefined; children: ReactNode }) {
   return (
-    <div className={`ds-card ds-card__row${selectedClass(selected)}`}>
-      <div className="ds-card__lead">{time ?? <CalendarIcon size={22} />}</div>
+    <div className={`ds-card ds-card--fluid${tone === undefined ? "" : ` ds-card--${tone}`}${selectedClass(selected)}`}>
+      <div className="ds-card__row">{children}</div>
+    </div>
+  );
+}
+
+type EventProps = { time: string | null; title: string; detail: string; provenance?: Provenance } & Selectable;
+
+/** A fact on its own (grey): time, title, who. With no time (all day), its provenance icon instead. */
+export function EventCard({ time, title, detail, provenance = "calendar", onSelect, selected }: EventProps) {
+  return (
+    <RowCard selected={selected}>
+      <div className="ds-card__lead">{time ?? <ProvenanceIcon provenance={provenance} size={22} />}</div>
       <div className="ds-card__main">
         <Title onSelect={onSelect}>{title}</Title>
         {detail === "" ? null : <p className="ds-card__detail">{detail}</p>}
       </div>
-    </div>
+    </RowCard>
   );
 }
 
@@ -56,7 +88,7 @@ export function ListCard({ children, label }: { children: ReactNode; label?: str
   );
 }
 
-export function EventRow({ time, title, detail, onSelect, selected }: { time: string | null; title: string; detail: string } & Selectable) {
+export function EventRow({ time, title, detail, provenance = "calendar", onSelect, selected }: EventProps) {
   const text = (
     <>
       {title}
@@ -65,7 +97,8 @@ export function EventRow({ time, title, detail, onSelect, selected }: { time: st
   );
   return (
     <div className={`ds-list-row${selectedClass(selected)}`} role="listitem">
-      <div className="ds-list-row__time">{time ?? ""}</div>
+      {/* HOU-153: an all-day item has no time, so the column shows where it came from, not a gap. */}
+      <div className="ds-list-row__time">{time ?? <ProvenanceIcon provenance={provenance} size={20} />}</div>
       {onSelect === undefined ? (
         <div className="ds-list-row__text">{text}</div>
       ) : (
@@ -93,7 +126,7 @@ export function ArrivalRow({ shop, when }: { shop: string; when: string }) {
 /** Planner-made (green). Always carries its reason; dismiss with no guilt. */
 export function SuggestionCard({ title, reason, actions, onSelect, selected }: { title: string; reason: string; actions: readonly CardAction[] } & Selectable) {
   return (
-    <div className={`ds-card ds-card--suggestion ds-card__row${selectedClass(selected)}`}>
+    <RowCard tone="suggestion" selected={selected}>
       <div className="ds-card__lead">
         <SunIcon size={26} tone="suggestion" />
       </div>
@@ -103,14 +136,14 @@ export function SuggestionCard({ title, reason, actions, onSelect, selected }: {
       </div>
       {/* A lone action (e.g. only a dismiss) stays quiet; the solid button is for "do it". */}
       <Actions actions={actions} variants={actions.length === 1 ? ["suggestion-secondary"] : ["primary", "suggestion-secondary"]} />
-    </div>
+    </RowCard>
   );
 }
 
 /** Rule-derived (amber) — the only block allowed to be amber, with at most one action. */
 export function AlertCard({ title, reason, action, onSelect, selected }: { title: string; reason: string; action: CardAction | null } & Selectable) {
   return (
-    <div className={`ds-card ds-card--alert ds-card__row${selectedClass(selected)}`}>
+    <RowCard tone="alert" selected={selected}>
       <div className="ds-card__lead">
         <AlertIcon size={24} tone="alert" />
       </div>
@@ -121,7 +154,7 @@ export function AlertCard({ title, reason, action, onSelect, selected }: { title
         {reason === "" ? null : <p className="ds-card__detail">{reason}</p>}
       </div>
       {action === null ? null : <Actions actions={[action]} variants={["alert"]} />}
-    </div>
+    </RowCard>
   );
 }
 
@@ -137,15 +170,6 @@ export function BacklogPickCard({ title, reason, actions, onSelect, selected }: 
     </div>
   );
 }
-
-export type StillHappening = { id: string; text: string; provenance: "calendar" | "email" | "rule" | "planner" };
-
-const STILL_ICON = {
-  calendar: <CalendarIcon size={20} />,
-  email: <ParcelIcon size={20} />,
-  rule: <RuleIcon size={20} />,
-  planner: <SunIcon size={20} />,
-} as const;
 
 /** Slow, sick or away: one suggested thing, then what is still happening anyway (MOM-1, MOM-5). */
 export function ModeCard({
@@ -181,7 +205,7 @@ export function ModeCard({
         <ul className="ds-still" aria-label="Still happening">
           {still.map((s) => (
             <li key={s.id} className="ds-still__item">
-              {STILL_ICON[s.provenance]}
+              <ProvenanceIcon provenance={s.provenance} size={20} />
               <span>{s.text}</span>
             </li>
           ))}
