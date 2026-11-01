@@ -1,7 +1,8 @@
 /**
  * HOME-6 / HOU-154: register the service worker, and pick up a deploy without anyone touching the
- * screen. Each deploy serves a new worker (it carries the build id); when it takes over a page that
- * an older worker was controlling, the page reloads itself once.
+ * screen. Each deploy serves a new worker (it carries the build id); when a worker takes over whose
+ * build is not the one this page was served by, the page reloads itself once. Comparing builds, not
+ * "was there a worker before", also covers a page opened with none (a first visit, a hard reload).
  *
  * Why a reload and not a "tap to reload" note: the kitchen iPad is left open and nobody taps it, so a
  * note would sit there while the old build runs. The plan comes back from the server on reload, so
@@ -11,8 +12,8 @@
 export function registerServiceWorker(): void {
   if (!("serviceWorker" in navigator)) return;
   const container = navigator.serviceWorker;
-  // The first install takes over a page that had no worker: that is not a new build, so no reload.
-  const hadWorker = container.controller !== null;
+  // The build that served this page (server/http/app.ts); absent under `vite dev`, which never reloads.
+  const page = document.querySelector<HTMLMetaElement>('meta[name="household-build"]')?.content ?? null;
   let reloading = false;
   const reloadWhenIdle = () => {
     if (reloading) return;
@@ -24,7 +25,12 @@ export function registerServiceWorker(): void {
     window.location.reload();
   };
   container.addEventListener("controllerchange", () => {
-    if (hadWorker) reloadWhenIdle();
+    const worker = container.controller;
+    if (page === null || worker === null) return;
+    void (async () => {
+      const build = await buildOf(worker);
+      if (build !== null && build !== page) reloadWhenIdle();
+    })();
   });
   void container.register("/sw.js", { updateViaCache: "none" }).catch(() => {});
 }
@@ -39,6 +45,16 @@ export function checkForUpdate(): void {
     .getRegistration()
     .then((r) => r?.update())
     .catch(() => {});
+}
+
+/** The build a worker carries, asked over a message channel (web/public/sw.js); null if it cannot say. */
+function buildOf(worker: ServiceWorker): Promise<string | null> {
+  return new Promise((resolve) => {
+    const channel = new MessageChannel();
+    channel.port1.addEventListener("message", (e: MessageEvent) => resolve(typeof e.data === "string" ? e.data : null), { once: true });
+    channel.port1.start();
+    worker.postMessage("build", [channel.port2]);
+  });
 }
 
 function typing(): boolean {

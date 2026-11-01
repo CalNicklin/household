@@ -73,9 +73,20 @@ test("[HOME-6] (HOU-154) after a deploy one reload shows the new build, an open 
     await expect(shown).toHaveAttribute("content", a);
     await expect(page.getByText("Hang the washing out")).toBeVisible();
     await expect.poll(() => page.evaluate(() => navigator.serviceWorker.controller !== null)).toBe(true);
-    // A page that is controlled by build A's worker has every view and the page itself to hand.
-    await page.reload();
+
+    // Deploy B to the page as first opened (no worker when it loaded; A's took over without a reload).
+    // Nobody touches the screen: it reconnects, finds the new worker and reloads itself, once.
+    let loads = 0;
+    page.on("load", () => (loads += 1));
+    await deploy("b");
+    const b = await buildOf();
+    expect(b).not.toBe(a);
+    await eventually(async () => (await shown.getAttribute("content")) === b);
     await expect(page.getByText("Hang the washing out")).toBeVisible();
+    // Once, not a loop: a few seconds later it has still loaded only the once.
+    await pause(3_000);
+    expect(loads).toBe(1);
+    await evidence(page, "HOU-154-reloaded-itself");
 
     // HOME-6: the network blips; a reload still shows the last plan.
     await ctx.setOffline(true);
@@ -84,28 +95,23 @@ test("[HOME-6] (HOU-154) after a deploy one reload shows the new build, an open 
     await evidence(page, "HOU-154-offline-last-plan");
     await ctx.setOffline(false);
     await page.reload();
-    await expect(shown).toHaveAttribute("content", a);
-
-    // Deploy B. Nobody touches the screen: it reconnects, finds the new worker and reloads itself, once.
-    await deploy("b");
-    const b = await buildOf();
-    expect(b).not.toBe(a);
-    let loads = 0;
-    page.on("load", () => (loads += 1));
-    await eventually(async () => (await shown.getAttribute("content")) === b);
     await expect(shown).toHaveAttribute("content", b);
-    await expect(page.getByText("Hang the washing out")).toBeVisible();
-    // Once, not a loop: a few seconds later it has still loaded only the once.
-    await pause(3_000);
-    expect(loads).toBe(1);
-    await evidence(page, "HOU-154-reloaded-itself");
 
-    // Deploy C, and reload straight away: that one reload shows C.
+    // Deploy C to a page that a worker controlled when it loaded: it reloads itself too.
+    loads = 0;
     await deploy("c");
     const c = await buildOf();
     expect(c).not.toBe(b);
+    await eventually(async () => (await shown.getAttribute("content")) === c);
+    await pause(3_000);
+    expect(loads).toBe(1);
+
+    // Deploy D, and reload straight away: that one reload shows D.
+    await deploy("d");
+    const d = await buildOf();
+    expect(d).not.toBe(c);
     await page.reload();
-    await expect(shown).toHaveAttribute("content", c);
+    await expect(shown).toHaveAttribute("content", d);
     await evidence(page, "HOU-154-one-reload");
     await ctx.close();
   } finally {
