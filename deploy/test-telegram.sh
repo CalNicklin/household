@@ -44,6 +44,8 @@ cp "$repo"/deploy/compose.yml "$repo"/deploy/compose.hindsight.yml "$repo"/deplo
 printf 'HOUSEHOLD_DIR=%s\nHOUSEHOLD_REPO=localhost:5000/household\n' "$work/srv" > "$HOUSEHOLD_CONF"
 docker run --rm --network none --memory 128m -v "$repo/scripts/env-init.ts:/env-init.ts:ro" -v "$work/srv:/work" -w /work node:22-bookworm-slim node /env-init.ts --real > /dev/null
 echo "HOUSEHOLD_DOMAIN=localhost" >> "$work/srv/.env"
+# HOU-160: the real house needs its model's key; no call is made with it here.
+echo "ANTHROPIC_API_KEY=placeholder-not-a-key" >> "$work/srv/.env"
 lib="$work/lib"
 install -d "$lib"
 install -m 755 "$repo"/deploy/household-*.sh "$repo/scripts/backup.sh" "$repo/scripts/restore.sh" "$lib/"
