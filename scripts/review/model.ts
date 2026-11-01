@@ -223,8 +223,9 @@ export async function runStage(opts: { stage: ReviewStage; model: LanguageModel;
     prepareStep: ({ stepNumber }) => (stepNumber >= Limits.reviewMaxSteps.value - 1 || spent >= Limits.reviewMaxStageTokens.value ? { toolChoice: "none" as const } : {}),
     onStepFinish: (step) => {
       const t = tokensOf(step.usage);
+      // The first step has written the cache by now (once: later steps don't call it).
+      if (spent === 0) opts.onFirstStep?.();
       spent += t.input + t.output;
-      opts.onFirstStep?.();
     },
     // limit: reviewMaxOutputTokens
     maxOutputTokens: Limits.reviewMaxOutputTokens.value,
