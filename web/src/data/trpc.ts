@@ -24,9 +24,19 @@ export function makeQueryClient(): QueryClient {
 
 type LinkFetch = NonNullable<Parameters<typeof httpLink>[0]["fetch"]>;
 
+/**
+ * HOU-158: true while the page is hidden or being closed. A request made then (a delete whose Undo
+ * window was cut short) is sent with keepalive, so the browser finishes it after the page has gone.
+ */
+let leaving = false;
+export function setLeaving(next: boolean): void {
+  leaving = next;
+}
+
 const trpcFetch: LinkFetch = async (url, init) => {
   const res = await fetch(url, {
     credentials: "same-origin",
+    keepalive: leaving,
     method: init?.method ?? "GET",
     headers: init?.headers ?? {},
     body: init?.body ?? null,
