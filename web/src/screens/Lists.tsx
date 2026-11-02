@@ -152,7 +152,7 @@ export function ListsScreen() {
   return (
     <Page label="Lists">
       <Header title="Lists" line="Shopping and simple lists, shared by everyone" nav={navFor("/lists")} />
-      <FooterComposer placeholder="“Add wrapping paper to the presents list”" />
+      <FooterComposer placeholder="Add to a list, or ask the house anything" />
       <Grid3>
         {(lists.data ?? []).map((l) => (
           <ListPanel key={l.id} list={l} />

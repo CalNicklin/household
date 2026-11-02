@@ -118,7 +118,7 @@ describe("Code rules that a tool enforces", () => {
     const check = readFileSync(path.join(ROOT, "scripts/check.ts"), "utf8");
     for (const step of ['"tsc"', '"oxlint"', '"fallow", "audit"', "drizzle.ts", '"vitest"', '"playwright"']) expect(check).toContain(step);
     const ci = readFileSync(path.join(ROOT, ".github/workflows/ci.yml"), "utf8");
-    expect([...ci.matchAll(/- run: (.+)/g)].map((m) => m[1])).toEqual(["pnpm install --frozen-lockfile", "pnpm exec playwright install --with-deps chromium", "pnpm check"]);
+    expect([...ci.matchAll(/- run: (.+)/g)].map((m) => m[1])).toEqual(["pnpm install --frozen-lockfile", "pnpm exec playwright install --with-deps chromium webkit", "pnpm check"]);
     const fallow = z.object({ boundaries: z.object({ zones: z.array(z.object({ name: z.string() })), rules: z.array(z.object({ from: z.string(), allow: z.array(z.string()) })) }) }).parse(JSON.parse(readFileSync(path.join(ROOT, ".fallowrc.json"), "utf8")));
     expect(fallow.boundaries.rules.find((r) => r.from === "contracts")?.allow).toEqual([]);
     for (const d of Object.values(Domain)) expect(fallow.boundaries.rules.find((r) => r.from === `domain-${d}`)?.allow).toEqual(["contracts", "infra"]);
