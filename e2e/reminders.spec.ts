@@ -33,7 +33,6 @@ test("[CAP-10] 'remind us to discuss Wise Owls tonight' shows on Today under Lat
  * Delete (with Undo) on its card, or saying so to the house. Never a second reminder.
  */
 test("[CAP-10][PRV-1] a reminder's '…' menu changes its time and deletes it with Undo; 'cancel the 9 o'clock BoyBoy reminder' cancels the duplicate (HOU-174)", async ({ page }) => {
-  await page.clock.install();
   await login(page);
   await say(page, "remind me tonight to lock the shed");
   await expect(page.getByRole("status")).toContainText("I'll remind you at 20:00 today: Lock the shed.");
@@ -46,11 +45,15 @@ test("[CAP-10][PRV-1] a reminder's '…' menu changes its time and deletes it wi
   await card().getByLabel("New time for Lock the shed").fill("21:15");
   await evidence(page, "HOU-174-change-time");
   await card().getByRole("button", { name: "Save" }).click();
+  await expect(page.getByRole("status")).toContainText("Moved: Lock the shed, now at 21:15 today.");
   await expect(card().getByText("21:15")).toBeVisible();
   await expect(card().getByText("20:00")).toHaveCount(0);
   await evidence(page, "HOU-174-changed");
 
-  // Delete, with Undo (HOU-158): Undo puts it back with nothing sent; left alone, it is gone.
+  // Delete, with Undo (HOU-158): Undo puts it back with nothing sent; left alone, it is gone. FB-2: on
+  // Playwright's clock from here, so the test skips the Undo window instead of waiting it out.
+  await page.clock.install();
+  await page.reload();
   const toast = page.getByRole("status", { name: "Deleted" });
   await card().getByRole("button", { name: "Actions for Lock the shed" }).click();
   await page.getByRole("menuitem", { name: "Delete" }).click();

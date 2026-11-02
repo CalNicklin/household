@@ -6,6 +6,7 @@ import {
   NotificationStatus,
   zAcceptMessageInput,
   zAcceptMessageOutput,
+  zActionKind,
   zDropInput,
   zDroppedSender,
   zDroppedSendersInput,
@@ -269,13 +270,17 @@ export function jobsRouter(db: JobsDb) {
         const r = m.replies[0];
         const job = m.jobs[0];
         // PRV-5: redaction empties the attachments, so a finished tap is also known by its `tap:` intent.
-        const tap = m.attachments.some((a) => a.kind === AttachmentKind.ref && a.action !== undefined) || (job?.intent.startsWith("tap:") ?? false);
+        const tapped = m.attachments.flatMap((a) => (a.kind === AttachmentKind.ref && a.action !== undefined ? [a.action] : []))[0];
+        const tap = tapped !== undefined || (job?.intent.startsWith("tap:") ?? false);
+        const fromIntent = zActionKind.safeParse(job?.intent.slice("tap:".length));
+        const action = tapped ?? (tap && fromIntent.success ? fromIntent.data : null);
         return {
           id: m.id,
           text: m.text,
           redacted: m.redacted,
           receivedAt: iso(m.receivedAt),
           tap,
+          action,
           reply: r === undefined ? null : { id: r.id, text: r.text, createdAt: iso(r.createdAt) },
           job: job === undefined ? null : { status: job.status, toolCalls: job.toolCalls },
         };

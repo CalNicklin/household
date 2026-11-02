@@ -2,7 +2,7 @@ import { ActionKind, type BacklogItem, BacklogStatus, BacklogTag, BlockType, typ
 import { findSlot, partOfDay } from "../rules/fit.ts";
 import { adultsOf, type HouseFacts, nameOf } from "../rules/day.ts";
 import type { Runtime } from "../runtime.ts";
-import { addLocalDays, atLocal, daysBetween, localDate, shortWeekday, startOfLocalDay } from "../time.ts";
+import { addLocalDays, atLocal, dayPartWords, daysBetween, localDate, startOfLocalDay } from "../time.ts";
 import { type BacklogPick, isShopNews, type OneThing } from "./compose.ts";
 import { type HouseFill, START_REF_PREFIX } from "./first-day.ts";
 
@@ -93,7 +93,7 @@ async function withRetry<T>(call: () => Promise<T>, attempts: number = Limits.we
   }
 }
 
-export type PickCandidate = BacklogPick & { slotDate: LocalDate; dayPart: string; who: string[] };
+export type PickCandidate = BacklogPick & { who: string[] };
 
 /**
  * Backlog items with a slot this week that have never been offered (PRO-6), soonest first. A slot
@@ -103,7 +103,9 @@ export async function pickCandidates(rt: Runtime, facts: HouseFacts, date: Local
   const api = rt.system("planner");
   const items = (await api.backlog.list()).filter((i) => i.status === BacklogStatus.active);
   const offered = new Set((await api.plans.offers()).filter((o) => o.itemId !== signals.todayOffer).map((o) => o.itemId));
-  const from = localDate(now, rt.timeZone) === date ? now : atLocal(date, 7, 0, rt.timeZone);
+  // HOU-173: the reason is read from the real today, whichever day's plan it is on.
+  const today = localDate(now, rt.timeZone);
+  const from = today === date ? now : atLocal(date, 7, 0, rt.timeZone);
   const out: PickCandidate[] = [];
   for (const item of items) {
     if (offered.has(item.id)) continue;
@@ -115,13 +117,15 @@ export async function pickCandidates(rt: Runtime, facts: HouseFacts, date: Local
     if (slot.date === date && slot.who.every((w) => signals.heavy.includes(w))) continue;
     const person = signals.offerTo[item.text.toLowerCase()] ?? null;
     const forWhom = person === null ? "" : ` ${nameOf(facts.people, person)} usually takes these.`;
-    out.push({ itemId: item.id, title: item.text, why: `${pickReason(facts, item, slot.date, date, dayPart, slot.why)}${forWhom}`, person, slotDate: slot.date, dayPart, who: slot.who });
+    out.push({ itemId: item.id, title: item.text, why: `${pickReason(facts, item, slot.date, today, dayPart, slot.why)}${forWhom}`, person, slotDate: slot.date, dayPart, who: slot.who });
   }
   return out.sort((a, b) => a.slotDate.localeCompare(b.slotDate));
 }
 
-function pickReason(facts: HouseFacts, item: BacklogItem, slotDate: LocalDate, today: LocalDate, dayPart: string, why: string[]): string {
-  const day = slotDate === today ? `This ${dayPart}` : `${shortWeekday(slotDate)} ${dayPart}`;
+/** HOU-173: `today` is the real current date, never the plan's: the age and the day words are both said from it. */
+export function pickReason(facts: HouseFacts, item: BacklogItem, slotDate: LocalDate, today: LocalDate, dayPart: string, why: string[]): string {
+  const words = dayPartWords(slotDate, today, dayPart);
+  const day = `${words.charAt(0).toUpperCase()}${words.slice(1)}`;
   const age = daysBetween(localDate(new Date(item.createdAt), facts.timeZone), today);
   const added = age <= 0 ? "added today" : age === 1 ? "added yesterday" : age < 14 ? `added ${age} days ago` : `added ${Math.round(age / 7)} weeks ago`;
   const conditions = why.length === 0 ? "is clear" : `is clear: ${why.join(", ")}`;
@@ -169,7 +173,7 @@ export async function oneThingCandidates(rt: Runtime, facts: HouseFacts, date: L
   const small = out.length === 0 ? oldestSmall(items) : undefined;
   if (small !== undefined) {
     const ref = `backlog:${small.id}`;
-    const age = daysBetween(localDate(new Date(small.createdAt), rt.timeZone), date);
+    const age = daysBetween(localDate(new Date(small.createdAt), rt.timeZone), localDate(now, rt.timeZone));
     out.push({
       ref,
       title: small.text,

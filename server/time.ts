@@ -32,11 +32,6 @@ export function atLocal(date: LocalDate, hour: number, minute: number, timeZone:
   return new Date(new TZDate(y ?? 1970, (m ?? 1) - 1, d ?? 1, hour, minute, 0, timeZone).getTime());
 }
 
-/** MOM-4: midnight at the end of the local day that contains `at`. */
-export function nextLocalMidnight(at: Date, timeZone: string): Date {
-  return startOfLocalDay(addLocalDays(localDate(at, timeZone), 1), timeZone);
-}
-
 export function addLocalDays(date: LocalDate, days: number): LocalDate {
   return format(addDays(parseISO(date), days), "yyyy-MM-dd");
 }
@@ -63,6 +58,13 @@ export function longDate(date: LocalDate): string {
 
 export function shortWeekday(date: LocalDate): string {
   return format(parseISO(date), "EEEE");
+}
+
+/** HOU-173: a part of a day said from the real today: "this morning", "tomorrow evening", "Wednesday afternoon". */
+export function dayPartWords(date: LocalDate, today: LocalDate, part: string): string {
+  if (date === today) return `this ${part}`;
+  if (date === addLocalDays(today, 1)) return `tomorrow ${part}`;
+  return `${shortWeekday(date)} ${part}`;
 }
 
 /** "13:00" style clock for an instant in the house time zone. */

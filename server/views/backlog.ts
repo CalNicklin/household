@@ -2,6 +2,8 @@ import { type BacklogScreen, BacklogStatus } from "@household/contracts";
 import { gatherFacts } from "../planner/gather.ts";
 import { nameOf } from "../rules/day.ts";
 import { findSlot, partOfDay, waitingFor } from "../rules/fit.ts";
+import { pencilledFrom } from "./screen.ts";
+import { pencilledLine } from "../planner/pencil.ts";
 import type { Runtime } from "../runtime.ts";
 import { localDate, shortWeekday } from "../time.ts";
 
@@ -24,6 +26,7 @@ export async function backlogScreen(rt: Runtime): Promise<BacklogScreen> {
   const today = localDate(now, rt.timeZone);
   const items = await rt.system("views").backlog.list();
   const facts = await gatherFacts(rt, today, 7);
+  const pencilled = new Map((await pencilledFrom(rt, today)).map((p) => [p.item.id, p.slot]));
   const out: BacklogScreen = { count: 0, soon: [], waiting: [], justAdded: [], parked: [] };
   for (const item of items) {
     if (item.status === BacklogStatus.done) continue;
@@ -32,6 +35,12 @@ export async function backlogScreen(rt: Runtime): Promise<BacklogScreen> {
       continue;
     }
     out.count += 1;
+    // HOU-173: pencilled in, it could go soon: on the day and part it was pencilled in for.
+    const pencil = pencilled.get(item.id);
+    if (pencil !== undefined) {
+      out.soon.push({ item, slot: pencilledLine(pencil, today) });
+      continue;
+    }
     if (!item.confirmedTags && now.getTime() - new Date(item.createdAt).getTime() < JUST_ADDED_MS) {
       out.justAdded.push({ item, byline: `${nameOf(facts.people, item.createdBy)} · ${when(item.createdAt, now, rt.timeZone)}` });
       continue;
