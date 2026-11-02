@@ -20,6 +20,14 @@ export const zRemindInput = z.object({
   index: z.number().int().min(0).optional(),
 });
 export const zLocalDateRangeInput = z.object({ from: z.iso.date(), to: z.iso.date() });
+/**
+ * HOU-174: a person moves or re-times a reminder, or cancels it, when they ask. A job may do it only
+ * from the message it is handling (PRV-1), like setting one.
+ */
+export const zReminderChangeInput = z.object({ id: z.string(), date: z.iso.date(), time: zLocalTime.nullable(), sourceMessage: z.string() });
+export const zReminderCancelInput = z.object({ id: z.string(), sourceMessage: z.string() });
+/** HOU-174: open reminders on `from` or later, the ones a person could still change or cancel. */
+export const zUpcomingRemindersInput = z.object({ from: z.iso.date() });
 /** CAP-10: "Not now" or "Later" moves a reminder to another day, keeping its time. */
 export const zReminderMoveInput = z.object({ id: z.string(), date: z.iso.date() });
 /** CAP-10: open reminders with no time from before `today` become backlog items. */

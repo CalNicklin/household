@@ -1,5 +1,5 @@
-import { type Block, BlockType, type NotifyAction, Section, SectionLabel } from "@household/contracts";
-import type { ReactNode } from "react";
+import { ActionKind, ActionLabel, type Block, BlockType, type NotifyAction, Section, SectionLabel } from "@household/contracts";
+import { type ReactNode, useState } from "react";
 import { type About, useUiState } from "../data/ui-state.tsx";
 import {
   AlertCard,
@@ -12,17 +12,23 @@ import {
   Focus,
   Header,
   ListCard,
+  Menu,
   ModeCard,
   type NavLink,
   ReminderCard,
   Section as SectionView,
   SuggestionCard,
+  TimeChoice,
 } from "../design-system/index.ts";
 import { piecesOf, type Run, slotBlocks } from "./layout.ts";
 
 export type BlockHandlers = {
   /** A one-tap button: becomes a normal message with the action's ref (CH-8). */
   onAction: (block: Block, action: NotifyAction) => void;
+  /** HOU-174: a person's Change time on a reminder, to `time` (HH:MM). */
+  onRetime: (block: Block, ref: string, time: string) => void;
+  /** HOU-174: a person's Delete on a reminder, with Undo (HOU-158). */
+  onDelete: (block: Block, ref: string, title: string) => void;
 };
 
 function cardActions(block: Block, actions: readonly NotifyAction[], handlers: BlockHandlers): CardAction[] {
@@ -74,11 +80,53 @@ function BlockView({ block, handlers, nav }: { block: Block; handlers: BlockHand
     case BlockType.backlogPick:
       return <BacklogPickCard title={block.title} reason={block.reason} actions={cardActions(block, block.actions, handlers)} onSelect={select({ ref: block.ref, title: block.title })} selected={isSelected(block.ref)} />;
     case BlockType.reminder:
-      return <ReminderCard time={block.time} title={block.title} detail={block.detail} actions={cardActions(block, block.actions, handlers)} onSelect={select({ ref: block.ref, title: block.title })} selected={isSelected(block.ref)} />;
+      return <ReminderBlock block={block} handlers={handlers} />;
     case BlockType.composer:
       // Rendered by the footer slot (BlockScreen), never inline.
       return null;
   }
+}
+
+/**
+ * HOU-174: a reminder's "…" menu: Change time (a small time choice) and Delete (with Undo). Both are a
+ * person's own action (PRV-1); nothing here changes a reminder without a tap.
+ */
+function ReminderBlock({ block, handlers }: { block: Extract<Block, { type: "reminder" }>; handlers: BlockHandlers }) {
+  const { select, isSelected } = useSelect();
+  const [choosing, setChoosing] = useState(false);
+  const menu = (
+    <Menu
+      icon="more"
+      label={`Actions for ${block.title}`}
+      entries={[
+        { key: "retime", label: ActionLabel[ActionKind.retime], onSelect: () => setChoosing(true) },
+        { key: "delete", label: ActionLabel[ActionKind.cancel], onSelect: () => handlers.onDelete(block, block.ref, block.title) },
+      ]}
+    />
+  );
+  const below = choosing ? (
+    <TimeChoice
+      label={`New time for ${block.title}`}
+      initial={block.time}
+      onCancel={() => setChoosing(false)}
+      onSave={(time) => {
+        setChoosing(false);
+        handlers.onRetime(block, block.ref, time);
+      }}
+    />
+  ) : null;
+  return (
+    <ReminderCard
+      time={block.time}
+      title={block.title}
+      detail={block.detail}
+      actions={cardActions(block, block.actions, handlers)}
+      menu={menu}
+      below={below}
+      onSelect={select({ ref: block.ref, title: block.title })}
+      selected={isSelected(block.ref)}
+    />
+  );
 }
 
 function SuggestionBlock({ block, handlers }: { block: Extract<Block, { type: "suggestion" }>; handlers: BlockHandlers }) {

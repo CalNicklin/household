@@ -48,7 +48,7 @@ describe("Platform", () => {
 
   test("[PLT-5] one agent with tools for the house database, calendar, lists app, weather and daylight, parcels and messages", () => {
     const scope = jobScope(h.rt, "j", "m", "priya", "app");
-    expect(Object.keys(houseTools(scope)).sort()).toEqual(["add_to_list", "capture", "hand_over", "move_to_tomorrow", "record_arrival", "remind", "respond", "set_mode", "shop", "sitter_booked", "today", "what_now"]);
+    expect(Object.keys(houseTools(scope)).sort()).toEqual(["add_to_list", "cancel_reminder", "capture", "change_reminder", "hand_over", "move_to_tomorrow", "record_arrival", "remind", "respond", "set_mode", "shop", "sitter_booked", "today", "what_now"]);
   });
 
   test("[PLT-10][QA-8] long tool calls are child workflows; a job's trace (steps, tool calls, tokens, cost, time) is in one place, and monthly spend is on a page", async () => {

@@ -1,14 +1,15 @@
 import { createTool } from "@mastra/core/tools";
-import { ActionKind, type BacklogTag, Limits, ListWriteOutcome, LongTool, type ModeKind as Mode, ModeKind, ModeLabel, Urgency, zActionKind, zBacklogTag } from "@household/contracts";
+import { ActionKind, type BacklogTag, Channel, Limits, ListWriteOutcome, LongTool, type ModeKind as Mode, ModeKind, ModeLabel, Urgency, zActionKind, zBacklogTag } from "@household/contracts";
 import { z } from "zod";
 import { gatherFacts, oneThingCandidates } from "../planner/gather.ts";
 import { inQuietHours } from "../rules/budget.ts";
 import { adultsOf, contextLine, eventsOn } from "../rules/day.ts";
 import { parseOrder } from "../rules/orders.ts";
-import { reminderFor, reminderWhen } from "../rules/remind.ts";
+import { reminderFor, reminderWhen, retimeWhen } from "../rules/remind.ts";
 import { guessTags } from "../rules/tags.ts";
 import { dayIn, daysIn } from "../rules/when.ts";
 import { addLocalDays, atLocal, clock, localDate, localTime, longDate, startOfLocalDay } from "../time.ts";
+import { cancelReminder, changeReminder, findReminder } from "./reminders.ts";
 import { respond, subjectFor } from "./respond.ts";
 import type { JobScope } from "./scope.ts";
 
@@ -79,6 +80,43 @@ export function houseTools(scope: JobScope) {
       const day = reminder.date === date ? "today" : reminder.date === addLocalDays(date, 1) ? "tomorrow" : longDate(reminder.date);
       if (reminder.time === null) return { set: true, id: reminder.id, say: `I'll remind ${whom}: ${reminder.text}. ${day === "today" ? "It's on Today for the rest of the day." : `It'll be on the home screen ${day}.`}` };
       return { set: true, id: reminder.id, say: `I'll remind ${whom} at ${reminder.time} ${day}: ${reminder.text}.` };
+    }),
+  });
+
+  /**
+   * HOU-174: move, re-time or cancel a reminder, only when a person asks to (PRV-1). Which one is read
+   * by rules from what they said; several that could match means asking, never guessing.
+   */
+  const whichReminder = z
+    .string()
+    .describe("Which reminder, in their words: 'the BoyBoy reminder', 'the 9 o'clock one', 'Wednesday's reminder', 'that one'.");
+  const aboutRef = z.string().nullable().optional().describe("The About ref, when they mean the thing they are looking at ('this', 'that one').");
+  // PRV-1: an email carries words someone else wrote (an order, a forward), never the person's own ask,
+  // so no email changes or cancels a reminder.
+  const fromEmail = () => scope.channel === Channel.email;
+  const changeReminderTool = createTool({
+    id: "change_reminder",
+    description:
+      "Only when someone explicitly asks to move, re-time or change an existing reminder: 'make the BoyBoy reminder 7:30', 'move that reminder to Thursday', 'make it earlier, 730'. `when` is the new time or day as they said it. Never on your own initiative, and never set a second reminder instead.",
+    inputSchema: z.object({ which: whichReminder, ref: aboutRef, when: z.string().min(1) }),
+    execute: record("change_reminder", async (input: { which: string; ref?: string | null | undefined; when: string }) => {
+      if (fromEmail()) return { changed: false, say: "" };
+      const found = await findReminder(scope, input.which, input.ref);
+      if ("say" in found) return { changed: false, say: found.say };
+      const when = retimeWhen(input.when, found.reminder, rt.ports.clock.now(), tz);
+      if (when === null) return { changed: false, say: `What time should it be? I couldn't tell from "${input.when}".` };
+      return changeReminder(scope, found.reminder, when);
+    }),
+  });
+  const cancelReminderTool = createTool({
+    id: "cancel_reminder",
+    description: "Only when someone explicitly asks to cancel, delete or stop an existing reminder: 'cancel the 9 o'clock BoyBoy reminder', 'delete that reminder', 'I don't need the dentist reminder'. Never on your own initiative.",
+    inputSchema: z.object({ which: whichReminder, ref: aboutRef }),
+    execute: record("cancel_reminder", async (input: { which: string; ref?: string | null | undefined }) => {
+      if (fromEmail()) return { cancelled: false, say: "" };
+      const found = await findReminder(scope, input.which, input.ref);
+      if ("say" in found) return { cancelled: false, say: found.say };
+      return cancelReminder(scope, found.reminder);
     }),
   });
 
@@ -179,7 +217,8 @@ export function houseTools(scope: JobScope) {
   const respondTool = createTool({
     id: "respond",
     description: "Done, not today, snooze or accept on something on the screen, by its ref.",
-    inputSchema: z.object({ ref: z.string(), action: zActionKind, value: z.string().nullable().optional() }),
+    // HOU-174: a reminder's Change time and Delete are a person's tap, or change_reminder / cancel_reminder; never this.
+    inputSchema: z.object({ ref: z.string(), action: zActionKind.exclude([ActionKind.retime, ActionKind.cancel]), value: z.string().nullable().optional() }),
     execute: record("respond", async (input: { ref: string; action: ActionKind; value?: string | null | undefined }) => ({ say: await respond(scope, input.ref, input.action, input.value ?? null) })),
   });
 
@@ -271,6 +310,8 @@ export function houseTools(scope: JobScope) {
   return {
     capture,
     remind,
+    change_reminder: changeReminderTool,
+    cancel_reminder: cancelReminderTool,
     shop,
     add_to_list: addToList,
     set_mode: setMode,

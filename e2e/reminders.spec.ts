@@ -1,3 +1,4 @@
+import { Limits } from "@household/contracts";
 import { evidence, expect, login, phone, reset, say, test, timer } from "./fixtures.ts";
 
 test.beforeEach(async ({ request }) => reset(request));
@@ -25,4 +26,68 @@ test("[CAP-10] 'remind us to discuss Wise Owls tonight' shows on Today under Lat
   await expect(page.getByRole("heading", { name: "Monday 2 November" })).toBeVisible();
   await expect(page.getByText("Discuss Wise Owls", { exact: true })).toHaveCount(0);
   await evidence(page, "HOU-172-done");
+});
+
+/**
+ * HOU-174: a reminder is changed or cancelled only because a person asks: "…" then Change time or
+ * Delete (with Undo) on its card, or saying so to the house. Never a second reminder.
+ */
+test("[CAP-10][PRV-1] a reminder's '…' menu changes its time and deletes it with Undo; 'cancel the 9 o'clock BoyBoy reminder' cancels the duplicate (HOU-174)", async ({ page }) => {
+  await login(page);
+  await say(page, "remind me tonight to lock the shed");
+  await expect(page.getByRole("status")).toContainText("I'll remind you at 20:00 today: Lock the shed.");
+  const card = () => page.getByRole("region", { name: "Later today" }).locator(".ds-card").filter({ hasText: "Lock the shed" });
+  await expect(card().getByText("20:00")).toBeVisible();
+
+  // Change time: a small time choice under the card.
+  await card().getByRole("button", { name: "Actions for Lock the shed" }).click();
+  await page.getByRole("menuitem", { name: "Change time" }).click();
+  await card().getByLabel("New time for Lock the shed").fill("21:15");
+  await evidence(page, "HOU-174-change-time");
+  await card().getByRole("button", { name: "Save" }).click();
+  await expect(page.getByRole("status")).toContainText("Moved: Lock the shed, now at 21:15 today.");
+  await expect(card().getByText("21:15")).toBeVisible();
+  await expect(card().getByText("20:00")).toHaveCount(0);
+  await evidence(page, "HOU-174-changed");
+
+  // Delete, with Undo (HOU-158): Undo puts it back with nothing sent; left alone, it is gone. FB-2: on
+  // Playwright's clock from here, so the test skips the Undo window instead of waiting it out.
+  await page.clock.install();
+  await page.reload();
+  const toast = page.getByRole("status", { name: "Deleted" });
+  await card().getByRole("button", { name: "Actions for Lock the shed" }).click();
+  await page.getByRole("menuitem", { name: "Delete" }).click();
+  await expect(toast).toContainText("Deleted “Lock the shed”");
+  await expect(card()).toHaveCount(0);
+  await evidence(page, "HOU-174-delete-undo");
+  await toast.getByRole("button", { name: "Undo" }).click();
+  await expect(card().getByText("21:15")).toBeVisible();
+  await card().getByRole("button", { name: "Actions for Lock the shed" }).click();
+  await page.getByRole("menuitem", { name: "Delete" }).click();
+  // limit: undoWindowMs
+  await page.clock.fastForward(Limits.undoWindowMs.value);
+  await expect(toast).toHaveCount(0);
+  // Sent once the window ends: the reminder is cancelled, so a fresh load of Today leaves it out too.
+  await expect(async () => {
+    await page.reload();
+    await expect(page.getByRole("heading", { name: "Monday 2 November" })).toBeVisible();
+    await expect(page.getByText("Lock the shed", { exact: true })).toHaveCount(0);
+  }).toPass();
+
+  // Cal's duplicate (2 Nov): two BoyBoy reminders on Wednesday; saying which one cancels just that one.
+  await say(page, "remind me on Wednesday morning to check BoyBoy's lunchtime nap");
+  await expect(page.getByRole("status")).toContainText("I'll remind you at 09:00 Wednesday 4 November");
+  await say(page, "remind me on Wednesday at 7:30 to check BoyBoy's lunchtime nap");
+  await expect(page.getByRole("status")).toContainText("I'll remind you at 07:30 Wednesday 4 November");
+  await say(page, "make the BoyBoy reminder 7:15");
+  await expect(page.getByRole("status")).toContainText("Which one?");
+  await say(page, "cancel the 9 o'clock BoyBoy reminder");
+  await expect(page.getByRole("status")).toContainText("Cancelled the 09:00 reminder Wednesday 4 November: Check BoyBoy's lunchtime nap.");
+  await evidence(page, "HOU-174-cancel-by-phrase");
+  await page.goto("/week");
+  const wednesday = page.getByRole("region", { name: "Wednesday 4 November" });
+  const boyBoy = wednesday.locator(".ds-card").filter({ hasText: "Check BoyBoy's lunchtime nap" });
+  await expect(boyBoy).toHaveCount(1);
+  await expect(boyBoy.getByText("07:30")).toBeVisible();
+  await evidence(page, "HOU-174-week-one-left");
 });
