@@ -115,19 +115,22 @@ export async function gmailForwarded(shopMessage: string, user: string, forwardT
   return { message, envelopeFrom: `${local}+caf_=${forwardTo.replace("@", "=")}@${domain}` };
 }
 
-/** Gmail's forwarding confirmation, as Google sends it to the new forwarding address. */
-export function gmailConfirmation(user: string, forwardTo: string, code: string): string {
+/**
+ * Gmail's forwarding confirmation, as Google sends it to the new forwarding address. The real one's
+ * exact shape isn't public (HOU-169), so `shape` gives the variants recognition must tolerate: another
+ * google.com sender, a subject (RFC 2047-encoded or not) and the body as plain text or HTML.
+ */
+export function gmailConfirmation(user: string, forwardTo: string, code: string, shape: { from?: string; subject?: string; body?: string; html?: boolean } = {}): string {
+  const body = shape.body ?? [`${user} has requested to automatically forward mail to your email address ${forwardTo}.`, `Confirmation code: ${code}`, "To allow it, click the link below to confirm the request: https://mail-settings.google.com/mail/vf-%5BANGjdJ%5D-abc"].join("\r\n");
   return crlf([
-    "From: Gmail Team <forwarding-noreply@google.com>",
+    `From: ${shape.from ?? "Gmail Team <forwarding-noreply@google.com>"}`,
     `To: ${forwardTo}`,
-    `Subject: (#${code}) Gmail Forwarding Confirmation - Receive Mail from ${user}`,
+    `Subject: ${shape.subject ?? `(#${code}) Gmail Forwarding Confirmation - Receive Mail from ${user}`}`,
     "Date: Sun, 1 Nov 2026 09:00:00 +0000",
     "Message-ID: <confirm-1@google.com>",
-    'Content-Type: text/plain; charset="UTF-8"',
+    `Content-Type: text/${shape.html === true ? "html" : "plain"}; charset="UTF-8"`,
     "",
-    `${user} has requested to automatically forward mail to your email address ${forwardTo}.`,
-    `Confirmation code: ${code}`,
-    "To allow it, click the link below to confirm the request: https://mail-settings.google.com/mail/vf-%5BANGjdJ%5D-abc",
+    body,
   ]);
 }
 

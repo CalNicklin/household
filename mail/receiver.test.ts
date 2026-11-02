@@ -8,7 +8,7 @@ import path from "node:path";
 import { Limits } from "@household/contracts";
 import type { DNSResolver } from "mailauth";
 import type { SMTPServer } from "smtp-server";
-import { afterAll, beforeAll, describe, expect, test } from "vitest";
+import { afterAll, beforeAll, describe, expect, test, vi } from "vitest";
 import { z } from "zod";
 import { lastConfirmation } from "./confirmation.ts";
 import { createReceiver } from "./receiver.ts";
@@ -177,8 +177,24 @@ describe("the mail receiver", () => {
     const confirmation = await signed(gmailConfirmation("cal@gmail.com", ORDERS, "693452117"), world.signer.google);
     expect((await deliver("forwarding-noreply@google.com", [ORDERS], confirmation)).data).toBe(250);
     expect(posted.length).toBe(before);
-    expect(await lastConfirmation(stateDir, new Date())).toBe("693452117");
+    expect(await lastConfirmation(stateDir, new Date())).toEqual({ code: "693452117", link: "https://mail-settings.google.com/mail/vf-%5BANGjdJ%5D-abc" });
     expect(await lastConfirmation(stateDir, new Date(Date.now() + 61 * 60 * 1000))).toBeNull();
+  });
+
+  test("[HOU-169] a google.com email that isn't the confirmation logs its shape (no digits, no body) and goes on to the app", async () => {
+    const before = posted.length;
+    const logged: string[] = [];
+    const spy = vi.spyOn(console, "info").mockImplementation((line: string) => void logged.push(line));
+    try {
+      const message = await signed(gmailConfirmation("cal@gmail.com", ORDERS, "0", { from: "Google <alerts@google.com>", subject: "Security alert 4417", body: "Secret body" }), world.signer.google);
+      expect((await deliver("alerts@google.com", [ORDERS], message)).data).toBe(250);
+    } finally {
+      spy.mockRestore();
+    }
+    expect(posted.length).toBe(before + 1);
+    const shape = logged.filter((l) => l.includes('"event":"mail-google-not-confirmation"'));
+    expect(shape).toHaveLength(1);
+    expect(JSON.parse(shape[0] ?? "")).toEqual({ event: "mail-google-not-confirmation", from: "alerts@google.com", subjectMatched: false, bodyMatched: false, subject: "Security alert ####" });
   });
 
   test("STARTTLS is offered only with a real certificate, never a made-up one", async () => {

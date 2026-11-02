@@ -1,8 +1,9 @@
 import { SenderProof } from "@household/contracts";
 import { authenticate } from "mailauth";
+import { simpleParser } from "mailparser";
 import { beforeAll, describe, expect, test } from "vitest";
 import { fixtureWorld, gmailConfirmation, gmailForwarded, screwfixOrder, signed } from "./testing.ts";
-import { forwardingConfirmationCode, gmailForwarder, provenSenders } from "./verify.ts";
+import { forwardingConfirmation, gmailForwarder, type ParsedMail, provenSenders } from "./verify.ts";
 
 /**
  * HOU-150 / CH-3: who forwarded an email to orders@ is proven by the forwarder's own provider (Gmail's
@@ -97,15 +98,48 @@ describe("who forwarded it", () => {
   });
 });
 
-const subject = (code: string) => `(#${code}) Gmail Forwarding Confirmation - Receive Mail from cal@gmail.com`;
+// Codes are made up per run (HOU-168's secret scan): nine digits, as Gmail's are.
+const newCode = () => String(100_000_000 + Math.floor(Math.random() * 900_000_000));
+const parsed = async (message: string): Promise<ParsedMail> => {
+  const mail = await simpleParser(message);
+  return { subject: mail.subject ?? "", text: mail.text ?? "", html: typeof mail.html === "string" ? mail.html : "" };
+};
+const fromGoogle = async (message: string) => forwardingConfirmation((await check(await signed(message, world.signer.google), "forwarding-noreply@google.com", GOOGLE)).proven, await parsed(message));
+const LINK = "https://mail-settings.google.com/mail/vf-%5BANGjdJ%5D-abc";
 
 describe("Gmail's forwarding confirmation", () => {
-  test("its code is read only from Google's own, signed email", async () => {
-    const genuine = await check(await signed(gmailConfirmation("cal@gmail.com", ORDERS, "693452117"), world.signer.google), "forwarding-noreply@google.com", GOOGLE);
-    expect(forwardingConfirmationCode(genuine.proven, subject("693452117"))).toBe("693452117");
-    const unsigned = await check(gmailConfirmation("cal@gmail.com", ORDERS, "111111111"), "forwarding-noreply@google.com", ELSEWHERE);
-    expect(forwardingConfirmationCode(unsigned.proven, subject("111111111"))).toBeNull();
-    const other = await check(await signed(gmailConfirmation("cal@gmail.com", ORDERS, "222222222"), world.signer.evil), "x@evil.test", ELSEWHERE);
-    expect(forwardingConfirmationCode(other.proven, subject("222222222"))).toBeNull();
+  test("its code and link are read only from Google's own, signed email", async () => {
+    const code = newCode();
+    const message = gmailConfirmation("cal@gmail.com", ORDERS, code);
+    expect(await fromGoogle(message)).toEqual({ confirmation: { code, link: LINK }, ignored: null });
+    // Unsigned, or signed by anyone but google.com, it is nobody's confirmation, and not logged as Google's.
+    const unsigned = await check(message, "forwarding-noreply@google.com", ELSEWHERE);
+    expect(forwardingConfirmation(unsigned.proven, await parsed(message))).toEqual({ confirmation: null, ignored: null });
+    const other = await check(await signed(message, world.signer.evil), "x@evil.test", ELSEWHERE);
+    expect(forwardingConfirmation(other.proven, await parsed(message))).toEqual({ confirmation: null, ignored: null });
+    // google.com's key over a From that isn't google.com's proves nothing for Google either.
+    const misaligned = gmailConfirmation("cal@gmail.com", ORDERS, code, { from: "Gmail Team <forwarding-noreply@google.com.evil.test>" });
+    const signedMisaligned = await check(await signed(misaligned, world.signer.google), "x@evil.test", ELSEWHERE);
+    expect(forwardingConfirmation(signedMisaligned.proven, await parsed(misaligned)).confirmation).toBeNull();
+  });
+
+  test("[HOU-169] real-shaped variants: encoded subject, code later in the subject, code only in the body, another google.com sender", async () => {
+    const code = newCode();
+    const encoded = `=?UTF-8?B?${Buffer.from(`(#${code}) Gmail Forwarding Confirmation - Receive Mail from cal@gmail.com`).toString("base64")}?=`;
+    expect((await fromGoogle(gmailConfirmation("cal@gmail.com", ORDERS, code, { subject: encoded }))).confirmation?.code).toBe(code);
+    expect((await fromGoogle(gmailConfirmation("cal@gmail.com", ORDERS, code, { subject: `Gmail Forwarding Confirmation (#${code})` }))).confirmation?.code).toBe(code);
+    const bodyOnly = { subject: "Gmail Forwarding Confirmation - Receive Mail from cal@gmail.com" };
+    expect((await fromGoogle(gmailConfirmation("cal@gmail.com", ORDERS, code, bodyOnly))).confirmation).toEqual({ code, link: LINK });
+    const html = `<p>Confirmation code: <b>${code}</b></p><p><a href="https://mail.google.com/mail/vf-%5BANGjdJ%5D-x?a=1&amp;b=2">confirm</a></p>`;
+    expect((await fromGoogle(gmailConfirmation("cal@gmail.com", ORDERS, code, { ...bodyOnly, body: html, html: true }))).confirmation).toEqual({ code, link: "https://mail.google.com/mail/vf-%5BANGjdJ%5D-x?a=1&b=2" });
+    for (const from of ["mail-noreply@google.com", "FORWARDING-NOREPLY@Google.com", '"Gmail-Team" <noreply@google.com>']) {
+      expect((await fromGoogle(gmailConfirmation("cal@gmail.com", ORDERS, code, { from }))).confirmation?.code).toBe(code);
+    }
+  });
+
+  test("[HOU-169] a google.com-proven email that isn't the confirmation gives its shape, digits masked", async () => {
+    const code = newCode();
+    const result = await fromGoogle(gmailConfirmation("cal@gmail.com", ORDERS, code, { from: "Google <alerts@google.com>", subject: `Alert ${code}`, body: "Nothing to confirm." }));
+    expect(result).toEqual({ confirmation: null, ignored: { from: "alerts@google.com", subjectMatched: false, bodyMatched: false, subject: "Alert #########" } });
   });
 });
