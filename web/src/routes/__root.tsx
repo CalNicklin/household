@@ -2,6 +2,7 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { createRootRoute, HeadContent, Outlet, Scripts, useRouterState } from "@tanstack/react-router";
 import { type ReactNode, useEffect, useState } from "react";
 import { useLive } from "../data/live.ts";
+import { registerServiceWorker } from "../data/sw.ts";
 import { makeQueryClient, makeTrpcClient, TRPCProvider } from "../data/trpc.ts";
 import { UiStateProvider } from "../data/ui-state.tsx";
 import { UndoProvider, useUndo } from "../data/undo.tsx";
@@ -48,7 +49,7 @@ function Root() {
   const [trpcClient] = useState(makeTrpcClient);
   const path = useRouterState({ select: (s) => s.location.pathname });
   useEffect(() => {
-    if ("serviceWorker" in navigator) void navigator.serviceWorker.register("/sw.js").catch(() => {});
+    registerServiceWorker();
   }, []);
   return (
     <Doc>

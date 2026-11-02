@@ -115,6 +115,8 @@ export const zPlan = z.object({
   version: z.number().int(),
   createdAt: zIsoDateTime,
   blocks: z.array(zBlock),
+  /** HOU-154: the build that made it (null before builds were recorded); an older one is redone once. */
+  build: z.string().nullable(),
 });
 export type Plan = z.infer<typeof zPlan>;
 

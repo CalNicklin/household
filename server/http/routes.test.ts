@@ -13,7 +13,8 @@ beforeAll(async () => {
 afterAll(async () => h.close());
 
 /** Routes anyone may reach: logging in, a health check with no data, and the static shell's assets. */
-const PUBLIC = new Set(["/healthz", "/api/login", "/api/logout"]);
+// HOU-154: /sw.js is the static shell's service worker (PUBLIC_FILES), now served with the build id.
+const PUBLIC = new Set(["/healthz", "/api/login", "/api/logout", "/sw.js"]);
 /** Webhooks are public paths that check their own secret. */
 const WEBHOOKS = new Set(["/webhooks/telegram", "/webhooks/email", "/webhooks/calendar", "/mcp"]);
 

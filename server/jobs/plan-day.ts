@@ -4,6 +4,7 @@ import { HouseAgent } from "../agent/agent.ts";
 import { jobScope } from "../agent/scope.ts";
 import { compose, shoppingForPlan } from "../planner/compose.ts";
 import { gatherFacts, houseFill, otherAdultOf, pickCandidates, screenNotes } from "../planner/gather.ts";
+import { plannerBuildId } from "../build.ts";
 import { allRules } from "../rules/nudges.ts";
 import { dayPartOf } from "../agent/respond.ts";
 import { localDate, localHour } from "../time.ts";
@@ -65,7 +66,7 @@ async function planDayImpl(date: LocalDate, trigger: string, parentJob: string |
       });
       const api = rt.system("planner");
       if (choice.pick !== null) await api.plans.recordOffer({ itemId: choice.pick.itemId, date, person: choice.pick.person });
-      return api.plans.save({ date, blocks, inputs: { trigger, facts, signals, candidates: gathered.candidates.map((c) => c.itemId), pick: choice.pick?.itemId ?? null }, trigger, jobId: parentJob });
+      return api.plans.save({ date, blocks, inputs: { trigger, build: plannerBuildId(), facts, signals, candidates: gathered.candidates.map((c) => c.itemId), pick: choice.pick?.itemId ?? null }, trigger, jobId: parentJob });
     },
     { name: "compose-and-save" },
   );

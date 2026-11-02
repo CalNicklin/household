@@ -41,7 +41,7 @@ import { weekView } from "./week.ts";
 /** What the views may ask the composition root to start; views never reach the coordinator themselves. */
 export type ViewHooks = {
   /** HOU-149: start today's plan through the coordinator, at most once an hour. */
-  planToday: () => Promise<unknown>;
+  planToday: (build: string | null) => Promise<unknown>;
 };
 
 /**
