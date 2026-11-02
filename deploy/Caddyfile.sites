@@ -1,0 +1,7 @@
+# HOU-175: added to the global options by compose.caddy-sites.yml only when other apps' sites are served.
+# Every site without a bind of its own (the house's, the previews', other apps') listens only on Caddy's
+# front address: its default route's source, on the house's own network, where Docker delivers 80 and 443.
+# The household-previews network is internal (no gateway), so Caddy's address there is never the front one,
+# and a PR preview that connects to Caddy finds nothing listening: it can't reach an imported site, which
+# may proxy to services on the host.
+default_bind {$CADDY_FRONT_IP}
