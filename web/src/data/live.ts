@@ -15,7 +15,8 @@ function localDay(): string {
  */
 function refresher(queryClient: QueryClient): { refresh: () => void; stop: () => void } {
   const owed = new Set<string>();
-  const refetch = (query: Query) => void queryClient.refetchQueries({ queryKey: query.queryKey, exact: true, type: "active" }, { cancelRefetch: false });
+  // Stale again, and refetched now if a screen shows it; one no screen shows waits for its next mount.
+  const refetch = (query: Query) => void queryClient.invalidateQueries({ queryKey: query.queryKey, exact: true }, { cancelRefetch: false });
   const stop = queryClient.getQueryCache().subscribe((event) => {
     if (event.type !== "updated" || (event.action.type !== "success" && event.action.type !== "error")) return;
     // HOU-161: Lists' optimistic setQueryData mid-fetch is a "success" too; the fetch is still on its way.
@@ -25,9 +26,10 @@ function refresher(queryClient: QueryClient): { refresh: () => void; stop: () =>
   const refresh = () => {
     // Stale everywhere, so an inactive screen refetches when it is next shown; nothing refetched here.
     void queryClient.invalidateQueries({ refetchType: "none" });
-    for (const query of queryClient.getQueryCache().findAll({ type: "active" })) {
-      if (query.state.fetchStatus === "idle") refetch(query);
-      else owed.add(query.queryHash);
+    // A fetch still on its way is owed one more even when its screen is gone: coming back joins it.
+    for (const query of queryClient.getQueryCache().findAll()) {
+      if (query.state.fetchStatus !== "idle") owed.add(query.queryHash);
+      else if (query.isActive()) refetch(query);
     }
   };
   return { refresh, stop };
