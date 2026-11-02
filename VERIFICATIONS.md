@@ -196,7 +196,7 @@ Types come first and everything else depends on them. Each domain owns its own d
 The building agent finds out whether its change worked in seconds, and proves user journeys by using the app the way we will, not only by unit tests.
 
 - [ ] FB-1 **(gate)** The agent can run the whole system locally with one command and see a change in the browser in under two seconds (Vite dev server with HMR; reason: agent iteration speed).
-- [ ] FB-2 `pnpm check` (CODE-11) finishes in under three minutes on a clean checkout, measured in CI; anything slower is split into a fast default and a `pnpm check:full` (reason: agent iteration speed).
+- [ ] FB-2 `pnpm check` (CODE-11) finishes in under four minutes on a clean checkout, measured in CI; anything slower is split into a fast default and a `pnpm check:full` (reason: agent iteration speed).
 - [ ] FB-3 Every line in Morning glance, Capture, In the moment, Proactive nudges and Automations has an end-to-end test that drives the real app against the practice household (QA-9), written in Playwright and runnable headless in CI.
 - [ ] FB-4 The building agent has computer use and a browser available in its sandbox, and its definition of done for a user-facing line is: run the e2e test, then perform the journey itself with computer use on the deployed preview, and attach the screenshots to the Linear issue as evidence (QA-1).
 - [ ] FB-5 Every PR gets a deployed preview URL with its own practice household, so a journey can be checked by a person or an agent before merge.

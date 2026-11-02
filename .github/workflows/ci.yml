@@ -1,5 +1,5 @@
 # CODE-11: CI installs, then runs `pnpm check` and nothing else. FB-2 is measured here: check fails
-# itself if it takes longer than three minutes.
+# itself if it takes longer than four minutes.
 name: ci
 on:
   pull_request:

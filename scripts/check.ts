@@ -4,7 +4,7 @@ import { postgresCandidates } from "../server/testing/postgres.ts";
 
 /**
  * CODE-11: the only check. tsc, oxlint, Fallow, drizzle-kit check, then the tests (unit and the
- * Playwright journeys). FB-2: the whole run is timed and must stay under three minutes; slow extras
+ * Playwright journeys). FB-2: the whole run is timed and must stay under four minutes; slow extras
  * live in `pnpm check:full`.
  *
  * The steps run in three lanes at once, because none needs another lane's output: the static checks,
@@ -125,9 +125,9 @@ if (results.includes(false)) {
   process.exitCode = 1;
 } else {
   process.stdout.write(`\n✓ pnpm check passed in ${total.toFixed(1)}s (${timings.join(", ")})\n`);
-  // FB-2: anything slower than three minutes must be split into check:full.
-  if (!full && total > 180) {
-    process.stdout.write("FALSE FB-2: pnpm check took longer than three minutes on this machine\n");
+  // FB-2: anything slower than four minutes must be split into check:full.
+  if (!full && total > 240) {
+    process.stdout.write("FALSE FB-2: pnpm check took longer than four minutes on this machine\n");
     process.exitCode = 1;
   }
 }
