@@ -7,7 +7,7 @@ import { ActionKind, type BacklogItem, BacklogStatus, type Block, BlockType, typ
 import { nameOf } from "../rules/day.ts";
 import { addLocalDays, dayPartWords } from "../time.ts";
 
-export const PENCIL_PREFIX = "pencil:";
+const PENCIL_PREFIX = "pencil:";
 
 /** The slot as an action's value: "2026-11-04 morning". */
 export function pencilValue(slot: PencilSlot): string {

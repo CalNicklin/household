@@ -77,6 +77,15 @@ async function respondToReminder(scope: JobScope, ref: string, action: ActionKin
 }
 
 /**
+ * HOU-173: a backlog pick's buttons are kept against the day whose plan offered it (PRO-6: one plan,
+ * once), so the card closes there — on Week for a later day — as well as on Today. Anything else is today's.
+ */
+async function respondedOn(scope: JobScope, ref: string, action: ActionKind, hasSlot: boolean, today: LocalDate): Promise<LocalDate> {
+  if (!ref.startsWith("backlog:") || (action !== ActionKind.accept && !hasSlot)) return today;
+  return (await scope.api.plans.offers()).find((o) => `backlog:${o.itemId}` === ref)?.date ?? today;
+}
+
+/**
  * Done, Not today, Snooze, hand-over, accept or answer — however it arrived (HOME-4/5, CH-8).
  * Nothing becomes overdue: a response hides the thing and is remembered, that's all.
  */
@@ -97,12 +106,8 @@ export async function respond(scope: JobScope, ref: string, action: ActionKind, 
   // CAP-10: Done, or Not now / Later (to tomorrow). A reminder someone asked for is theirs, not a
   // suggestion: nothing to learn from, nothing to remember.
   if (ref.startsWith("reminder:")) return respondToReminder(scope, ref, action, date);
-  // HOU-173: a backlog pick's buttons are kept against the day whose plan offered it (PRO-6: one
-  // plan, once), so the card closes there — on Week for a later day — as well as on Today.
   const slot = ref.startsWith("backlog:") ? parsePencil(value) : null;
-  const pickTap = ref.startsWith("backlog:") && (action === ActionKind.accept || slot !== null);
-  const offeredOn = pickTap ? (await scope.api.plans.offers()).find((o) => `backlog:${o.itemId}` === ref)?.date : undefined;
-  await scope.api.plans.respond({ ref, action, channel: scope.channel, date: offeredOn ?? date, value });
+  await scope.api.plans.respond({ ref, action, channel: scope.channel, date: await respondedOn(scope, ref, action, slot !== null, date), value });
   const subject = await subjectFor(scope, ref, date);
 
   // HOU-149: "Getting started" cards are about the app, not the house's life: nothing to learn or

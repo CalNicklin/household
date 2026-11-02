@@ -32,11 +32,6 @@ export function atLocal(date: LocalDate, hour: number, minute: number, timeZone:
   return new Date(new TZDate(y ?? 1970, (m ?? 1) - 1, d ?? 1, hour, minute, 0, timeZone).getTime());
 }
 
-/** MOM-4: midnight at the end of the local day that contains `at`. */
-export function nextLocalMidnight(at: Date, timeZone: string): Date {
-  return startOfLocalDay(addLocalDays(localDate(at, timeZone), 1), timeZone);
-}
-
 export function addLocalDays(date: LocalDate, days: number): LocalDate {
   return format(addDays(parseISO(date), days), "yyyy-MM-dd");
 }
