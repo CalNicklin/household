@@ -344,11 +344,10 @@ a:hover {
   cursor: pointer;
   display: block;
   border-radius: 6px;
-  padding-block: 11px;
-  margin-block: -11px;
-  /* HOU-164: 44px whatever the line height, so a small title (or a fallback font) can't make it short. */
-  box-sizing: border-box;
-  min-height: var(--size-target-tap);
+  /* HOU-164: 44px whatever the line height (a small title, or a fallback font, is under 22px), and the
+     margin takes back exactly what the padding adds. */
+  padding-block: max(11px, calc((var(--size-target-tap) - 1lh) / 2));
+  margin-block: min(-11px, calc((1lh - var(--size-target-tap)) / 2));
 }
 
 .ds-list-row .ds-selectable {
