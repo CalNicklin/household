@@ -20,6 +20,9 @@ PREVIEW_REPO="${PREVIEW_REPO:-ghcr.io/calnicklin/household-preview}"
 export PREVIEWS_DIR
 # HOU-175: other apps' sites for the house's Caddy (root-owned *.caddy files; install.sh makes the directory).
 SITES_DIR="${SITES_DIR:-/etc/household/sites}"
+# Who must own it and its files: root. (A setting only so tests run unprivileged; like everything in
+# household.conf, only root can change it.)
+SITES_OWNER_UID="${SITES_OWNER_UID:-0}"
 export SITES_DIR
 
 [ -f "$HOUSEHOLD_DIR/.env" ] || { echo "no $HOUSEHOLD_DIR/.env: run deploy/install.sh first" >&2; exit 1; }
@@ -43,13 +46,13 @@ if grep -qE '^MAIL_DOMAIN=.+' "$HOUSEHOLD_DIR/.env"; then COMPOSE_FILE="$COMPOSE
 sites_usable() {
   local f found=""
   [ -d "$SITES_DIR" ] || return 1
-  if [ -L "$SITES_DIR" ] || [ "$(stat -c %u "$SITES_DIR")" != 0 ] || (( 0$(stat -c %a "$SITES_DIR") & 022 )); then
+  if [ -L "$SITES_DIR" ] || [ "$(stat -c %u "$SITES_DIR")" != "$SITES_OWNER_UID" ] || (( 0$(stat -c %a "$SITES_DIR") & 022 )); then
     echo "note: $SITES_DIR is not root's alone (it must be a directory owned by root, writable by no group or other user), so the house's Caddy serves no extra sites" >&2
     return 1
   fi
   for f in "$SITES_DIR"/*.caddy; do
     [ -e "$f" ] || [ -L "$f" ] || continue
-    if [ -L "$f" ] || [ ! -f "$f" ] || [ "$(stat -c %u "$f")" != 0 ] || (( 0$(stat -c %a "$f") & 022 )); then
+    if [ -L "$f" ] || [ ! -f "$f" ] || [ "$(stat -c %u "$f")" != "$SITES_OWNER_UID" ] || (( 0$(stat -c %a "$f") & 022 )); then
       echo "note: $f is not a root-owned file only root can write, so the house's Caddy serves no extra sites" >&2
       return 1
     fi
@@ -70,23 +73,41 @@ household_compose() { docker compose "$@"; }
 # HOU-175: the sites are files the house doesn't write, so before any `up` that could recreate Caddy, its
 # whole config, sites included, goes through `caddy validate` in a throwaway Caddy (no ports published).
 # Invalid: says which file and line, and fails. Needs HOUSEHOLD_IMAGE set, like every compose command.
-# `caddy validate` doesn't bind, so the adapted config is also checked for any listener but the front address
-# (Caddyfile.sites) and 127.0.0.1: a site with its own `bind` would fail to start, or reach the previews.
-# shellcheck disable=SC2016 # expanded in the throwaway Caddy, where the entrypoint sets CADDY_FRONT_IP
-SITES_CHECK='caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile || exit 1
-listen="$(caddy adapt --config /etc/caddy/Caddyfile --adapter caddyfile 2> /dev/null | grep -o "\"listen\":\[[^]]*\]" | grep -o "\"[^\"]*\"" | grep -vx "\"listen\"")"
-[ -n "$listen" ] || { echo "Error: the config has no listener"; exit 1; }
-other="$(printf "%s\n" "$listen" | grep -vxE "\"((tcp|udp)[0-9]?/)?(127\.0\.0\.1|${CADDY_FRONT_IP:-none}):[0-9]+\"" | tr "\n" " " | sed "s/ \$//")"
-[ -z "$other" ] || { echo "Error: a site listens on $other, not only on the front address: no site may set its own bind"; exit 1; }'
-sites_valid() {
-  local out
-  [[ ":$COMPOSE_FILE:" == *":$HOUSEHOLD_DIR/compose.caddy-sites.yml:"* ]] || return 0
-  if out="$(household_compose run --rm --no-deps -T caddy sh -c "$SITES_CHECK" < /dev/null 2>&1)"; then
-    echo "caddy config with $SITES_DIR is valid"
-    return 0
-  fi
-  { grep -E '^Error:' <<< "$out" || tail -n 5 <<< "$out"; } | sed "s|/etc/caddy/sites/|$SITES_DIR/|g" >&2
+# `caddy validate` binds nothing, so Caddy's adapted config is also checked: every listener must be on the
+# front address (Caddyfile.sites) or 127.0.0.1. A site with its own `bind` would fail to start, or reach the
+# previews. Run in the throwaway Caddy (where the entrypoint sets CADDY_FRONT_IP): validation's messages on
+# stderr; on stdout the front address, then the adapted JSON.
+# shellcheck disable=SC2016 # expanded in the throwaway Caddy
+SITES_CHECK='caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile >&2 || exit 1
+echo "$CADDY_FRONT_IP"
+caddy adapt --config /etc/caddy/Caddyfile --adapter caddyfile 2> /dev/null'
+
+# sites_listeners_ok <front address> < adapted.json: fails closed. Every "listen" key must open an array of
+# only allowed addresses; any other (IPv6, 0.0.0.0, another IP, a shape not foreseen) is named and refused.
+sites_listeners_ok() {
+  local front="$1" json keys allowed
+  json="$(cat)"
+  [[ "$front" =~ ^[0-9]{1,3}(\.[0-9]{1,3}){3}$ ]] || { echo "Error: no front address for Caddy ('$front')" >&2; return 1; }
+  allowed="\"listen\":\[(\"((tcp|udp)[0-9]?/)?(127\.0\.0\.1|${front//./\\.}):[0-9]+\",?)+\]"
+  keys="$({ grep -o '"listen":' <<< "$json" || true; } | wc -l)"
+  [ "$keys" -gt 0 ] || { echo "Error: the config has no listener" >&2; return 1; }
+  [ "$({ grep -oE "$allowed" <<< "$json" || true; } | wc -l)" -eq "$keys" ] && return 0
+  echo "Error: a site listens on $(grep -oE '"listen":\[("([^"\\]|\\.)*",?)*\]' <<< "$json" | grep -vxE "$allowed" | cut -d: -f2- | tr '\n' ' ' | sed 's/ $//'), not only on the front address $front: no site may set its own bind" >&2
   return 1
+}
+
+sites_valid() {
+  local out err
+  [[ ":$COMPOSE_FILE:" == *":$HOUSEHOLD_DIR/compose.caddy-sites.yml:"* ]] || return 0
+  err="$(mktemp)"
+  if ! out="$(household_compose run --rm --no-deps -T caddy sh -c "$SITES_CHECK" < /dev/null 2> "$err")"; then
+    { grep -E '^Error:' "$err" || tail -n 5 "$err"; } | sed "s|/etc/caddy/sites/|$SITES_DIR/|g" >&2
+    rm -f "$err"
+    return 1
+  fi
+  rm -f "$err"
+  tail -n +2 <<< "$out" | sites_listeners_ok "$(head -n 1 <<< "$out")" || return 1
+  echo "caddy config with $SITES_DIR is valid"
 }
 
 # HOU-160: the practice model's test-only opt-in never reaches the real house's settings (test harnesses

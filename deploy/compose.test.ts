@@ -126,25 +126,12 @@ describe("HOU-175: other apps' sites on the house's Caddy", () => {
     expect(read("compose.yml")).not.toMatch(/sites|host-gateway/);
   });
 
-  it("[PLT-8] is added only when root alone can write the directory and every *.caddy in it", () => {
-    expect(common).toMatch(/^if \[ -f "\$HOUSEHOLD_DIR\/compose\.caddy-sites\.yml" \] && sites_usable; then$/m);
-    const check = /sites_usable\(\) \{[\s\S]*?\n\}/.exec(common)?.[0] ?? "";
-    expect(check).toContain('[ -d "$SITES_DIR" ] || return 1');
-    // The directory: not a symlink, owned by root, writable by no group or other user.
-    expect(check).toContain('[ -L "$SITES_DIR" ] || [ "$(stat -c %u "$SITES_DIR")" != 0 ] || (( 0$(stat -c %a "$SITES_DIR") & 022 ))');
-    // Each file the same, and at least one of them.
-    expect(check).toContain('[ -L "$f" ] || [ ! -f "$f" ] || [ "$(stat -c %u "$f")" != 0 ] || (( 0$(stat -c %a "$f") & 022 ))');
-    expect(check).toMatch(/\[ -n "\$found" \]\n\}$/);
-  });
-
-  it("[FB-5] while sites are served, every site listens only on Caddy's front address, never where the PR previews reach it", () => {
+  it("[FB-5] while sites are served, Caddy's global options bind every site to its front address (config)", () => {
     // In the global options, so it binds the imported sites too; present only through the overlay's mount.
     expect(read("Caddyfile")).toMatch(/^\{\n\tadmin off\n(\t#.*\n)*\timport \/etc\/caddy\/front\/\*\.caddy\n/m);
     expect(read("Caddyfile.sites").replace(/^#.*\n/gm, "")).toBe("default_bind {$CADDY_FRONT_IP}\n");
-    // The default route's source address: the house's network (the previews' is internal, with no gateway).
-    expect(entrypoint).toContain("ip -4 route get 1.1.1.1");
-    expect(entrypoint).toContain('export CADDY_FRONT_IP="$$front"');
-    // deploy/test-deploy.sh shows a container on household-previews refused by Caddy while the site works.
+    // The entrypoint works it out at start; deploy/test-deploy.sh shows a preview refused while the site works,
+    // and deploy/sites.test.ts that the validation refuses any other listener.
   });
 
   // The source lines that set this up; deploy/test-deploy.sh shows a non-root user can neither add nor change a site.
@@ -158,20 +145,5 @@ describe("HOU-175: other apps' sites on the house's Caddy", () => {
     expect(install).toMatch(/^echo 'household ALL=\(root\) NOPASSWD: \/usr\/local\/sbin\/household-deploy, \/usr\/local\/sbin\/household-preview' > "\$rule"$/m);
     expect(install).toMatch(/^gpasswd -d household docker /m);
     expect(read("household-deploy.sh")).not.toMatch(/SITES_DIR=|sites\/\S*\.caddy\s*>/);
-  });
-
-  it("[PLT-8] every command that starts the house validates Caddy's whole config with the sites first", () => {
-    expect(common).toContain('household_compose run --rm --no-deps -T caddy sh -c "$SITES_CHECK"');
-    // Validation, then (since validate binds nothing) no listener but the front address and 127.0.0.1.
-    expect(common).toMatch(/^SITES_CHECK='caddy validate --config \/etc\/caddy\/Caddyfile --adapter caddyfile \|\| exit 1$/m);
-    expect(common).toContain('(127\\.0\\.0\\.1|${CADDY_FRONT_IP:-none}):[0-9]+');
-    for (const [file, before] of [["household-deploy.sh", "household_compose up"], ["household-setup.sh", "household_compose up"], ["household-restore.sh", "\"$HOUSEHOLD_LIB/restore.sh\""]] as const) {
-      const text = read(file);
-      const validate = text.search(/^(if ! )?sites_valid\b/m);
-      expect(validate, `${file} never validates the sites`).toBeGreaterThan(0);
-      expect(validate, `${file} starts something before validating`).toBeLessThan(text.indexOf(before));
-      // Its failure stops the command on the same line or in the if block right after it.
-      expect(text.slice(validate).split("\n").slice(0, 4).join("\n"), `${file} carries on after invalid sites`).toMatch(/^(sites_valid \|\| \{ .*; exit 1; \}|if ! sites_valid; then\n(  .*\n)+  exit 1)$/m);
-    }
   });
 });

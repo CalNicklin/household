@@ -271,7 +271,7 @@ house_ok "with an invalid site"
 # A site that validates but would bind elsewhere (its own `bind`): refused too, before Caddy is touched.
 printf 'monitor.localhost {\n\tbind 0.0.0.0\n\trespond "monitor"\n}\n' > "$sites/monitor.caddy"
 if deploy_sites sites-bind; then fail "a deploy with a site that sets its own bind went ahead"; fi
-grep -q '^Error: a site listens on "0.0.0.0:443", not only on the front address' "$work/sites-bind.log" || { cat "$work/sites-bind.log" >&2; fail "the refusal did not name the listener"; }
+grep -q '^Error: a site listens on \["0.0.0.0:443"\], not only on the front address' "$work/sites-bind.log" || { cat "$work/sites-bind.log" >&2; fail "the refusal did not name the listener"; }
 [ "$(caddy_now)" = "$before" ] || fail "Caddy was touched by a site with its own bind"
 house_ok "with a site that sets its own bind"
 echo "an invalid site was refused, naming $sites/monitor.caddy:2; and a site with its own bind was refused; Caddy, the house and the valid site carried on"
