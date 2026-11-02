@@ -57,7 +57,7 @@ describe("CAP-10: reminders you ask for", () => {
     expect((await h.rt.system("t").backlog.getReminder({ id: block.ref.slice("reminder:".length) }))?.status).toBe(ReminderStatus.done);
   });
 
-  test("[CAP-10] Not now moves a reminder to tomorrow, under Tomorrow and then on tomorrow's Today", async () => {
+  test("[CAP-10] Not now moves a reminder to tomorrow: off today's screen, and on tomorrow's Today", async () => {
     h.ports.clock.set(atLocal(MON, 20, 20, TZ), true);
     await h.sayAndWait("remind me at 9pm to put the bins out", { person: "tom" });
     const [block] = await reminderBlocks(MON);
