@@ -1,10 +1,11 @@
-import { ActionKind, type ShoppingRequest, ShoppingStatus } from "@household/contracts";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { ActionKind, DeletableShoppingStatuses, type ShoppingRequest, ShoppingStatus } from "@household/contracts";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { useState } from "react";
 import { say } from "../data/send.ts";
 import { useTRPC } from "../data/trpc.ts";
-import { BacklogRow, Button, ExternalLink, Grid3, Header, ListCard, Page, Row, Section, Text } from "../design-system/index.ts";
+import { useUndo } from "../data/undo.tsx";
+import { BacklogRow, Button, ExternalLink, Grid3, Header, ListCard, Menu, Page, Row, Section, Text } from "../design-system/index.ts";
 import { FooterComposer, navFor } from "./common.tsx";
 
 const STATUS_LINE: Record<ShoppingStatus, (r: ShoppingRequest) => string> = {
@@ -18,7 +19,23 @@ const STATUS_LINE: Record<ShoppingStatus, (r: ShoppingRequest) => string> = {
 };
 
 /** A request that went nowhere can be dismissed with one tap, no guilt (HOU-148). */
-const DISMISSABLE: ReadonlySet<ShoppingStatus> = new Set([ShoppingStatus.failed, ShoppingStatus.saved]);
+const DISMISSABLE: ReadonlySet<ShoppingStatus> = new Set(DeletableShoppingStatuses);
+
+const requestKey = (id: string) => `shopping:${id}`;
+
+/** HOU-158: "…" then Delete, with Undo, on a request that went nowhere. Only a person's tap (PRV-1). */
+function DeleteMenu({ request }: { request: ShoppingRequest }) {
+  const trpc = useTRPC();
+  const { remove } = useUndo();
+  const del = useMutation(trpc.removeShopRequest.mutationOptions());
+  return (
+    <Menu
+      icon="more"
+      label={`Actions for ${request.item}`}
+      entries={[{ key: "delete", label: "Delete", onSelect: () => remove(requestKey(request.id), `Deleted “${request.item}”`, () => del.mutateAsync({ id: request.id })) }]}
+    />
+  );
+}
 
 /** AUT-3: no exact match → one question with two or three options to tap. */
 function Request({ request, helperConnected, onDismiss }: { request: ShoppingRequest; helperConnected: boolean; onDismiss: (id: string) => void }) {
@@ -35,7 +52,12 @@ function Request({ request, helperConnected, onDismiss }: { request: ShoppingReq
     void say({ text: name, ref: `shopping:${request.id}`, action: ActionKind.answer, value: sku }).then(() => queryClient.invalidateQueries());
   };
   return (
-    <BacklogRow title={request.item} meta={STATUS_LINE[status](request)} tone={request.status === ShoppingStatus.added ? "suggestion" : "muted"}>
+    <BacklogRow
+      title={request.item}
+      meta={STATUS_LINE[status](request)}
+      tone={request.status === ShoppingStatus.added ? "suggestion" : "muted"}
+      {...(DISMISSABLE.has(request.status) ? { menu: <DeleteMenu request={request} /> } : {})}
+    >
       {request.status === ShoppingStatus.needsChoice ? (
         <Row>
           {request.options.map((o) => (
@@ -66,10 +88,11 @@ function Request({ request, helperConnected, onDismiss }: { request: ShoppingReq
 export function ShopScreen() {
   const trpc = useTRPC();
   const shop = useQuery(trpc.shop.queryOptions());
+  const { isDeleted } = useUndo();
   const data = shop.data;
   const [dismissed, setDismissed] = useState<ReadonlySet<ShoppingRequest["id"]>>(new Set());
   const onDismiss = (id: string) => setDismissed((d) => new Set([...d, id]));
-  const requests = (data?.requests ?? []).filter((r) => !dismissed.has(r.id));
+  const requests = (data?.requests ?? []).filter((r) => !dismissed.has(r.id) && !isDeleted(requestKey(r.id)));
   return (
     <Page label="Shop">
       <Header title="Shop" line={data?.deliveryDate === null || data === undefined ? "No delivery booked" : `Next delivery ${new Date(data.deliveryDate).toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long" })}`} nav={navFor("/shop")} />

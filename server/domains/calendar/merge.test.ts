@@ -83,7 +83,7 @@ describe("[HOME-1] the house reads several calendars as one", () => {
       sitters: [{ id: "s1", name: "Jess", knownFreeDays: [] }],
       sitterBookings: [],
       arrivals: [],
-      mode: null,
+      modes: [],
       forecast: {},
     };
     const invite = [copy("priya", "inv", { uid: "u3", title: "Dinner" }), copy("tom", "inv", { uid: "u3", title: "Dinner" })];

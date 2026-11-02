@@ -72,6 +72,8 @@ export const zMode = z.object({
   mode: zModeKind,
   setBy: z.string(),
   setAt: zIsoDateTime,
+  /** HOU-156: when it takes effect: when it was set, or the start of a later day it was set ahead for. */
+  startsAt: zIsoDateTime,
   /** MOM-4: ends at midnight unless extended. */
   endsAt: zIsoDateTime,
 });
@@ -325,7 +327,8 @@ export type ShoppingRequest = z.infer<typeof zShoppingRequest>;
 
 export const zShoppingRun = z.object({
   id: z.string(),
-  requestId: z.string(),
+  /** Null once a person has deleted the request (HOU-158); the run's log and screenshots stay (AUT-6). */
+  requestId: z.string().nullable(),
   log: z.array(z.object({ at: zIsoDateTime, line: z.string() })),
   screenshots: z.array(z.string()),
   createdAt: zIsoDateTime,
