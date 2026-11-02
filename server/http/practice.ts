@@ -49,7 +49,7 @@ export function practiceRoutes(rt: Runtime) {
       if (ports.messenger instanceof PracticeMessenger) ports.messenger.sent.length = 0;
       if (ports.memory instanceof InMemoryEpisodicMemory) ports.memory.banks.clear();
       ports.shopping = helper;
-      await truncateAndSeed(rt.env, rt.dbs, new Date(body.at), { empty: body.empty });
+      await truncateAndSeed(rt.dbs, new Date(body.at), { empty: body.empty });
       if (body.empty) {
         ports.clock.set(body.at, false);
         rt.bus.publish("plan");

@@ -1,5 +1,6 @@
 import { spawn, spawnSync } from "node:child_process";
 import { Client } from "pg";
+import { postgresCandidates } from "../server/testing/postgres.ts";
 
 /**
  * CODE-11: the only check. tsc, oxlint, Fallow, drizzle-kit check, then the tests (unit and the
@@ -60,10 +61,10 @@ function run(step: Step): Promise<{ ok: boolean; seconds: number }> {
 /**
  * HOU-163: the most connections Postgres had open at once while the steps ran (from pg_stat_activity,
  * sampled), printed at the end so CI shows how far the run stays under max_connections. The server is
- * whichever the tests use (server/testing/postgres.ts); until one answers, nothing is sampled.
+ * the first the tests would use that answers; until one does, nothing is sampled.
  */
 function sampleConnections(): () => Promise<string | null> {
-  const urls = [process.env["TEST_DATABASE_URL"], process.env["DATABASE_URL"], "postgres://postgres:postgres@localhost:5432/postgres", "postgres://postgres:postgres@localhost:54329/postgres"].filter((u): u is string => u !== undefined);
+  const urls = postgresCandidates();
   let client: Client | null = null;
   let connecting = false;
   let peak = 0;
