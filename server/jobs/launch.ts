@@ -1,4 +1,5 @@
 import { DBOS } from "@dbos-inc/dbos-sdk";
+import { Limits } from "@household/contracts";
 import { databaseUrl } from "../db/index.ts";
 import type { Runtime } from "../runtime.ts";
 import { setJobRuntime } from "./context.ts";
@@ -7,7 +8,13 @@ import "./handle-message.ts";
 /** PLT-2: jobs are DBOS workflows checkpointed in Postgres; a restarted worker resumes from the last step. */
 export async function launchJobs(rt: Runtime): Promise<void> {
   setJobRuntime(rt);
-  DBOS.setConfig({ name: `household-${rt.env.HOUSEHOLD_ID}`, systemDatabaseUrl: databaseUrl(rt.env.DATABASE_URL, `${rt.env.DB_PREFIX}_dbos`), logLevel: "warn" });
+  DBOS.setConfig({
+    name: `household-${rt.env.HOUSEHOLD_ID}`,
+    systemDatabaseUrl: databaseUrl(rt.env.DATABASE_URL, `${rt.env.DB_PREFIX}_dbos`),
+    // limit: dbosPoolMax
+    systemDatabasePoolSize: Limits.dbosPoolMax.value,
+    logLevel: "warn",
+  });
   await DBOS.launch();
 }
 

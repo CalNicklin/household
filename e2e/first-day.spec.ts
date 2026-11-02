@@ -1,5 +1,5 @@
 import type { Browser, Page } from "@playwright/test";
-import { evidence, expect, login, reset, resetEmpty, say, test } from "./fixtures.ts";
+import { evidence, expect, login, loginWithForm, reset, resetEmpty, say, test } from "./fixtures.ts";
 
 /** HOU-149: the kitchen iPad and a phone, the two sizes the home screen has to work at. */
 const SIZES = {
@@ -10,7 +10,7 @@ const SIZES = {
 async function open(browser: Browser, size: keyof typeof SIZES, baseURL: string | undefined): Promise<Page> {
   const ctx = await browser.newContext({ ...SIZES[size], ...(baseURL === undefined ? {} : { baseURL }) });
   const page = await ctx.newPage();
-  await login(page);
+  await loginWithForm(page);
   return page;
 }
 

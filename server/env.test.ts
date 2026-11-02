@@ -10,6 +10,9 @@ const real = {
   CALENDAR_WEBHOOK_TOKEN: "e",
   MCP_TOKEN: "f",
   HELPER_TOKEN: "g",
+  MODEL_PROVIDER: "anthropic",
+  MODEL_ID: "claude-opus-5-5",
+  ANTHROPIC_API_KEY: "placeholder-not-a-key",
 };
 
 describe("Settings", () => {
@@ -23,6 +26,23 @@ describe("Settings", () => {
   test("[PLT-8] a setting written empty is unset: no helper, and an empty secret still stops the real house", () => {
     expect(loadEnv({ ...real, HELPER_URL: "", HINDSIGHT_URL: "" })).not.toHaveProperty("HELPER_URL");
     expect(() => loadEnv({ ...real, SESSION_SECRET: "" })).toThrow(/PRV-6: the real house needs its own SESSION_SECRET/);
+  });
+
+  test("[HOU-160] the real house refuses the practice model, and a real model without its key, at startup", () => {
+    const practiceModel = /HOU-160: the real house will not run on the practice model: set MODEL_PROVIDER=anthropic/;
+    expect(() => loadEnv({ ...real, MODEL_PROVIDER: undefined, MODEL_ID: undefined })).toThrow(practiceModel);
+    expect(() => loadEnv({ ...real, MODEL_PROVIDER: "" })).toThrow(practiceModel);
+    expect(() => loadEnv({ ...real, MODEL_PROVIDER: "practice" })).toThrow(practiceModel);
+    expect(() => loadEnv({ ...real, ANTHROPIC_API_KEY: undefined })).toThrow("HOU-160: MODEL_PROVIDER=anthropic needs ANTHROPIC_API_KEY: set it in .env");
+    expect(() => loadEnv({ ...real, ANTHROPIC_API_KEY: "" })).toThrow(/needs ANTHROPIC_API_KEY/);
+    expect(() => loadEnv({ ...real, MODEL_PROVIDER: "openai", MODEL_ID: "gpt" })).toThrow(/MODEL_PROVIDER=openai needs OPENAI_API_KEY/);
+    expect(loadEnv(real)).toMatchObject({ MODEL_PROVIDER: "anthropic", MODEL_ID: "claude-opus-5-5" });
+    expect(loadEnv(real)).not.toHaveProperty("ANTHROPIC_API_KEY");
+    // A Docker test harness may run the real house on the practice model only by saying so by name.
+    expect(loadEnv({ ...real, MODEL_PROVIDER: "practice", MODEL_ID: "practice-1", PRACTICE_MODEL_FOR_TESTS: "yes" }).MODEL_PROVIDER).toBe("practice");
+    expect(() => loadEnv({ ...real, MODEL_PROVIDER: "practice", PRACTICE_MODEL_FOR_TESTS: "true" })).toThrow(practiceModel);
+    // The practice household still runs on the practice model, with no key.
+    expect(loadEnv({}).MODEL_PROVIDER).toBe("practice");
   });
 
   test("[HOME-1] GOOGLE_CALENDARS names each calendar's owner; GOOGLE_CALENDAR_ID alone is the shared one; a bad entry or an unknown owner is caught", () => {
