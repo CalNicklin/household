@@ -42,7 +42,7 @@ export function BacklogScreen() {
   return (
     <Page label="Backlog">
       <Header title="Backlog" line={`${count} ${count === 1 ? "thing" : "things"} with no deadline · nothing here is overdue, ever`} nav={navFor("/backlog")} />
-      <FooterComposer placeholder="Dump it here — “put up the hallway pictures”, “book the car in for MOT”" label="Add to the backlog" />
+      <FooterComposer placeholder="Dump a job here, or ask the house anything" label="Add to the backlog, or ask the house" />
       <Grid3>
         <Section label={BacklogGroupLabel[BacklogGroup.soon]} tone="suggestion">
           <ListCard label={BacklogGroupLabel[BacklogGroup.soon]}>

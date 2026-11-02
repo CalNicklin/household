@@ -1,5 +1,5 @@
 import { ActionKind, type Plan, type Response, zDateInput, zHandOver, zHandOverInput, zOffer, zOfferInput, zPersonInput, zPlan, zRespondInput, zResponse, zSavePlanInput } from "@household/contracts";
-import { and, desc, eq, gte, lt, max } from "drizzle-orm";
+import { and, desc, eq, gte, lt, max, sql } from "drizzle-orm";
 import { z } from "zod";
 import type { DomainDb } from "../../db/index.ts";
 import { iso } from "../../db/map.ts";
@@ -16,9 +16,14 @@ const toResponse = (r: typeof schema.responses.$inferSelect): Response => ({ id:
 
 export function plansRouter(db: PlansDb) {
   return router({
-    /** PLT-4: every version is kept, with the inputs that made it. */
+    /**
+     * PLT-4: every version is kept, with the inputs that made it. HOU-162: saves of one date take turns
+     * (a transaction lock on the date), so two jobs planning the same day at once both land, the later
+     * one as the next version, instead of one failing on `plans_date_version`.
+     */
     save: systemProcedure.input(zSavePlanInput).output(zPlan).mutation(async ({ ctx, input }) => {
       const row = await db.transaction(async (tx) => {
+        await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`plans:${input.date}`}, 0))`);
         const [{ v } = { v: null }] = await tx.select({ v: max(schema.plans.version) }).from(schema.plans).where(eq(schema.plans.date, input.date));
         const [inserted] = await tx.insert(schema.plans).values({ ...input, version: (v ?? 0) + 1, createdAt: ctx.now }).returning();
         return inserted;
