@@ -83,7 +83,6 @@ async function respondToReminder(scope: JobScope, ref: string, action: ActionKin
   return "Noted.";
 }
 
-
 /**
  * HOU-173: a backlog pick's buttons are kept against the day whose plan offered it (PRO-6: one plan,
  * once), so the card closes there — on Week for a later day — as well as on Today. Anything else is today's.
