@@ -1,3 +1,5 @@
+import { randomBytes } from "node:crypto";
+import { Practice } from "@household/contracts";
 import { execFile } from "node:child_process";
 import { createServer, type Server, type ServerResponse } from "node:http";
 import type { AddressInfo } from "node:net";
@@ -10,12 +12,14 @@ import type { HttpEnv } from "../../server/adapters/registry.ts";
 import { TelegramTransport } from "../../server/integrations/telegram.ts";
 import type { TestHousehold } from "../../server/testing/household.ts";
 import { householdWithApp, jobForKey, messageByKey, storedShape } from "../../server/testing/http.ts";
+import { postgresPasswordEnv } from "../../server/testing/postgres.ts";
 import { connect, parseTelegramCommand, redact, settingsProblem, showSenders, showStatus, TELEGRAM_USAGE, webhookUrl } from "./admin.ts";
 
 const ROOT = path.resolve(import.meta.dirname, "..", "..");
 const run = promisify(execFile);
-const TOKEN = "123456:stand-in-bot-token-AAAA";
-const SECRET = "stand-in-webhook-secret_0123";
+/** HOU-168: made up per run (in the shapes BotFather and Telegram allow), so no literal one is in the repo. */
+const TOKEN = `123456:${randomBytes(18).toString("base64url")}`;
+const SECRET = `${randomBytes(12).toString("hex")}_0123`;
 const PUBLIC_URL = "https://house.example.test";
 
 /**
@@ -82,7 +86,7 @@ describe("household-telegram: the command line", () => {
     expect(webhookUrl("https://house.tracesknown.com")).toBe("https://house.tracesknown.com/webhooks/telegram");
     expect(settingsProblem({ token: TOKEN, secret: SECRET, publicUrl: PUBLIC_URL })).toBeNull();
     expect(settingsProblem({ token: undefined, secret: SECRET, publicUrl: PUBLIC_URL })).toMatch(/TELEGRAM_BOT_TOKEN is not set/);
-    expect(settingsProblem({ token: TOKEN, secret: "has+slash/and=", publicUrl: PUBLIC_URL })).toMatch(/TELEGRAM_WEBHOOK_SECRET/);
+    expect(settingsProblem({ token: TOKEN, secret: `${SECRET}+slash/and=`, publicUrl: PUBLIC_URL })).toMatch(/TELEGRAM_WEBHOOK_SECRET/);
     expect(settingsProblem({ token: TOKEN, secret: SECRET, publicUrl: "http://house.example.test" })).toMatch(/not https/);
   });
 });
@@ -144,12 +148,12 @@ describe("finding and adding an adult's Telegram ID", () => {
 
   const post = async (from: number, text: string, chat = from) => {
     const update = { update_id: (updateId += 1), message: { chat: { id: chat }, from: { id: from }, text } };
-    const res = await app.request("/webhooks/telegram", { method: "POST", headers: { "content-type": "application/json", "x-telegram-bot-api-secret-token": "practice-telegram-secret" }, body: JSON.stringify(update) });
+    const res = await app.request("/webhooks/telegram", { method: "POST", headers: { "content-type": "application/json", "x-telegram-bot-api-secret-token": Practice.settings.TELEGRAM_WEBHOOK_SECRET }, body: JSON.stringify(update) });
     expect(res.status).toBe(200);
     return update.update_id;
   };
   const fail = (args: string[]) => cli(args).then(() => null, (e: unknown) => z.object({ code: z.number(), stderr: z.string() }).parse(e));
-  const cli = (args: string[]) => run("node", ["scripts/telegram.ts", ...args], { cwd: ROOT, env: { PATH: process.env["PATH"] ?? "", PRACTICE: "true", DATABASE_URL: h.env.DATABASE_URL, DB_PREFIX: h.env.DB_PREFIX } });
+  const cli = (args: string[]) => run("node", ["scripts/telegram.ts", ...args], { cwd: ROOT, env: { PATH: process.env["PATH"] ?? "", PRACTICE: "true", DATABASE_URL: h.env.DATABASE_URL, DB_PREFIX: h.env.DB_PREFIX, ...postgresPasswordEnv() } });
 
   test("[CH-3] an unknown sender is dropped and stays unanswered; senders shows their user ID, never their words", async () => {
     const id = await post(555000111, "hi, this is Cal's new phone");

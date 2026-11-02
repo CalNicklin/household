@@ -10,6 +10,7 @@ import { z } from "zod";
 import { practicePorts } from "../../practice/fakes.ts";
 import { databaseUrl, dropDatabases, ensureDatabase } from "../../server/db/index.ts";
 import { loadEnv } from "../../server/env.ts";
+import { postgresPasswordEnv } from "../../server/testing/postgres.ts";
 import { createRuntime } from "../../server/runtime.ts";
 import { FAMILY_LISTS_ENV, readFamilyLists } from "./read.ts";
 
@@ -43,7 +44,7 @@ const fingerprint = () => asAdmin(sourceDb, async (c) => (await c.query("select 
 /** The import script, as Cal would run it, with only these environment variables. */
 async function importScript(env: Record<string, string>, args: string[] = []): Promise<{ code: number; out: string }> {
   try {
-    const r = await run("node", ["scripts/import-family-lists.ts", ...args], { cwd: ROOT, env: { PATH: process.env["PATH"] ?? "", HOME: process.env["HOME"] ?? "", DATABASE_URL: url, DB_PREFIX: targetPrefix, PRACTICE: "true", ...env } });
+    const r = await run("node", ["scripts/import-family-lists.ts", ...args], { cwd: ROOT, env: { PATH: process.env["PATH"] ?? "", HOME: process.env["HOME"] ?? "", DATABASE_URL: url, DB_PREFIX: targetPrefix, PRACTICE: "true", ...postgresPasswordEnv(), ...env } });
     return { code: 0, out: r.stdout + r.stderr };
   } catch (e) {
     const err = z.object({ code: z.number(), stdout: z.string(), stderr: z.string() }).parse(e);

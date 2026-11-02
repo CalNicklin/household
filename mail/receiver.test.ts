@@ -1,3 +1,4 @@
+import { randomBytes } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import { mkdtempSync, readFileSync } from "node:fs";
 import { createServer, type Server } from "node:http";
@@ -13,6 +14,9 @@ import { z } from "zod";
 import { lastConfirmation } from "./confirmation.ts";
 import { createReceiver } from "./receiver.ts";
 import { deliver as deliverOnce, fixtureWorld, gmailConfirmation, gmailForwarded, screwfixOrder, signed, smtpSession } from "./testing.ts";
+
+/** HOU-168: made up per run, so no secret-shaped literal is in the repo. */
+const WEBHOOK_SECRET = randomBytes(12).toString("hex");
 
 /**
  * HOU-150 over real SMTP: the receiver takes mail for orders@ only, never relays, refuses what is too
@@ -35,7 +39,7 @@ const portOf = (address: string | AddressInfo | null): number => {
 };
 
 async function startReceiver(resolver: DNSResolver): Promise<number> {
-  const receiver = createReceiver({ domain: DOMAIN, webhookUrl: `http://127.0.0.1:${portOf(webhook.address())}/webhooks/email`, webhookSecret: "a-secret-for-the-webhook", stateDir, resolver });
+  const receiver = createReceiver({ domain: DOMAIN, webhookUrl: `http://127.0.0.1:${portOf(webhook.address())}/webhooks/email`, webhookSecret: WEBHOOK_SECRET, stateDir, resolver });
   receivers.push(receiver);
   await new Promise<void>((r) => receiver.listen(0, "127.0.0.1", r));
   return portOf(receiver.server.address());
@@ -75,7 +79,7 @@ describe("the mail receiver", () => {
     expect(await deliver(forwarded.envelopeFrom, [ORDERS], forwarded.message)).toMatchObject({ mail: 250, rcpts: [250], data: 250 });
     expect(posted.slice(before)).toEqual([
       {
-        secret: "a-secret-for-the-webhook",
+        secret: WEBHOOK_SECRET,
         body: expect.objectContaining({ from: "Screwfix <orders@screwfix.com>", to: ORDERS, subject: "Your Screwfix order is confirmed", messageId: "<sf-88231@screwfix.com>", provenSenders: ["cal@gmail.com"] }),
       },
     ]);
@@ -189,7 +193,7 @@ describe("the mail receiver", () => {
     const dir = mkdtempSync(path.join(tmpdir(), "mail-tls-"));
     execFileSync("openssl", ["req", "-x509", "-newkey", "rsa:2048", "-nodes", "-days", "1", "-subj", `/CN=${DOMAIN}`, "-keyout", path.join(dir, "key.pem"), "-out", path.join(dir, "cert.pem")], { stdio: "ignore" });
     const cert = readFileSync(path.join(dir, "cert.pem"));
-    const withTls = createReceiver({ domain: DOMAIN, webhookUrl: "http://127.0.0.1:1/", webhookSecret: "a-secret-for-the-webhook", stateDir, tls: { key: readFileSync(path.join(dir, "key.pem")), cert } });
+    const withTls = createReceiver({ domain: DOMAIN, webhookUrl: "http://127.0.0.1:1/", webhookSecret: WEBHOOK_SECRET, stateDir, tls: { key: readFileSync(path.join(dir, "key.pem")), cert } });
     receivers.push(withTls);
     await new Promise<void>((r) => withTls.listen(0, "127.0.0.1", r));
     const t = await smtpSession(portOf(withTls.server.address()), "127.0.0.1", CLIENT);

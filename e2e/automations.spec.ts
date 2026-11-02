@@ -48,7 +48,7 @@ test("[AUT-3][AUT-4] no exact match: nothing is added and it asks one question w
 });
 
 test("[AUT-2][AUT-7] the shopping helper runs sealed, with its own login; a second helper is just another folder", async ({ request }) => {
-  const tasks = await request.get(`http://localhost:${ownStack().helper}/tasks`, { headers: { Authorization: "Bearer e2e-helper-token" } });
+  const tasks = await request.get(`http://localhost:${ownStack().helper}/tasks`, { headers: { Authorization: `Bearer ${readFileSync(ownStack().helperTokenFile, "utf8")}` } });
   expect(tasks.ok()).toBe(true);
   expect(JSON.stringify(await tasks.json())).toContain("shopping");
   expect((await request.get(`http://localhost:${ownStack().helper}/tasks`)).status()).toBe(401);

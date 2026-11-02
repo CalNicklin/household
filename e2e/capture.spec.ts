@@ -1,3 +1,4 @@
+import { Practice } from "@household/contracts";
 import { Limits } from "@household/contracts";
 import { evidence, expect, login, reset, say, telegram, test } from "./fixtures.ts";
 
@@ -68,7 +69,7 @@ test("[CAP-7][CAP-8][PRO-10] chores, nursery days, term dates and closures show 
 test("[CAP-9][PRV-3] an order confirmation email makes an Arriving row with the shop and day; nobody types anything", async ({ page, request }) => {
   await login(page);
   const r = await request.post("/webhooks/email", {
-    headers: { "X-Webhook-Secret": "practice-email-secret" },
+    headers: { "X-Webhook-Secret": Practice.settings.EMAIL_WEBHOOK_SECRET },
     data: { from: "Argos <orders@argos.co.uk>", to: "priya@practice.home", subject: "Your Argos order is confirmed", text: "Thanks for your order. It will be delivered tomorrow between 8am and 12pm. Someone needs to be in to sign for it.", messageId: "argos-e2e-1" },
   });
   expect(r.ok()).toBe(true);

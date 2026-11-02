@@ -1,3 +1,5 @@
+import { randomBytes } from "node:crypto";
+import { Practice } from "@household/contracts";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -14,6 +16,10 @@ import { testHousehold, type TestHousehold } from "../../testing/household.ts";
 import { jobForKey, poll } from "../../testing/http.ts";
 import type { HttpEnv } from "../registry.ts";
 import { adapter, ensureWatches, WATCH_CHECK_CRON } from "./index.ts";
+
+/** HOU-168: made up per run, so no credential-shaped literal is in the repo. */
+const CLIENT_SECRET = randomBytes(12).toString("base64url");
+const REFRESH = `refresh-${randomBytes(12).toString("base64url")}`;
 
 /**
  * HOU-147 / HOU-152: the real Google adapter (token file → refresh-token grant → events.list /
@@ -57,7 +63,7 @@ beforeAll(async () => {
   google = await fakeServer(standInGoogle);
   dir = mkdtempSync(path.join(tmpdir(), "hou147-"));
   const file = path.join(dir, "google.json");
-  writeFileSync(file, JSON.stringify({ client_id: "cid", client_secret: "csecret", refresh_token: "refresh-standin", token_url: `${google.url}/token` }), { mode: 0o600 });
+  writeFileSync(file, JSON.stringify({ client_id: "cid", client_secret: CLIENT_SECRET, refresh_token: REFRESH, token_url: `${google.url}/token` }), { mode: 0o600 });
   h = await testHousehold({ jobs: false, env: { PUBLIC_URL: "https://house.example/" } });
   const real = realPorts({ ...h.env, GOOGLE_CALENDARS: `shared:${FAMILY},tom:${TOM}`, GOOGLE_ACCESS_TOKEN_FILE: file, GOOGLE_CALENDAR_API: google.url }, h.ports.clock, {
     timeZone: "Europe/London",
@@ -91,7 +97,7 @@ describe("Google Calendar on the real adapter (HOU-147, HOU-152)", () => {
     expect(family).toMatchObject({ calendarId: FAMILY, address: "https://house.example/webhooks/calendar", expiresAt: "2026-11-09T08:00:00.000Z", openedAt: "2026-11-02T08:00:00.000Z", closedAt: null });
     expect(tom).toMatchObject({ calendarId: TOM, address: "https://house.example/webhooks/calendar", closedAt: null });
     expect(posts().map((r) => r.path)).toEqual([`/calendars/${encodeURIComponent(FAMILY)}/events/watch`, `/calendars/${encodeURIComponent(TOM)}/events/watch`]);
-    expect(JSON.parse(posts()[0]?.body.toString() ?? "{}")).toEqual({ id: family?.channelId, type: "web_hook", address: "https://house.example/webhooks/calendar", token: "practice-calendar-token" });
+    expect(JSON.parse(posts()[0]?.body.toString() ?? "{}")).toEqual({ id: family?.channelId, type: "web_hook", address: "https://house.example/webhooks/calendar", token: Practice.settings.CALENDAR_WEBHOOK_TOKEN });
     const first = await jobForKey(rt, "calendar:opened:2026-11-02T08:00:00.000Z");
     expect(first.job.status).toBe("succeeded");
     // The practice seed's copies (from calendars this house doesn't read) are gone; the dentist is one
@@ -110,7 +116,7 @@ describe("Google Calendar on the real adapter (HOU-147, HOU-152)", () => {
     const push = (n: string) =>
       app.request("/webhooks/calendar", {
         method: "POST",
-        headers: { "x-goog-channel-id": tom?.channelId ?? "", "x-goog-channel-token": "practice-calendar-token", "x-goog-resource-state": "exists", "x-goog-message-number": n, "x-goog-resource-id": tom?.resourceId ?? "" },
+        headers: { "x-goog-channel-id": tom?.channelId ?? "", "x-goog-channel-token": Practice.settings.CALENDAR_WEBHOOK_TOKEN, "x-goog-resource-state": "exists", "x-goog-message-number": n, "x-goog-resource-id": tom?.resourceId ?? "" },
       });
     expect((await push("2")).status).toBe(200);
     const second = await jobForKey(rt, `calendar:${tom?.channelId}:2`);
@@ -128,7 +134,7 @@ describe("Google Calendar on the real adapter (HOU-147, HOU-152)", () => {
     // The refresh-token grant from the file, never the token itself in a URL.
     const grant = new URLSearchParams(google.requests.find((r) => r.path === "/token")?.body.toString());
     expect(grant.get("grant_type")).toBe("refresh_token");
-    for (const r of google.requests) expect(r.path).not.toContain("refresh-standin");
+    for (const r of google.requests) expect(r.path).not.toContain(REFRESH);
   });
 
   test("[CH-6] fake clock: each watch is kept until a day before Google ends it, then renewed and the old one closed", async () => {

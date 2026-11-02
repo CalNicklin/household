@@ -3,7 +3,7 @@ import { Client } from "pg";
 import { postgresCandidates } from "../server/testing/postgres.ts";
 
 /**
- * CODE-11: the only check. tsc, oxlint, Fallow, drizzle-kit check, then the tests (unit and the
+ * CODE-11: the only check. tsc, oxlint, Fallow, drizzle-kit check, the secret scan, then the tests (unit and the
  * Playwright journeys). FB-2: the whole run is timed and must stay under four minutes; slow extras
  * live in `pnpm check:full`.
  *
@@ -34,6 +34,8 @@ const lanes: Step[][] = [
     // CODE-8: `fallow audit` against the base branch; on a branch with no base, the whole project.
     base === null ? { name: "fallow", cmd: "pnpm", args: ["exec", "fallow", "--fail-on-issues", "--quiet"] } : { name: "fallow", cmd: "pnpm", args: ["exec", "fallow", "audit", "--base", base, "--quiet"] },
     { name: "drizzle-kit check", cmd: "node", args: ["scripts/drizzle.ts", "check"] },
+    // HOU-168: no credential-shaped literal in any file git tracks (secretlint, offline, about a second).
+    { name: "secrets", cmd: "node", args: ["scripts/secrets.ts"] },
   ],
   [{ name: "tests", cmd: "pnpm", args: ["exec", "vitest", "run"] }],
   [

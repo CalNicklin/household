@@ -1,3 +1,4 @@
+import { randomBytes } from "node:crypto";
 import { createHash } from "node:crypto";
 import { mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -19,8 +20,10 @@ afterEach(async () => {
   rmSync(dir, { recursive: true, force: true });
 });
 
-const SECRET = "client-secret-xyz";
-const REFRESH = "1//refresh-token-never-shown";
+/** HOU-168: made up per run, so no credential-shaped literal is in the repo. */
+const SECRET = randomBytes(12).toString("base64url");
+const REFRESH = `1//${randomBytes(12).toString("base64url")}`;
+const ACCESS = `ya29.${randomBytes(12).toString("base64url")}`;
 
 function clientFile(body: unknown = { installed: { client_id: "cid.apps.googleusercontent.com", client_secret: SECRET, redirect_uris: ["http://localhost"] } }): string {
   const file = path.join(dir, "client_secret_test.json");
@@ -31,7 +34,7 @@ function clientFile(body: unknown = { installed: { client_id: "cid.apps.googleus
 /** Run the flow; `browser` decides where Google "sends the browser back" to, given the consent link. */
 async function run(options: { token?: (form: URLSearchParams) => { status: number; body: unknown }; browser?: (consent: URL) => string; before?: (consent: URL) => Promise<void>; client?: string }) {
   const token = await fakeServer((req, res) => {
-    const reply = (options.token ?? (() => ({ status: 200, body: { access_token: "ya29.x", expires_in: 3599, refresh_token: REFRESH, scope: GOOGLE_CALENDAR_SCOPE, token_type: "Bearer" } })))(new URLSearchParams(req.body.toString()));
+    const reply = (options.token ?? (() => ({ status: 200, body: { access_token: ACCESS, expires_in: 3599, refresh_token: REFRESH, scope: GOOGLE_CALENDAR_SCOPE, token_type: "Bearer" } })))(new URLSearchParams(req.body.toString()));
     json(res, reply.status, reply.body);
   });
   closers.push(token.close);
@@ -96,7 +99,7 @@ describe("pnpm google:connect (HOU-147)", () => {
     const said = r.lines.join("\n");
     expect(said).not.toContain(REFRESH);
     expect(said).not.toContain(SECRET);
-    expect(said).not.toContain("ya29.x");
+    expect(said).not.toContain(ACCESS);
   });
 
   test("replaces an older google.json, still mode 600", async () => {

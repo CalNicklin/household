@@ -1,3 +1,4 @@
+import { randomBytes } from "node:crypto";
 import { spawnSync } from "node:child_process";
 import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -21,8 +22,10 @@ afterEach(async () => {
 });
 
 const clock = { now: () => new Date("2026-11-02T08:00:00Z") };
-const SECRET = "csecret-never-printed";
-const REFRESH = "1//refresh-never-printed";
+/** HOU-168: made up per run, so no credential-shaped literal is in the repo. */
+const SECRET = randomBytes(12).toString("base64url");
+const REFRESH = `1//${randomBytes(12).toString("base64url")}`;
+const ACCESS = `ya29.${randomBytes(12).toString("base64url")}`;
 const FAMILY = "family123@group.calendar.google.com";
 const openWatch: CalendarWatch = { channelId: "c1", calendarId: FAMILY, resourceId: "r1", address: "https://house.example/webhooks/calendar", expiresAt: "2026-11-08T11:00:00.000Z", openedAt: "2026-11-01T11:00:00.000Z", closedAt: null };
 const watchOn = (calendarId: string, channelId: string): CalendarWatch => ({ ...openWatch, calendarId, channelId });
@@ -33,7 +36,7 @@ const people = [
 
 async function check(options: { tokenStatus?: number; calendarId?: string; calendars?: string; watches?: CalendarWatch[]; creds?: unknown }) {
   const google = await fakeServer((req, res) => {
-    if (req.path === "/token") return options.tokenStatus === undefined ? json(res, 200, { access_token: "ya29.secret-access", expires_in: 3600 }) : json(res, options.tokenStatus, { error: "invalid_grant" });
+    if (req.path === "/token") return options.tokenStatus === undefined ? json(res, 200, { access_token: ACCESS, expires_in: 3600 }) : json(res, options.tokenStatus, { error: "invalid_grant" });
     if (req.path.startsWith("/users/me/calendarList"))
       return json(res, 200, {
         items: [
@@ -58,7 +61,7 @@ async function check(options: { tokenStatus?: number; calendarId?: string; calen
   const lines: string[] = [];
   const code = await googleCheck({ env, clock, watches: async () => options.watches ?? [openWatch], people: async () => people, out: (l) => lines.push(l) });
   const text = lines.join("\n");
-  for (const secret of [SECRET, REFRESH, "ya29.secret-access"]) expect(text).not.toContain(secret);
+  for (const secret of [SECRET, REFRESH, ACCESS]) expect(text).not.toContain(secret);
   expect(google.requests.filter((r) => r.path !== "/token" && r.method !== "GET")).toEqual([]);
   return { code, text, google };
 }
@@ -123,7 +126,7 @@ describe("household-google check (HOU-147, HOU-152)", () => {
   });
 
   test("a fixed access token is flagged: it dies within the hour", async () => {
-    const { code, text } = await check({ creds: { access_token: "ya29.secret-access" }, calendarId: FAMILY });
+    const { code, text } = await check({ creds: { access_token: ACCESS }, calendarId: FAMILY });
     expect(code).toBe(1);
     expect(text).toContain("holds a fixed access token");
   });

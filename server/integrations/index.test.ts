@@ -1,3 +1,4 @@
+import { randomBytes } from "node:crypto";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -13,10 +14,14 @@ import { NoShoppingHelper } from "./shopping-helper.ts";
 import { TelegramTransport } from "./telegram.ts";
 import { OpenMeteoWeather } from "./weather-open-meteo.ts";
 
+/** HOU-168: every credential here is made up per run, so no literal one is in the repo. */
+const made = () => randomBytes(12).toString("base64url");
+const ACCESS = made();
+
 const clock = { now: () => new Date("2026-11-02T07:00:00Z") };
 const options = { timeZone: "Europe/London", personForEmail: () => null };
 // HOU-160: the real house always runs on a real model, with its key.
-const realModel = { MODEL_PROVIDER: "anthropic", MODEL_ID: "claude-opus-5-5", ANTHROPIC_API_KEY: "placeholder-not-a-key" };
+const realModel = { MODEL_PROVIDER: "anthropic", MODEL_ID: "claude-opus-5-5", ANTHROPIC_API_KEY: made() };
 
 describe("real ports", () => {
   it("[QA-9] with nothing configured, every credentialed port falls back to the practice household and says so", () => {
@@ -33,19 +38,19 @@ describe("real ports", () => {
       PRACTICE: "false",
       GOOGLE_CALENDAR_ID: "family@group.calendar.google.com",
       GOOGLE_ACCESS_TOKEN_FILE: "/run/secrets/google.json",
-      TELEGRAM_BOT_TOKEN: "123:abc",
+      TELEGRAM_BOT_TOKEN: `123:${made()}`,
       HINDSIGHT_URL: "http://hindsight:8888",
       S3_ENDPOINT: "http://minio:9000",
       S3_ACCESS_KEY_ID: "minio",
-      S3_SECRET_ACCESS_KEY: "minio-secret",
+      S3_SECRET_ACCESS_KEY: made(),
       // PRV-6: the real house will not start on the practice defaults of these.
-      SESSION_SECRET: "test-session",
+      SESSION_SECRET: made(),
       STORAGE_KEY: "ab".repeat(32),
-      TELEGRAM_WEBHOOK_SECRET: "test-telegram",
-      EMAIL_WEBHOOK_SECRET: "test-email",
-      CALENDAR_WEBHOOK_TOKEN: "test-calendar",
-      MCP_TOKEN: "test-mcp",
-      HELPER_TOKEN: "test-helper",
+      TELEGRAM_WEBHOOK_SECRET: made(),
+      EMAIL_WEBHOOK_SECRET: made(),
+      CALENDAR_WEBHOOK_TOKEN: made(),
+      MCP_TOKEN: made(),
+      HELPER_TOKEN: made(),
       ...realModel,
     });
     const { ports, missing } = realPorts(env, clock, options);
@@ -80,7 +85,7 @@ describe("real ports", () => {
     const google = await fakeServer((req, res) => {
       const form = new URLSearchParams(req.body.toString());
       if (form.get("refresh_token") === "old") json(res, 400, { error: "invalid_grant" });
-      else json(res, 200, { access_token: "new-access", expires_in: 3600 });
+      else json(res, 200, { access_token: ACCESS, expires_in: 3600 });
     });
     const dir = mkdtempSync(path.join(tmpdir(), "google-file-"));
     const file = path.join(dir, "google.json");
@@ -90,7 +95,7 @@ describe("real ports", () => {
       const get = googleTokenFromFile(file, clock);
       await expect(get()).rejects.toThrow(/HTTP 400/);
       write("new");
-      expect(await get()).toBe("new-access");
+      expect(await get()).toBe(ACCESS);
     } finally {
       await google.close();
       rmSync(dir, { recursive: true, force: true });

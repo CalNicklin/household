@@ -1,3 +1,4 @@
+import { Practice } from "@household/contracts";
 import type { Hono } from "hono";
 import { z } from "zod";
 import { afterAll, beforeAll, describe, expect, test } from "vitest";
@@ -13,7 +14,7 @@ beforeAll(async () => {
 });
 afterAll(async () => h.close());
 
-const push = (messageNumber: string, token = "practice-calendar-token", state = "exists") =>
+const push = (messageNumber: string, token: string = Practice.settings.CALENDAR_WEBHOOK_TOKEN, state = "exists") =>
   app.request("/webhooks/calendar", {
     method: "POST",
     headers: { "x-goog-channel-id": "chan-1", "x-goog-channel-token": token, "x-goog-resource-state": state, "x-goog-message-number": messageNumber, "x-goog-resource-id": "res-1" },

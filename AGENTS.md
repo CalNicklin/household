@@ -13,6 +13,11 @@ Read `README.md` once. `VERIFICATIONS.md` is the only spec.
 - `pnpm check` enforces the rest of the code rules (boundaries, relations, limits, lint); read its failure line, it names the verification.
 - Run everything locally with `pnpm dev`; reseed the practice household with `pnpm seed`.
 
+## Secrets in tests
+- Generate test credentials at runtime (`randomBytes`, as `helper/testing.ts` and `e2e/stack.ts` do); never commit a literal password, secret, token or key, not even a test one. `pnpm check` refuses one (its `secrets` step, rules in `.secretlintrc.yml`), with the file and line.
+- The practice household's public values (its login, its webhook secrets) have one home, `contracts/src/practice.ts`; take them from there.
+- No password goes in a URL. A local Postgres that wants one gets it from `PGPASSWORD`.
+
 ## Prove it
 - `pnpm check` must pass. It is the only check.
 - A user-facing line needs a Playwright e2e test against the practice household, and you must perform the journey yourself with computer use on the PR's preview and attach screenshots to the issue (FB-4). The `preview` workflow comments the preview's URL and the practice logins on the PR once its image is up.

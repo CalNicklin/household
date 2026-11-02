@@ -27,7 +27,8 @@ trap cleanup EXIT
 step() { printf '\n== %s\n' "$*"; }
 fail() { echo "FALSE CH-3: $*" >&2; exit 1; }
 # A made-up token: the stand-in accepts only this one.
-token="424242:test-telegram-stand-in-token"
+# HOU-168: made up per run, in the shape BotFather gives, so no token-shaped literal is in the repo.
+token="424242:$(od -An -N12 -tx1 /dev/urandom | tr -d ' \n')"
 
 step "the image, built as deploy.yml builds it"
 "$repo/deploy/build-image.sh" "$local_image" "$ref"
@@ -45,7 +46,9 @@ printf 'HOUSEHOLD_DIR=%s\nHOUSEHOLD_REPO=localhost:5000/household\n' "$work/srv"
 docker run --rm --network none --memory 128m -v "$repo/scripts/env-init.ts:/env-init.ts:ro" -v "$work/srv:/work" -w /work node:22-bookworm-slim node /env-init.ts --real > /dev/null
 echo "HOUSEHOLD_DOMAIN=localhost" >> "$work/srv/.env"
 # HOU-160: the real house needs its model's key; no call is made with it here.
-echo "ANTHROPIC_API_KEY=placeholder-not-a-key" >> "$work/srv/.env"
+# HOU-168: a stand-in key made up per run, so no key-shaped literal is in the repo.
+model_key="stand-in-$(od -An -N12 -tx1 /dev/urandom | tr -d ' \n')"
+echo "ANTHROPIC_API_KEY=$model_key" >> "$work/srv/.env"
 lib="$work/lib"
 install -d "$lib"
 install -m 755 "$repo"/deploy/household-*.sh "$repo/scripts/backup.sh" "$repo/scripts/restore.sh" "$lib/"

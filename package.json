@@ -61,6 +61,8 @@
   "devDependencies": {
     "@electric-sql/pglite": "0.5.14",
     "@playwright/test": "1.63.0",
+    "@secretlint/secretlint-rule-pattern": "13.1.0",
+    "@secretlint/secretlint-rule-preset-recommend": "13.1.0",
     "@tanstack/react-start": "1.169.4",
     "@types/mailparser": "^3.9.0",
     "@types/node": "^26.6.6",
@@ -74,6 +76,7 @@
     "fallow": "3.38.1",
     "oxlint": "1.90.0",
     "oxlint-tsgolint": "^7.0.2005",
+    "secretlint": "13.1.0",
     "tsx": "^4.23.15",
     "typescript": "^7.0.2",
     "vite": "8.3.5",

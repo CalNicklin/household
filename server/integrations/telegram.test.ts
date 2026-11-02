@@ -1,8 +1,10 @@
+import { randomBytes } from "node:crypto";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { fakeServer, json } from "./fake-http.ts";
 import { parseTelegramUpdate, TelegramTransport } from "./telegram.ts";
 
-const TOKEN = "123456:SECRET-bot-token";
+/** HOU-168: made up per run, so no token-shaped literal is in the repo. */
+const TOKEN = `123456:${randomBytes(18).toString("base64url")}`;
 const servers: { close: () => Promise<void> }[] = [];
 afterEach(async () => {
   await Promise.all(servers.splice(0).map((s) => s.close()));

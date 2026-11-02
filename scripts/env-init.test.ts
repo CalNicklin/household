@@ -1,3 +1,4 @@
+import { randomBytes } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import { mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -20,25 +21,41 @@ function envInit(env: string | null, ...args: string[]): { out: string; env: str
   return { out, env: readFileSync(path.join(dir, ".env"), "utf8"), rewritten: before !== after.ino, mode: after.mode & 0o777 };
 }
 
+// HOU-168: the credentials in the old .env are made up per run, so no literal one is in the repo.
+const made = () => randomBytes(9).toString("base64url");
+const OLD_SECRETS = {
+  POSTGRES_PASSWORD: made(),
+  SESSION_SECRET: made(),
+  STORAGE_KEY: made(),
+  S3_SECRET_ACCESS_KEY: made(),
+  HELPER_TOKEN: made(),
+  TELEGRAM_WEBHOOK_SECRET: made(),
+  EMAIL_WEBHOOK_SECRET: made(),
+  CALENDAR_WEBHOOK_TOKEN: made(),
+  MCP_TOKEN: made(),
+  TELEGRAM_BOT_TOKEN: `123:${made()}`,
+};
+const old = (name: keyof typeof OLD_SECRETS) => `${name}=${OLD_SECRETS[name]}`;
+
 // A .env as install.sh wrote it before HOU-148: no MODEL_PROVIDER or MODEL_ID, credentials filled in by hand.
 const OLD = [
   "PRACTICE=false",
   "DB_PREFIX=home",
   "HOUSEHOLD_ID=home",
-  "POSTGRES_PASSWORD=pg-old",
-  "SESSION_SECRET=session-old",
-  "STORAGE_KEY=storage-old",
+  old("POSTGRES_PASSWORD"),
+  old("SESSION_SECRET"),
+  old("STORAGE_KEY"),
   "S3_ACCESS_KEY_ID=household-old",
-  "S3_SECRET_ACCESS_KEY=s3-old",
-  "HELPER_TOKEN=helper-old",
-  "TELEGRAM_WEBHOOK_SECRET=tg-old",
-  "EMAIL_WEBHOOK_SECRET=email-old",
-  "CALENDAR_WEBHOOK_TOKEN=cal-old",
-  "MCP_TOKEN=mcp-old",
-  "PRACTICE_SUPERMARKET_PASSWORD=sm-old",
+  old("S3_SECRET_ACCESS_KEY"),
+  old("HELPER_TOKEN"),
+  old("TELEGRAM_WEBHOOK_SECRET"),
+  old("EMAIL_WEBHOOK_SECRET"),
+  old("CALENDAR_WEBHOOK_TOKEN"),
+  old("MCP_TOKEN"),
+  `PRACTICE_SUPERMARKET_PASSWORD=${made()}`,
   "SUPERMARKET_SECRET_FILE=./.secrets/waitrose.json",
   "# Cal's note",
-  "TELEGRAM_BOT_TOKEN=123:abc",
+  old("TELEGRAM_BOT_TOKEN"),
   "ANTHROPIC_API_KEY=",
   "HOUSEHOLD_DOMAIN=house.example.com",
   "HINDSIGHT_NETWORK=hindsight-net",
@@ -51,7 +68,7 @@ describe("env-init", () => {
     expect(env.slice(OLD.length + 1)).toBe("MODEL_PROVIDER=anthropic\nMODEL_ID=claude-opus-5-5\n");
     // Names only: no value it read or made is printed.
     expect(out).toContain("added to .env: MODEL_PROVIDER, MODEL_ID");
-    for (const secret of ["pg-old", "session-old", "storage-old", "s3-old", "helper-old", "tg-old", "email-old", "cal-old", "mcp-old", "123:abc"]) expect(out).not.toContain(secret);
+    for (const secret of Object.values(OLD_SECRETS)) expect(out).not.toContain(secret);
   });
 
   test("[HOU-160] a second run adds nothing and changes nothing; a setting written empty is filled in place", () => {

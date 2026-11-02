@@ -1,3 +1,4 @@
+import { randomBytes } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, test, vi } from "vitest";
 import { z } from "zod";
 import { testHousehold, type TestHousehold } from "../testing/household.ts";
@@ -24,7 +25,7 @@ afterAll(async () => {
 
 describe("prompt caching on the real provider (no network: the Anthropic API is stubbed)", () => {
   test("[QA-8][PLT-9] a message's two calls share one cached prefix (tools and instructions), and the cost prices cache reads and writes", async () => {
-    vi.stubEnv("ANTHROPIC_API_KEY", "placeholder-not-a-key");
+    vi.stubEnv("ANTHROPIC_API_KEY", randomBytes(12).toString("base64url"));
     const bodies: Body[] = [];
     // What the API returns for "what's today like": a tool call, then the reply. The first call
     // writes the 5,000-token prefix to the cache and the second reads it.
