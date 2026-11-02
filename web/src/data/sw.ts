@@ -1,3 +1,6 @@
+/** A build comparison that could not finish (see registerServiceWorker); checkForUpdate retries it. */
+let pending: (() => Promise<void>) | null = null;
+
 /**
  * HOME-6 / HOU-154: register the service worker, and pick up a deploy without anyone touching the
  * screen. Each deploy serves a new worker (it carries the build id); when a worker takes over whose
@@ -24,22 +27,27 @@ export function registerServiceWorker(): void {
     reloading = true;
     window.location.reload();
   };
+  // A new worker took over: compare builds. If the server can't say right now (a Wi-Fi blip), the
+  // comparison stays pending and the next check (checkForUpdate, at least once a minute) retries it.
+  const compare = async () => {
+    const build = await currentBuild();
+    pending = build === undefined ? compare : null;
+    if (build !== undefined && build !== page) reloadWhenIdle();
+  };
   container.addEventListener("controllerchange", () => {
     if (page === null || container.controller === null) return;
-    void (async () => {
-      const build = await currentBuild();
-      if (build !== undefined && build !== page) reloadWhenIdle();
-    })();
+    void compare();
   });
   void container.register("/sw.js", { updateViaCache: "none" }).catch(() => {});
 }
 
 /**
- * HOU-154: ask whether a newer worker is out. Called when the live connection (re)opens: a deploy
- * restarts the server, so an open screen reconnects, and this finds the new build straight away.
+ * HOU-154: ask whether a newer worker is out, and finish a build comparison that couldn't. Called when
+ * the live connection (re)opens (a deploy restarts the server), every minute, and on a glance.
  */
 export function checkForUpdate(): void {
   if (!("serviceWorker" in navigator)) return;
+  if (pending !== null) void pending();
   void navigator.serviceWorker
     .getRegistration()
     .then((r) => r?.update())
@@ -47,14 +55,13 @@ export function checkForUpdate(): void {
 }
 
 /**
- * The build the server's worker is now (the `x-household-build` header on /sw.js, server/http/app.ts):
- * the worker that just took over came from there. A worker from before builds were named has no
- * header (null): not this page's build, so it reloads. Unreachable (undefined): nothing to decide.
+ * The build the server is now: the `x-household-build` header on /sw.js (server/http/app.ts), which is
+ * where the worker that just took over came from. Undefined when the server can't be asked right now.
  */
-async function currentBuild(): Promise<string | null | undefined> {
+async function currentBuild(): Promise<string | undefined> {
   try {
     const res = await fetch("/sw.js", { cache: "no-store" });
-    return res.ok ? res.headers.get("x-household-build") : undefined;
+    return (res.ok ? res.headers.get("x-household-build") : null) ?? undefined;
   } catch {
     return undefined;
   }
