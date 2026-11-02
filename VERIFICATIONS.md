@@ -41,6 +41,7 @@ Anything either of us remembers can be noted in under five seconds, from anywher
 - [ ] CAP-7 Regular chores (which bins, watering the plants, changing the beds) are set up once as rules and appear on the right day.
 - [ ] CAP-8 Nursery term dates, closures and session days are known to the app and show up on the day they matter.
 - [ ] CAP-9 When an order confirmation email arrives for either of us, an Arriving row appears with the shop and the expected day. Nobody types anything.
+- [ ] CAP-10 Say "remind me / us / Chloe to X", with or without a time ("tonight", "at 8", "tomorrow", "later"), and it appears on Today for the people named: under Later today, then under Now when it's due, with a message at that time to anyone set up for messages. With no time, it stays on Today for the rest of the day and then moves to the Backlog. Reminders you ask for don't count towards PRO-6.
 
 ## In the moment
 

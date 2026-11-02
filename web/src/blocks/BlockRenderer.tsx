@@ -14,6 +14,7 @@ import {
   ListCard,
   ModeCard,
   type NavLink,
+  ReminderCard,
   Section as SectionView,
   SuggestionCard,
 } from "../design-system/index.ts";
@@ -72,6 +73,8 @@ function BlockView({ block, handlers, nav }: { block: Block; handlers: BlockHand
       );
     case BlockType.backlogPick:
       return <BacklogPickCard title={block.title} reason={block.reason} actions={cardActions(block, block.actions, handlers)} onSelect={select({ ref: block.ref, title: block.title })} selected={isSelected(block.ref)} />;
+    case BlockType.reminder:
+      return <ReminderCard time={block.time} title={block.title} detail={block.detail} actions={cardActions(block, block.actions, handlers)} onSelect={select({ ref: block.ref, title: block.title })} selected={isSelected(block.ref)} />;
     case BlockType.composer:
       // Rendered by the footer slot (BlockScreen), never inline.
       return null;

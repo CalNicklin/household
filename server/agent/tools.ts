@@ -5,9 +5,10 @@ import { gatherFacts, oneThingCandidates } from "../planner/gather.ts";
 import { inQuietHours } from "../rules/budget.ts";
 import { adultsOf, contextLine, eventsOn } from "../rules/day.ts";
 import { parseOrder } from "../rules/orders.ts";
+import { reminderFor, reminderWhen } from "../rules/remind.ts";
 import { guessTags } from "../rules/tags.ts";
 import { dayIn, daysIn } from "../rules/when.ts";
-import { addLocalDays, atLocal, clock, localDate, longDate, startOfLocalDay } from "../time.ts";
+import { addLocalDays, atLocal, clock, localDate, localTime, longDate, startOfLocalDay } from "../time.ts";
 import { respond, subjectFor } from "./respond.ts";
 import type { JobScope } from "./scope.ts";
 
@@ -46,6 +47,38 @@ export function houseTools(scope: JobScope) {
       // HOU-149: today's plan says whether the backlog is empty ("Getting started"), so redraw it now.
       replanToday();
       return { id: item.id, tags: item.tags, say: `Added to the backlog: ${item.text}.` };
+    }),
+  });
+
+  /**
+   * CAP-10: a reminder someone asks for. The time and the people are read by rules (server/rules/remind.ts),
+   * never guessed by the model; it shows on Today, and messages the people named when it is due.
+   */
+  let reminders = 0;
+  const remind = createTool({
+    id: "remind",
+    description:
+      "A reminder someone asks for: 'remind me to…', 'remind us to… tonight', 'remind Tom to… at 8', 'don't let me forget to… tomorrow', 'remind us later'. `text` is the thing to do, in their words without 'remind me to'. `for` is who, as they said it: 'me', 'us', or names. `when` is the time as they said it ('tonight', 'at 8', 'tomorrow morning', 'later'), or leave it out. Never capture a reminder.",
+    inputSchema: z.object({ text: z.string().min(1), for: z.array(z.string()).optional(), when: z.string().nullable().optional() }),
+    execute: record("remind", async (input: { text: string; for?: string[] | undefined; when?: string | null | undefined }) => {
+      const index = reminders++;
+      const now = rt.ports.clock.now();
+      const date = today();
+      const people = await rt.system("remind").household.people();
+      const who = reminderFor(input.for ?? ["me"], scope.person, people);
+      const others = adultsOf(people).map((p) => p.name);
+      if (who.unknown.length > 0 || who.ids.length === 0) return { set: false, say: `Who should I remind? I can remind ${others.join(", ").replace(/, ([^,]*)$/, " or $1")}, or "us" for everyone.` };
+      const when = reminderWhen(input.when ?? null, now, tz);
+      if (when === null) return { set: false, say: `Which day do you mean? I couldn't tell from "${input.when ?? ""}".` };
+      if (when.date < date || (when.date === date && when.time !== null && when.time <= localTime(now, tz)))
+        return { set: false, say: `${when.time ?? "That"} has already gone today. Say a later time, or tomorrow.` };
+      const reminder = await api.backlog.remind({ text: input.text, for: who.ids, date: when.date, time: when.time, createdVia: scope.channel, sourceMessage: scope.messageId, index });
+      for (const d of [date, addLocalDays(date, 1)]) if (d <= reminder.date && !scope.effects.replan.includes(d)) scope.effects.replan.push(d);
+      const names = reminder.for.map((id) => (id === scope.person ? "you" : (people.find((p) => p.id === id)?.name ?? id)));
+      const whom = names.length <= 1 ? (names[0] ?? "you") : `${names.slice(0, -1).join(", ")} and ${names.at(-1) ?? ""}`;
+      const day = reminder.date === date ? "today" : reminder.date === addLocalDays(date, 1) ? "tomorrow" : longDate(reminder.date);
+      if (reminder.time === null) return { set: true, id: reminder.id, say: `I'll remind ${whom}: ${reminder.text}. It's on ${day === "today" ? "Today" : `the home screen ${day}`} for the rest of the day.` };
+      return { set: true, id: reminder.id, say: `I'll remind ${whom} at ${reminder.time} ${day}: ${reminder.text}.` };
     }),
   });
 
@@ -237,6 +270,7 @@ export function houseTools(scope: JobScope) {
 
   return {
     capture,
+    remind,
     shop,
     add_to_list: addToList,
     set_mode: setMode,

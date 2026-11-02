@@ -102,6 +102,8 @@ export const BlockType = {
   alert: "alert",
   arrival: "arrival",
   backlogPick: "backlog-pick",
+  /** CAP-10: a reminder someone asked for (grey, a fact, not a suggestion). */
+  reminder: "reminder",
   composer: "composer",
 } as const;
 export type BlockType = ValueOf<typeof BlockType>;
@@ -149,6 +151,8 @@ export const Provenance = {
   email: "email",
   rule: "rule",
   planner: "planner",
+  /** CAP-10: one of us asked for it. */
+  person: "person",
 } as const;
 export type Provenance = ValueOf<typeof Provenance>;
 export const zProvenance = z.enum(Provenance);
@@ -219,6 +223,15 @@ export const BacklogStatus = {
 } as const;
 export type BacklogStatus = ValueOf<typeof BacklogStatus>;
 export const zBacklogStatus = z.enum(BacklogStatus);
+
+/** CAP-10: a reminder is open until someone taps Done; one with no time left open at the end of its day moves to the Backlog. */
+export const ReminderStatus = {
+  open: "open",
+  done: "done",
+  moved: "moved",
+} as const;
+export type ReminderStatus = ValueOf<typeof ReminderStatus>;
+export const zReminderStatus = z.enum(ReminderStatus);
 
 export const BacklogGroup = {
   soon: "soon",
@@ -345,6 +358,8 @@ export const TimerKind = {
   retention: "retention-purge",
   deliveries: "delivery-morning",
   basketSummary: "basket-summary",
+  /** CAP-10: a quarter-hourly look for reminders that are due (the hourly refresh looks on the hour). */
+  reminders: "reminders",
   /** HOU-149: today has no plan when someone looks (a new house, a missed timer); plan it now. Not on a schedule. */
   catchUpPlan: "catch-up-plan",
 } as const;

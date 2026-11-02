@@ -83,6 +83,17 @@ export const zBacklogPickBlock = z.object({
   actions: z.array(zNotifyAction),
 });
 
+/** CAP-10: a reminder one of us asked for: grey, with its time (if any), who it is for, Done and Not now. */
+export const zReminderBlock = z.object({
+  ...base,
+  type: z.literal(BlockType.reminder),
+  time: z.string().nullable(),
+  title: z.string(),
+  detail: z.string(),
+  ref: z.string(),
+  actions: z.array(zNotifyAction),
+});
+
 export const zComposerBlock = z.object({
   ...base,
   type: z.literal(BlockType.composer),
@@ -97,6 +108,7 @@ export const zBlock = z.discriminatedUnion("type", [
   zAlertBlock,
   zArrivalBlock,
   zBacklogPickBlock,
+  zReminderBlock,
   zComposerBlock,
 ]);
 export type Block = z.infer<typeof zBlock>;
@@ -107,6 +119,7 @@ export type SuggestionBlock = z.infer<typeof zSuggestionBlock>;
 export type AlertBlock = z.infer<typeof zAlertBlock>;
 export type ArrivalBlock = z.infer<typeof zArrivalBlock>;
 export type BacklogPickBlock = z.infer<typeof zBacklogPickBlock>;
+export type ReminderBlock = z.infer<typeof zReminderBlock>;
 export type ComposerBlock = z.infer<typeof zComposerBlock>;
 
 /** PLT-4: a day's plan is one row of ordered blocks; every version is kept. */

@@ -3,7 +3,7 @@ import { Channel, type LocalDate, type Plan } from "@household/contracts";
 import { HouseAgent } from "../agent/agent.ts";
 import { jobScope } from "../agent/scope.ts";
 import { compose, shoppingForPlan } from "../planner/compose.ts";
-import { gatherFacts, houseFill, otherAdultOf, pickCandidates, screenNotes } from "../planner/gather.ts";
+import { gatherFacts, houseFill, otherAdultOf, pickCandidates, remindersFor, screenNotes } from "../planner/gather.ts";
 import { plannerBuildId } from "../build.ts";
 import { allRules } from "../rules/nudges.ts";
 import { dayPartOf } from "../agent/respond.ts";
@@ -26,7 +26,8 @@ async function planDayImpl(date: LocalDate, trigger: string, parentJob: string |
       const signals = await planningSignals(rt, date, now, facts);
       const candidates = await pickCandidates(rt, facts, date, now, signals);
       const fill = await houseFill(rt);
-      return { now: now.toISOString(), facts, signals, candidates, fill };
+      const reminders = await remindersFor(rt, date);
+      return { now: now.toISOString(), facts, signals, candidates, fill, reminders };
     },
     { name: "gather" },
   );
@@ -63,6 +64,7 @@ async function planDayImpl(date: LocalDate, trigger: string, parentJob: string |
         avoid: new Set<string>(),
         otherAdult: otherAdultOf(facts),
         fill: gathered.fill,
+        reminders: gathered.reminders,
       });
       const api = rt.system("planner");
       if (choice.pick !== null) await api.plans.recordOffer({ itemId: choice.pick.itemId, date, person: choice.pick.person });

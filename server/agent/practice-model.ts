@@ -61,6 +61,34 @@ const splitItems = (s: string) =>
     .map((x) => x.trim().replace(/^(some|more|a|an)\s+/i, ""))
     .filter((x) => x.length > 0);
 
+// CAP-10: "remind me / us / Tom to…", "don't let me forget to… tonight". Who, then (optionally) when, then the thing.
+const REMIND = /^(?:please\s+)?(?:can you\s+)?(?:remind\s+((?:me|us|[a-z]+)(?:(?:\s*,\s*|\s+and\s+)(?:me|us|[a-z]+))*)|don'?t\s+let\s+(me|us)\s+forget)\b\s*(.*)$/i;
+const WHEN = /\b(tonight|this (?:evening|afternoon|morning)|tomorrow(?: (?:morning|afternoon|evening|night))?|later(?: today| on)?|at \d{1,2}(?:[:.]\d{2})?\s*(?:am|pm)?|in (?:an?|\d+|half an?) ?(?:hours?|minutes?|mins?)?|(?:on )?(?:mon|tues|wednes|thurs|fri|satur|sun)day)\b/i;
+
+/** "remind us to discuss Wise Owls tonight" → remind({ text, for, when }), or null. */
+function remindCall(text: string): Call | null {
+  const m = REMIND.exec(text.trim());
+  if (m === null) return null;
+  const who = (m[1] ?? m[2] ?? "me").split(/\s*,\s*|\s+and\s+/i).filter((w) => w !== "");
+  let rest = (m[3] ?? "").replace(/[.!]+$/, "").trim();
+  let when: string | null = null;
+  // "remind me at 8 to call Mum": the time comes before "to".
+  const before = /^(.*?)\s+(?:to|about)\s+(.*)$/i.exec(rest);
+  if (before?.[1] !== undefined && before[2] !== undefined && WHEN.test(before[1])) {
+    when = before[1];
+    rest = before[2];
+  } else {
+    rest = rest.replace(/^(?:to|about)\s+/i, "");
+    const w = WHEN.exec(rest);
+    if (w !== null) {
+      when = rest.slice(w.index).trim();
+      rest = rest.slice(0, w.index).trim();
+    }
+  }
+  if (rest === "") return null;
+  return { tool: "remind", input: { text: rest.replace(/^./, (c) => c.toUpperCase()), for: who, when } };
+}
+
 /** "slow day", "we're away this weekend", "back to normal" → set_mode, or nothing. */
 function modeCall(lower: string): Call[] {
   const modeMatch = /\b(slow|sick|lazy|rough|hard|quiet)\s+day\b/.exec(lower);
@@ -96,6 +124,8 @@ function practiceIntent(prompt: string): Call[] {
   if (about !== null && /^(done|did it|finished|sorted|all done)\b/.test(lower)) return [{ tool: "respond", input: { ref: about, action: "done" } }];
   if (about !== null && /^not (today|now)\b/.test(lower)) return [{ tool: "respond", input: { ref: about, action: "not-today" } }];
 
+  const reminder = remindCall(text);
+  if (reminder !== null) return [reminder];
   const sitter = /\b([A-Z][a-z]+)(?:'s| is)\s+(?:doing|babysitting|sitting|booked for|coming)\s+(?:on\s+)?(\w+day|tonight|tomorrow)\b/.exec(text);
   if (sitter !== null) return [{ tool: "sitter_booked", input: { sitter: sitter[1], when: sitter[2] } }];
 

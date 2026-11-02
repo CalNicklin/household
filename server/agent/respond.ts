@@ -1,7 +1,7 @@
-import { ActionKind, BlockType, DayPart, type LocalDate, LongTool, ModeKind, NotificationStatus, RhythmSource, ShoppingStatus } from "@household/contracts";
+import { ActionKind, BlockType, DayPart, type LocalDate, LongTool, ModeKind, NotificationStatus, ReminderStatus, RhythmSource, ShoppingStatus } from "@household/contracts";
 import { START_REF_PREFIX } from "../planner/first-day.ts";
 import { forecasts } from "../planner/gather.ts";
-import { addLocalDays, localDate, localHour, weekdayOf } from "../time.ts";
+import { addLocalDays, localDate, localHour, longDate, weekdayOf } from "../time.ts";
 import type { JobScope } from "./scope.ts";
 
 export function dayPartOf(hour: number): DayPart {
@@ -14,6 +14,10 @@ export async function subjectFor(scope: JobScope, ref: string, date: LocalDate):
   if (ref.startsWith("backlog:")) {
     const item = await api.backlog.get({ id: ref.slice("backlog:".length) });
     if (item !== null) return item.text;
+  }
+  if (ref.startsWith("reminder:")) {
+    const reminder = await api.backlog.getReminder({ id: ref.slice("reminder:".length) });
+    if (reminder !== null) return reminder.text;
   }
   if (ref.startsWith("shopping:")) {
     const request = await api.shopping.get({ id: ref.slice("shopping:".length) });
@@ -45,6 +49,32 @@ async function weatherNow(scope: JobScope, now: Date): Promise<string> {
   return `${h.precipitationProbability < 40 ? "dry" : "wet"} ${Math.round(h.temperatureC)}°`;
 }
 
+async function respondToReminder(scope: JobScope, ref: string, action: ActionKind, date: LocalDate): Promise<string> {
+  const reminder = await scope.api.backlog.getReminder({ id: ref.slice("reminder:".length) });
+  if (reminder === null) return "I can't find that reminder.";
+  if (reminder.status !== ReminderStatus.open) return reminder.status === ReminderStatus.done ? "That's already done." : "That's on the Backlog now.";
+  const replan = (d: LocalDate) => {
+    if (!scope.effects.replan.includes(d)) scope.effects.replan.push(d);
+  };
+  if (action === ActionKind.done) {
+    await scope.api.plans.respond({ ref, action, channel: scope.channel, date, value: null });
+    await scope.api.backlog.reminderDone({ id: reminder.id });
+    scope.effects.closeRefs.push({ ref, status: "done" });
+    replan(date);
+    return `Done: ${reminder.text}.`;
+  }
+  if (action === ActionKind.snooze || action === ActionKind.notToday) {
+    const to = addLocalDays(reminder.date > date ? reminder.date : date, 1);
+    await scope.api.plans.respond({ ref, action: ActionKind.snooze, channel: scope.channel, date, value: to });
+    await scope.api.backlog.moveReminder({ id: reminder.id, date: to });
+    scope.effects.closeRefs.push({ ref, status: "dismissed" });
+    replan(date);
+    replan(addLocalDays(date, 1));
+    return to === addLocalDays(date, 1) ? `Moved to tomorrow: ${reminder.text}.` : `Moved to ${longDate(to)}: ${reminder.text}.`;
+  }
+  return "Noted.";
+}
+
 /**
  * Done, Not today, Snooze, hand-over, accept or answer — however it arrived (HOME-4/5, CH-8).
  * Nothing becomes overdue: a response hides the thing and is remembered, that's all.
@@ -63,6 +93,9 @@ export async function respond(scope: JobScope, ref: string, action: ActionKind, 
     if (request?.status === ShoppingStatus.dismissed) return "That's already dismissed.";
     dismissShopping = request?.status === ShoppingStatus.failed || request?.status === ShoppingStatus.saved;
   }
+  // CAP-10: Done, or Not now / Later (to tomorrow). A reminder someone asked for is theirs, not a
+  // suggestion: nothing to learn from, nothing to remember.
+  if (ref.startsWith("reminder:")) return respondToReminder(scope, ref, action, date);
   await scope.api.plans.respond({ ref, action, channel: scope.channel, date, value });
   const subject = await subjectFor(scope, ref, date);
 

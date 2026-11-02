@@ -1,11 +1,12 @@
 import { DBOS } from "@dbos-inc/dbos-sdk";
-import { ActionKind, BlockType, Limits, type LocalDate, TimerKind, Urgency } from "@household/contracts";
+import { ActionKind, BlockType, Limits, type LocalDate, Section, TimerKind, Urgency } from "@household/contracts";
 import { updateLearning } from "../learning/learn.ts";
 import { notify } from "../notify/notify.ts";
 import { isShopNews } from "../planner/compose.ts";
 import { gatherFacts } from "../planner/gather.ts";
 import { adultsOf } from "../rules/day.ts";
 import { allRules, recipientsHomeAt } from "../rules/nudges.ts";
+import { isDue } from "../rules/remind.ts";
 import { addLocalDays, localDate, longDate, startOfLocalDay } from "../time.ts";
 import { updateScores, wellbeingNudges } from "../wellbeing/run.ts";
 import { jobRuntime } from "./context.ts";
@@ -32,6 +33,42 @@ async function dispatchDue(jobId: string, date: LocalDate): Promise<void> {
     },
     { name: `dispatch:${date}` },
   );
+}
+
+/**
+ * CAP-10: a message at its time to each person a due reminder is for (CH-7: their routing, quiet hours
+ * and daily limit decide whether it goes now or waits for the screen), with Done and Later. Each goes
+ * once for its day and time (PRO-9). True when today's plan still shows a due one under Later today.
+ */
+async function dispatchReminders(jobId: string, date: LocalDate): Promise<boolean> {
+  const rt = jobRuntime();
+  return DBOS.runStep(
+    async () => {
+      const api = rt.system("reminders");
+      const now = rt.ports.clock.now();
+      const due = (await api.backlog.reminders({ from: date, to: date })).filter((r) => isDue(r, now, rt.timeZone));
+      if (due.length === 0) return false;
+      const people = await api.household.people();
+      for (const r of due) {
+        const ref = `reminder:${r.id}`;
+        const asker = people.find((p) => p.id === r.askedBy)?.name ?? "one of you";
+        const actions = [
+          { kind: ActionKind.done, label: "Done", ref },
+          { kind: ActionKind.snooze, label: "Later", ref },
+        ];
+        for (const person of r.for) await notify(rt, { person, message: `Reminder${person === r.askedBy ? "" : ` from ${asker}`}: ${r.text}`, urgency: Urgency.urgent, actions, key: `${ref}:${r.date}T${r.time ?? ""}`, countsTowardsBudget: true }, jobId);
+      }
+      const latest = await api.plans.latest({ date });
+      return due.some((r) => latest?.blocks.some((b) => b.id === `reminder:${r.id}` && b.section !== Section.now) ?? false);
+    },
+    { name: `reminders:${date}` },
+  );
+}
+
+/** CAP-10: reminders with no time left open from an earlier day become backlog items. */
+async function remindersToBacklog(date: LocalDate): Promise<void> {
+  const rt = jobRuntime();
+  await DBOS.runStep(async () => rt.system("reminders").backlog.remindersToBacklog({ today: date }), { name: `reminders-to-backlog:${date}` });
 }
 
 async function plan(jobId: string, date: LocalDate, totals: Usage, why: string): Promise<void> {
@@ -114,14 +151,20 @@ export async function runTimer(jobId: string, timer: TimerKind, scheduledFor: st
         },
         { name: "learn-and-score" },
       );
+      await remindersToBacklog(today);
       await plan(jobId, today, totals, "timer:morning-plan");
       await plan(jobId, addLocalDays(today, 1), totals, "timer:morning-plan");
       await dispatchDue(jobId, today);
       break;
     }
     case TimerKind.hourlyRefresh:
+      await remindersToBacklog(today);
       await plan(jobId, today, totals, "timer:hourly-refresh");
       await dispatchDue(jobId, today);
+      await dispatchReminders(jobId, today);
+      break;
+    case TimerKind.reminders:
+      if (await dispatchReminders(jobId, today)) await plan(jobId, today, totals, "timer:reminders");
       break;
     case TimerKind.catchUpPlan:
       // HOU-149: someone looked and today had no plan. Plan today only; rule nudges keep to their own timers.
