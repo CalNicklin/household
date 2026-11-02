@@ -103,8 +103,10 @@ describe("HOU-177 (PRV-1): only a person's tap marks a reminder done or puts it 
     const r = (await boyBoy()).find((x) => x.time === "09:00");
     if (r === undefined) throw new Error("no 09:00 reminder");
     const tools = houseTools(jobScope(h.rt, "j", "app-message", "tom", Channel.app));
-    for (const action of [ActionKind.done, ActionKind.snooze, ActionKind.notToday])
-      expect(await tools.respond.execute?.({ ref: `reminder:${r.id}`, action }, {})).toEqual({ say: "Nothing was changed: a reminder is done or put off by tapping it. Ask to change its time or cancel it instead." });
+    const refused = { say: "Nothing was changed: a reminder is done or put off by tapping it. Ask to change its time or cancel it instead." };
+    for (const action of [ActionKind.done, ActionKind.snooze, ActionKind.notToday]) expect(await tools.respond.execute?.({ ref: `reminder:${r.id}`, action }, {})).toEqual(refused);
+    // Nor "move this to tomorrow" with the reminder as the About ref.
+    expect(await tools.move_to_tomorrow.execute?.({ ref: `reminder:${r.id}` }, {})).toEqual(refused);
     // The router: never the system, never a job handling a different message.
     const job = h.rt.as({ kind: ActorKind.agent, job: "j", onBehalfOf: "tom", message: "some-other-message" });
     await expect(job.backlog.reminderDone({ id: r.id, sourceMessage: "this-message" })).rejects.toThrow(/PRV-1/);
