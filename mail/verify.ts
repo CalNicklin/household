@@ -61,13 +61,19 @@ export function provenSenders(auth: AuthenticateResult, envelopeFrom: string, re
  * a proven Google message says is read tolerantly: any forwarding/noreply sender at google.com, the
  * code anywhere in the (already RFC 2047-decoded) subject or else in the body, and the confirmation link.
  */
-const GOOGLE_CONFIRMATION_SENDER = /^[a-z0-9._+-]*(?:forwarding|no-?reply)[a-z0-9._+-]*@google\.com$/;
+// Exact addresses, never a pattern: other google.com senders (Drive shares, comments) carry text that
+// anyone can choose, so they must never count as the confirmation, however they are signed.
+const GOOGLE_CONFIRMATION_SENDERS = new Set(["forwarding-noreply@google.com", "mail-noreply@google.com"]);
 const SUBJECT_CODE = /#\s*(\d{6,12})(?!\d)/;
 const BODY_CODE = /\bcode\b[^\d\n]{0,20}?(\d{6,12})(?!\d)/i;
 // The one-time link: mail-settings.google.com/…, or mail.google.com/… with Gmail's vf- token. URL
-// characters only, so nothing printed from it can reach a terminal as a control sequence.
-const CONFIRMATION_LINK = /https:\/\/(?:mail-settings\.google\.com\/[A-Za-z0-9\-._~:/?#@!$&()*+,;=%]+|mail\.google\.com\/[A-Za-z0-9\-._~:/?#@!$&()*+,;=%]*vf-[A-Za-z0-9\-._~:/?#@!$&()*+,;=%]*)/;
-const MAX_LINK = 2000;
+// characters only, so nothing printed from it can reach a terminal as a control sequence. confirmation.ts
+// checks what it saves against the same pattern.
+const URL_CHARS = "[A-Za-z0-9\\-._~:/?#@!$&()*+,;=%]";
+const LINK_SOURCE = `https://(?:mail-settings\\.google\\.com/${URL_CHARS}+|mail\\.google\\.com/${URL_CHARS}*vf-${URL_CHARS}*)`;
+const MAX_CONFIRMATION_LINK = 2000;
+const CONFIRMATION_LINK = new RegExp(LINK_SOURCE);
+export const isConfirmationLink = (link: string): boolean => link.length <= MAX_CONFIRMATION_LINK && new RegExp(`^${LINK_SOURCE}$`).test(link);
 
 export type ParsedMail = { subject: string; text: string; html: string };
 export type Confirmation = { code: string | null; link: string | null };
@@ -83,7 +89,7 @@ const htmlText = (html: string): string =>
     .replace(/&amp;/gi, "&");
 const linkIn = (mail: ParsedMail): string | null => {
   const link = CONFIRMATION_LINK.exec(mail.text)?.[0] ?? CONFIRMATION_LINK.exec(mail.html.replace(/&amp;/gi, "&"))?.[0] ?? null;
-  return link !== null && link.length <= MAX_LINK ? link : null;
+  return link !== null && isConfirmationLink(link) ? link : null;
 };
 
 /**
@@ -98,7 +104,7 @@ export function forwardingConfirmation(proven: ProvenSender[], mail: ParsedMail)
   const bodyCode = BODY_CODE.exec(mail.text)?.[1] ?? BODY_CODE.exec(htmlText(mail.html))?.[1] ?? null;
   const code = subjectCode ?? bodyCode;
   const link = linkIn(mail);
-  if (GOOGLE_CONFIRMATION_SENDER.test(from) && (code !== null || link !== null)) return { confirmation: { code, link }, ignored: null };
+  if (GOOGLE_CONFIRMATION_SENDERS.has(from) && (code !== null || link !== null)) return { confirmation: { code, link }, ignored: null };
   // Control characters out and length bounded: the subject reaches the log, its digits never do.
   const subject = mail.subject.replace(/\d/g, "#").replace(/[\p{Cc}\p{Cf}]/gu, " ").slice(0, 200);
   return { confirmation: null, ignored: { from, subjectMatched: subjectCode !== null, bodyMatched: bodyCode !== null, subject } };

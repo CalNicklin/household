@@ -1,6 +1,7 @@
 import { readFile, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { z } from "zod";
+import { isConfirmationLink } from "./verify.ts";
 
 /**
  * HOU-150: Gmail sends a code to a new forwarding address before it will forward to it. The receiver
@@ -13,8 +14,8 @@ const FILE = "forwarding-confirmation.json";
 const FRESH_MS = 60 * 60 * 1000;
 const zSaved = z.object({
   code: z.string().regex(/^\d{6,12}$/).nullable(),
-  // URL characters only (verify.ts), so printing it can't write control sequences to a terminal.
-  link: z.string().max(2000).regex(/^https:\/\/mail(-settings)?\.google\.com\/[A-Za-z0-9\-._~:/?#@!$&()*+,;=%]*$/).nullable(),
+  // The pattern verify.ts reads it with: URL characters only, so printing it can't write control sequences.
+  link: z.string().refine(isConfirmationLink).nullable(),
   at: z.iso.datetime(),
 });
 export type SavedConfirmation = { code: string | null; link: string | null };

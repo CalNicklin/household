@@ -132,8 +132,18 @@ describe("Gmail's forwarding confirmation", () => {
     expect((await fromGoogle(gmailConfirmation("cal@gmail.com", ORDERS, code, bodyOnly))).confirmation).toEqual({ code, link: LINK });
     const html = `<p>Confirmation code: <b>${code}</b></p><p><a href="https://mail.google.com/mail/vf-%5BANGjdJ%5D-x?a=1&amp;b=2">confirm</a></p>`;
     expect((await fromGoogle(gmailConfirmation("cal@gmail.com", ORDERS, code, { ...bodyOnly, body: html, html: true }))).confirmation).toEqual({ code, link: "https://mail.google.com/mail/vf-%5BANGjdJ%5D-x?a=1&b=2" });
-    for (const from of ["mail-noreply@google.com", "FORWARDING-NOREPLY@Google.com", '"Gmail-Team" <noreply@google.com>']) {
+    for (const from of ["mail-noreply@google.com", "FORWARDING-NOREPLY@Google.com", '"Gmail-Team" <forwarding-noreply@google.com>']) {
       expect((await fromGoogle(gmailConfirmation("cal@gmail.com", ORDERS, code, { from }))).confirmation?.code).toBe(code);
+    }
+  });
+
+  test("[HOU-169] Google mail whose text anyone chooses (a Drive share) is never the confirmation, however it is signed", async () => {
+    const code = newCode();
+    for (const from of ["drive-shares-dm-noreply@google.com", "drive-shares-noreply@google.com", "comments-noreply@google.com", "noreply@google.com"]) {
+      const share = gmailConfirmation("cal@gmail.com", ORDERS, code, { from, subject: `Document shared with you: "#${code}"` });
+      const result = await fromGoogle(share);
+      expect(result.confirmation).toBeNull();
+      expect(result.ignored?.from).toBe(from);
     }
   });
 
