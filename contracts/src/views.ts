@@ -152,7 +152,7 @@ export const VIEW_PERSON_HEADER = "x-household-person";
 
 /**
  * HOU-165: person-scoped views too private to keep on the device at all: today's conversation, the
- * settings (wellbeing scores, PRV-2) and the agent's runs and traces (what was said). They are sent
+ * settings (wellbeing scores, PRV-2) and the agent's runs, run log and traces (what was said). They are sent
  * `Cache-Control: no-store`, which the service worker respects, so they never show offline.
  */
-export const NO_STORE_VIEWS = ["conversation", "settings", "run", "trace"] as const;
+export const NO_STORE_VIEWS = ["conversation", "settings", "run", "runLog", "trace"] as const;

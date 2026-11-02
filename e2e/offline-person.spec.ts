@@ -25,6 +25,11 @@ test("[HOME-6] (HOU-165) on a shared iPad one person's offline views never show 
   await expect(page.getByText("Hang the washing out")).toBeVisible();
   await say(page, "remind me to ring the dentist");
   await expect(page.getByText("“remind me to ring the dentist”")).toBeVisible();
+  // She also looks at the week; Tom never does, so only her copy of it could ever be on the iPad.
+  await page.goto("/week");
+  await expect.poll(async () => (await keptUrls(page)).find((u) => u.includes("/api/trpc/week"))).toBeTruthy();
+  const week = (await keptUrls(page)).find((u) => u.includes("/api/trpc/week")) ?? "";
+  await page.goto("/");
   await expect.poll(() => kept(page)).toEqual(["household-views:priya"]);
   // Today's conversation is sent no-store, so it is never kept on the device.
   expect((await keptUrls(page)).some((u) => u.includes("/api/trpc/conversation"))).toBe(false);
@@ -45,6 +50,8 @@ test("[HOME-6] (HOU-165) on a shared iPad one person's offline views never show 
   await expect(page.getByText("Hang the washing out")).toBeVisible();
   await expect(page.getByText("remind me to ring the dentist")).toHaveCount(0);
   expect(await kept(page)).toEqual(["household-views:tom"]);
+  // Priya's week is not served to Tom offline: with no copy of his own, there is no answer at all.
+  expect(await page.evaluate((url) => fetch(url).then(() => "answered", () => "none"), week)).toBe("none");
   await evidence(page, "HOU-165-tom-offline-none-of-priya");
   await ctx.close();
 });
