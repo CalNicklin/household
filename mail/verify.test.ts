@@ -123,7 +123,7 @@ describe("Gmail's forwarding confirmation", () => {
     expect(forwardingConfirmation(signedMisaligned.proven, await parsed(misaligned)).confirmation).toBeNull();
   });
 
-  test("[HOU-169] real-shaped variants: encoded subject, code later in the subject, code only in the body, another google.com sender", async () => {
+  test("[HOU-169] real-shaped variants: encoded subject, code later in the subject, code only in the body, the sender in any case or display name", async () => {
     const code = newCode();
     const encoded = `=?UTF-8?B?${Buffer.from(`(#${code}) Gmail Forwarding Confirmation - Receive Mail from cal@gmail.com`).toString("base64")}?=`;
     expect((await fromGoogle(gmailConfirmation("cal@gmail.com", ORDERS, code, { subject: encoded }))).confirmation?.code).toBe(code);
@@ -132,14 +132,14 @@ describe("Gmail's forwarding confirmation", () => {
     expect((await fromGoogle(gmailConfirmation("cal@gmail.com", ORDERS, code, bodyOnly))).confirmation).toEqual({ code, link: LINK });
     const html = `<p>Confirmation code: <b>${code}</b></p><p><a href="https://mail.google.com/mail/vf-%5BANGjdJ%5D-x?a=1&amp;b=2">confirm</a></p>`;
     expect((await fromGoogle(gmailConfirmation("cal@gmail.com", ORDERS, code, { ...bodyOnly, body: html, html: true }))).confirmation).toEqual({ code, link: "https://mail.google.com/mail/vf-%5BANGjdJ%5D-x?a=1&b=2" });
-    for (const from of ["mail-noreply@google.com", "FORWARDING-NOREPLY@Google.com", '"Gmail-Team" <forwarding-noreply@google.com>']) {
+    for (const from of ["FORWARDING-NOREPLY@Google.com", '"Gmail-Team" <forwarding-noreply@google.com>']) {
       expect((await fromGoogle(gmailConfirmation("cal@gmail.com", ORDERS, code, { from }))).confirmation?.code).toBe(code);
     }
   });
 
-  test("[HOU-169] Google mail whose text anyone chooses (a Drive share) is never the confirmation, however it is signed", async () => {
+  test("[HOU-169] Google mail anyone can have sent here (a Drive share, a Send-mail-as verification) is never the confirmation, however it is signed", async () => {
     const code = newCode();
-    for (const from of ["drive-shares-dm-noreply@google.com", "drive-shares-noreply@google.com", "comments-noreply@google.com", "noreply@google.com"]) {
+    for (const from of ["mail-noreply@google.com", "drive-shares-dm-noreply@google.com", "drive-shares-noreply@google.com", "comments-noreply@google.com", "noreply@google.com"]) {
       const share = gmailConfirmation("cal@gmail.com", ORDERS, code, { from, subject: `Document shared with you: "#${code}"` });
       const result = await fromGoogle(share);
       expect(result.confirmation).toBeNull();

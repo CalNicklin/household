@@ -61,9 +61,10 @@ export function provenSenders(auth: AuthenticateResult, envelopeFrom: string, re
  * a proven Google message says is read tolerantly: any forwarding/noreply sender at google.com, the
  * code anywhere in the (already RFC 2047-decoded) subject or else in the body, and the confirmation link.
  */
-// Exact addresses, never a pattern: other google.com senders (Drive shares, comments) carry text that
-// anyone can choose, so they must never count as the confirmation, however they are signed.
-const GOOGLE_CONFIRMATION_SENDERS = new Set(["forwarding-noreply@google.com", "mail-noreply@google.com"]);
+// One exact address, never a pattern: other google.com senders carry text anyone can choose (Drive
+// shares, comments) or a code anyone can have sent here (mail-noreply@'s "Send mail as" verification),
+// so they never count as the forwarding confirmation, however they are signed.
+const GMAIL_FORWARDING_SENDER = "forwarding-noreply@google.com";
 const SUBJECT_CODE = /#\s*(\d{6,12})(?!\d)/;
 const BODY_CODE = /\bcode\b[^\d\n]{0,20}?(\d{6,12})(?!\d)/i;
 // The one-time link: mail-settings.google.com/…, or mail.google.com/… with Gmail's vf- token. URL
@@ -104,7 +105,7 @@ export function forwardingConfirmation(proven: ProvenSender[], mail: ParsedMail)
   const bodyCode = BODY_CODE.exec(mail.text)?.[1] ?? BODY_CODE.exec(htmlText(mail.html))?.[1] ?? null;
   const code = subjectCode ?? bodyCode;
   const link = linkIn(mail);
-  if (GOOGLE_CONFIRMATION_SENDERS.has(from) && (code !== null || link !== null)) return { confirmation: { code, link }, ignored: null };
+  if (from === GMAIL_FORWARDING_SENDER && (code !== null || link !== null)) return { confirmation: { code, link }, ignored: null };
   // Control characters out and length bounded: the subject reaches the log, its digits never do.
   const subject = mail.subject.replace(/\d/g, "#").replace(/[\p{Cc}\p{Cf}]/gu, " ").slice(0, 200);
   return { confirmation: null, ignored: { from, subjectMatched: subjectCode !== null, bodyMatched: bodyCode !== null, subject } };

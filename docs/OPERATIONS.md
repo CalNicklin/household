@@ -700,9 +700,9 @@ given `--mail-domain`, so until then a deploy runs exactly the four containers a
   the link if there was one, if it came within the hour, and nothing else. Both are one-time and expire.
   The deploy user can't run it.
   - Its sender is proven strictly: an `@google.com` From with a passing, aligned google.com DKIM
-    signature (HOU-169). What it says is read tolerantly, from Gmail's own senders only (`forwarding-noreply@google.com`,
-    `mail-noreply@google.com`; never a pattern, since Drive shares and comments are google.com-signed
-    text anyone chooses): the
+    signature (HOU-169). Only `forwarding-noreply@google.com` counts, never a pattern or another
+    google.com sender: Drive shares carry text anyone chooses, and anyone can have `mail-noreply@`'s
+    "Send mail as" verification sent here. From that sender, what it says is read tolerantly: the
     code anywhere in the decoded subject (`#123456789`) or else in the text or HTML body
     (`Confirmation code: 123456789`), and a `https://mail-settings.google.com/…` or
     `https://mail.google.com/…vf-…` link.
