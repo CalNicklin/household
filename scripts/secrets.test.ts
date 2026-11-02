@@ -44,7 +44,7 @@ describe("the secret scan in pnpm check", () => {
     expect(
       flagged({
         "runtime.ts": "const TOKEN = randomBytes(18).toString(\"base64url\");",
-        "practice.ts": "login({ username: \"priya\", password: Practice.login });",
+        "practice.ts": "export const PASSWORD = Practice.login;",
         "compose.yml": "POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?run pnpm env:init first}",
         "empty.env": "ANTHROPIC_API_KEY=",
         "regex.ts": "env.replace(/^MCP_TOKEN=.*$/m, \"MCP_TOKEN=\");",
