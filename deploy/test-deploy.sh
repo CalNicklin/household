@@ -273,7 +273,9 @@ echo "an invalid site was refused, naming $sites/monitor.caddy:2; Caddy, the hou
 # No sites again: the house goes back to exactly its own Caddy.
 rm "$sites"/*.caddy
 deploy_sites sites-none || fail "a deploy with an empty sites directory failed"
-[ "$(docker inspect -f '{{range .Mounts}}{{.Destination}} {{end}}{{.HostConfig.ExtraHosts}}' household-caddy-1)" = "/config /data /etc/caddy/Caddyfile []" ] || fail "Caddy kept the sites after they were removed"
+# (The previews' overlay stays on: Caddy has its mounts, and none of the sites'.)
+[ "$(docker inspect -f '{{range .Mounts}}{{.Destination}} {{end}}{{.HostConfig.ExtraHosts}}' household-caddy-1)" = "/config /data /etc/caddy/Caddyfile /etc/caddy/previews/previews.caddy /previews []" ] || fail "Caddy kept the sites after they were removed"
+[[ "$(from_preview 443 localhost)" == answered* ]] || fail "without sites, Caddy is not back to listening as before"
 house_ok "after the sites were removed"
 [ "$(trader_code)" != 401 ] || fail "the trader site is still served"
 if grep -lF -e "$site_password" "$work"/*.log; then fail "the site's password was printed"; fi
