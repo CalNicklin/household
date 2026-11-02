@@ -880,6 +880,15 @@ and the trader side owns them, the services behind them, and their logins.
 - **What the overlay gives Caddy:** the directory, read-only at `/etc/caddy/sites`, and the name
   `host.docker.internal` for the host (`extra_hosts: host-gateway`). No port, network, volume or memory
   of the house's changes; only 80 and 443 stay public.
+- **The PR previews can't reach the sites.** The house's Caddy is also on the internal
+  `household-previews` network, so a preview could connect to it and ask for `trader.example.com`, and
+  Caddy would proxy it to the host. So while sites are served, the overlay adds `deploy/Caddyfile.sites`
+  (`default_bind`) to Caddy's global options. Every site, the house's and the imported ones, then
+  listens only on Caddy's front address, the source address of its default route. That address is on the
+  house's own network, where Docker delivers ports 80 and 443; the previews' network is internal, with
+  no gateway. A preview that connects to Caddy finds nothing listening (`deploy/test-deploy.sh` shows it
+  refused on 80 and 443 while the host reaches the site). A site file must not set its own `bind`,
+  which would undo this. Caddy listens on IPv4 only then; the house's Docker networks have no IPv6.
 - **Validated before it is used:** before switching anything, `household-deploy` runs Caddy's whole
   config, sites included, through `caddy validate` in a throwaway Caddy. If a file is invalid, the deploy
   stops, naming the file and line (`Error: … /etc/household/sites/monitor.caddy:2: unrecognized directive: …`),
