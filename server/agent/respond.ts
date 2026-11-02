@@ -75,13 +75,13 @@ async function respondToReminder(scope: JobScope, ref: string, action: ActionKin
     return to === addLocalDays(date, 1) ? `Moved to tomorrow: ${reminder.text}.` : `Moved to ${longDate(to)}: ${reminder.text}.`;
   }
   // HOU-174: a person's Change time or Delete on the reminder (PRV-1: they asked). Never from an email,
-  // whose words are someone else's.
-  if ((action === ActionKind.retime || action === ActionKind.cancel) && scope.channel === Channel.email) return "";
-  if (action === ActionKind.retime) {
+  // whose words are someone else's: this is the one place both actions reach, so the refusal is here.
+  if (action === ActionKind.retime || action === ActionKind.cancel) {
+    if (scope.channel === Channel.email) return "";
+    if (action === ActionKind.cancel) return (await cancelReminder(scope, reminder)).say;
     if (value === null || !zLocalTime.safeParse(value).success) return "What time should it be?";
     return (await changeReminder(scope, reminder, { date: reminder.date, time: value })).say;
   }
-  if (action === ActionKind.cancel) return (await cancelReminder(scope, reminder)).say;
   return "Noted.";
 }
 
