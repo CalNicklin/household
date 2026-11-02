@@ -2,7 +2,7 @@ import { TimerKind, zTimerKind } from "@household/contracts";
 import type { Hono } from "hono";
 import { z } from "zod";
 import { PRACTICE_START } from "../../practice/data.ts";
-import { InMemoryEpisodicMemory, PracticeCalendar, PracticeClock, PracticeMessenger } from "../../practice/fakes.ts";
+import { InMemoryEpisodicMemory, PracticeCalendar, PracticeClock, PracticeMessenger, PracticeWeather } from "../../practice/fakes.ts";
 import { truncateAndSeed } from "../../practice/seed.ts";
 import { acceptTimer } from "../coordinator/accept.ts";
 import { NoShoppingHelper } from "../integrations/shopping-helper.ts";
@@ -36,9 +36,10 @@ export function practiceRoutes(rt: Runtime) {
     /**
      * FB-5 / FB-6: a fresh practice household in place, for previews and e2e. With `empty`, a
      * brand-new house instead (HOU-149): the people and logins only, and no plan until someone looks.
+     * With `weatherDown`, the weather service is down from the start (HOU-170).
      */
     app.post("/api/practice/reset", async (c) => {
-      const body = z.object({ at: z.iso.datetime({ offset: true }).default(PRACTICE_START), empty: z.boolean().default(false) }).parse(await c.req.json().catch(() => ({})));
+      const body = z.object({ at: z.iso.datetime({ offset: true }).default(PRACTICE_START), empty: z.boolean().default(false), weatherDown: z.boolean().default(false) }).parse(await c.req.json().catch(() => ({})));
       const ports = rt.ports;
       if (!(ports.clock instanceof PracticeClock)) return c.json({ error: "not the practice household" }, 400);
       ports.clock.set(body.at, true);
@@ -47,6 +48,8 @@ export function practiceRoutes(rt: Runtime) {
         else ports.calendar.reset();
       }
       if (ports.messenger instanceof PracticeMessenger) ports.messenger.sent.length = 0;
+      // HOU-170: with `weatherDown`, the house plans its day through a weather outage.
+      if (ports.weather instanceof PracticeWeather) ports.weather.down = body.weatherDown;
       if (ports.memory instanceof InMemoryEpisodicMemory) ports.memory.banks.clear();
       ports.shopping = helper;
       await truncateAndSeed(rt.dbs, new Date(body.at), { empty: body.empty });

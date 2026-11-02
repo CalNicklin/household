@@ -1,7 +1,7 @@
 /** Router inputs (CODE-5). Outputs are the records in domain.ts and blocks.ts. */
 import { z } from "zod";
 import { zBlock } from "./blocks.ts";
-import { zArrival, zCalendarCopy, zCalendarWatch, zJob, zLearningEvent, zListItem, zNurseryEvent, zPersonSettings, zProductOption, zQuestion, zRhythm, zRuleSpec, zTelegramUserId } from "./domain.ts";
+import { zArrival, zCalendarCopy, zCalendarWatch, zHourlyForecast, zJob, zLearningEvent, zListItem, zNurseryEvent, zPersonSettings, zProductOption, zQuestion, zRhythm, zRuleSpec, zTelegramUserId } from "./domain.ts";
 import { LongTool, zActionKind, zBacklogTag, zChannel, zDeliveryChannel, zListWriteOutcome, zLongTool, zModeKind, zModelProvider, zNotificationStatus, zShoppingStatus, zTimerKind } from "./enums.ts";
 import { zInboundMessage, zNotifyInput } from "./message.ts";
 
@@ -85,6 +85,7 @@ export const zDateInput = z.object({ date: z.iso.date() });
 export const zSavePlanInput = z.object({ date: z.iso.date(), blocks: z.array(zBlock), inputs: z.record(z.string(), z.unknown()), trigger: z.string(), jobId: z.string().nullable() });
 export const zRespondInput = z.object({ ref: z.string(), action: zActionKind, channel: zChannel, date: z.iso.date(), value: z.string().nullable() });
 export const zHandOverInput = z.object({ ref: z.string(), title: z.string(), to: z.string() });
+export const zSaveForecastInput = z.object({ date: z.iso.date(), hours: z.array(zHourlyForecast) });
 export const zOfferInput = z.object({ itemId: z.string(), date: z.iso.date(), person: z.string().nullable() });
 /**
  * HOME-1 / CH-6: one sync of every calendar the house reads. `calendarIds` are the calendars read now;

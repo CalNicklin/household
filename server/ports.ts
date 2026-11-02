@@ -2,7 +2,7 @@
  * Everything outside the house. Each port has a real adapter and a practice-household fake (QA-9);
  * nothing else in the server talks to the outside world.
  */
-import type { CalendarCopy, HouseCalendar, LocalDate, ProductOption } from "@household/contracts";
+import type { CalendarCopy, HourlyForecast, HouseCalendar, LocalDate, ProductOption } from "@household/contracts";
 
 export interface Clock {
   now(): Date;
@@ -39,7 +39,7 @@ export interface CalendarPush {
   close(channel: { id: string; resourceId: string }): Promise<void>;
 }
 
-export type HourlyForecast = { hour: string; precipitationProbability: number; temperatureC: number };
+export type { HourlyForecast } from "@household/contracts";
 
 export interface WeatherSource {
   hourly(date: LocalDate, latitude: number, longitude: number, timeZone: string): Promise<HourlyForecast[]>;

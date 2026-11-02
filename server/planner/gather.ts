@@ -1,4 +1,4 @@
-import { ActionKind, type BacklogItem, BacklogStatus, BacklogTag, BlockType, type LocalDate, NotificationStatus, type NotifyAction } from "@household/contracts";
+import { ActionKind, type BacklogItem, BacklogStatus, BacklogTag, BlockType, type HourlyForecast, Limits, type LocalDate, NotificationStatus, type NotifyAction } from "@household/contracts";
 import { findSlot, partOfDay } from "../rules/fit.ts";
 import { adultsOf, type HouseFacts, nameOf } from "../rules/day.ts";
 import type { Runtime } from "../runtime.ts";
@@ -12,11 +12,7 @@ export async function gatherFacts(rt: Runtime, from: LocalDate, days: number): P
   const settings = await api.household.settings();
   const start = startOfLocalDay(addLocalDays(from, -1), rt.timeZone).toISOString();
   const end = startOfLocalDay(addLocalDays(from, days + 1), rt.timeZone).toISOString();
-  const forecast: HouseFacts["forecast"] = {};
-  for (let d = 0; d < days; d++) {
-    const date = addLocalDays(from, d);
-    forecast[date] = await rt.ports.weather.hourly(date, settings.latitude, settings.longitude, rt.timeZone);
-  }
+  const forecast = await forecasts(rt, Array.from({ length: days }, (_, d) => addLocalDays(from, d)), settings.latitude, settings.longitude);
   return {
     timeZone: rt.timeZone,
     latitude: settings.latitude,
@@ -32,6 +28,69 @@ export async function gatherFacts(rt: Runtime, from: LocalDate, days: number): P
     modes: await api.household.modesBetween({ from: start, to: end }),
     forecast,
   };
+}
+
+/** When each weather source last failed its retries (in-process; a restart simply tries afresh). */
+const downAt = new WeakMap<object, number>();
+
+/**
+ * HOU-170: weather is an input, not a requirement. Each date's forecast is fetched and kept (PLT-3);
+ * a transient failure gets a short bounded retry, then the last good forecast for that date stands
+ * in, or none, which the rules read as "not known": nothing that needs dry weather fires and the
+ * context line says the forecast isn't available. One warning per outage, never a failed plan.
+ */
+export async function forecasts(rt: Runtime, dates: readonly LocalDate[], latitude: number, longitude: number): Promise<Record<LocalDate, HourlyForecast[]>> {
+  const api = rt.system("weather");
+  const out: Record<LocalDate, HourlyForecast[]> = {};
+  let down: { status: number | null; error: string } | null = null;
+  for (const date of dates) {
+    if (down === null) {
+      let hours: HourlyForecast[] | null = null;
+      try {
+        // limit: weatherDownForMs
+        const recentlyDown = Date.now() - (downAt.get(rt.ports.weather) ?? -Infinity) < Limits.weatherDownForMs.value;
+        hours = await withRetry(() => rt.ports.weather.hourly(date, latitude, longitude, rt.timeZone), recentlyDown ? 1 : undefined);
+        downAt.delete(rt.ports.weather);
+      } catch (e) {
+        downAt.set(rt.ports.weather, Date.now());
+        down = { status: statusOf(e), error: e instanceof Error ? e.name : "unknown" };
+        console.warn(JSON.stringify({ event: "weather-unavailable", status: down.status, error: down.error, date }));
+      }
+      // Outside the try: a database fault is not a weather outage, and fails the plan as it should.
+      if (hours !== null) {
+        await api.plans.saveForecast({ date, hours });
+        out[date] = hours;
+        continue;
+      }
+    }
+    out[date] = (await api.plans.forecast({ date }))?.hours ?? [];
+  }
+  return out;
+}
+
+/** A 5xx, a 429 or a network failure or timeout is worth another try; anything else (a 4xx, a bad body) is not. */
+function transient(e: unknown): boolean {
+  const status = statusOf(e);
+  if (status !== null) return status >= 500 || status === 429;
+  return e instanceof TypeError || (e instanceof Error && (e.name === "TimeoutError" || e.name === "AbortError"));
+}
+
+/** The HTTP status an integration's error carries (`IntegrationError.status`), if any. */
+function statusOf(e: unknown): number | null {
+  return e instanceof Error && "status" in e && typeof e.status === "number" ? e.status : null;
+}
+
+// limit: weatherAttempts
+async function withRetry<T>(call: () => Promise<T>, attempts: number = Limits.weatherAttempts.value): Promise<T> {
+  for (let attempt = 1; ; attempt++) {
+    try {
+      return await call();
+    } catch (e) {
+      if (attempt >= attempts || !transient(e)) throw e;
+      // limit: weatherRetryDelayMs
+      await new Promise((r) => setTimeout(r, Limits.weatherRetryDelayMs.value * 2 ** (attempt - 1)));
+    }
+  }
 }
 
 export type PickCandidate = BacklogPick & { slotDate: LocalDate; dayPart: string; who: string[] };

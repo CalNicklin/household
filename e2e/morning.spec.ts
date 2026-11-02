@@ -115,3 +115,14 @@ test("[HOME-11] tomorrow's plan is ready by 6am even if nobody opens the app", a
   expect((await phone(request, "1001")).length).toBeGreaterThanOrEqual(0);
   await evidence(page, "HOME-11-ready-by-6");
 });
+
+test("[HOME-2][PRO-4] HOU-170: with the weather service down, the day is still planned and the context line says the forecast isn't available", async ({ page, request }) => {
+  await reset(request, "2026-11-02T07:00:00.000Z", { weatherDown: true });
+  await login(page);
+  await expect(page.getByRole("heading", { name: "Monday 2 November" })).toBeVisible();
+  await expect(page.getByText(/^Forecast not available · dark by \d\d:\d\d · both home/)).toBeVisible();
+  await expect(page.getByText("Nursery drop-off")).toBeVisible();
+  // Nothing that needs dry weather is suggested on a guess.
+  await expect(page.getByText("Dry until 2pm and you're both in all day")).toHaveCount(0);
+  await evidence(page, "HOME-2-weather-down");
+});

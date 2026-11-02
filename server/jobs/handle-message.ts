@@ -6,7 +6,7 @@ import { subjectFor } from "../agent/respond.ts";
 import { reply } from "../notify/notify.ts";
 import { localDate, longDate } from "../time.ts";
 import { jobRuntime } from "./context.ts";
-import { applyEffects } from "./effects.ts";
+import { applyEffects, type ReplanFailure } from "./effects.ts";
 import { runTimer } from "./timers.ts";
 
 type Meta = {
@@ -65,6 +65,11 @@ async function agentStep(jobId: string, messageId: string, meta: Meta): Promise<
   return { ...result, effects: scope.effects, toolCalls };
 }
 
+/** HOU-170: a failed re-plan is on the job's record, beside the tools that succeeded; it is being retried. */
+function replanRecords(failures: readonly ReplanFailure[]): ToolCall[] {
+  return failures.map((f) => ({ tool: "replan", input: { date: f.date }, output: { failed: f.error, retrying: true } }));
+}
+
 async function handleMessageImpl(messageId: string): Promise<void> {
   const rt = jobRuntime();
   const jobId = DBOS.workflowID ?? `job-${messageId}`;
@@ -104,14 +109,16 @@ async function handleMessageImpl(messageId: string): Promise<void> {
       effects.replan = changed.changedDates.filter((d) => d >= today);
       // HOU-149: the first sync connects the calendar, which today's "Getting started" cards talk about.
       if (changed.firstSync && !effects.replan.includes(today)) effects.replan.unshift(today);
-      usage = await applyEffects(jobId, effects, null);
-      toolCalls = [{ tool: "calendar-sync", input: {}, output: { changedDates: changed.changedDates } }];
+      const applied = await applyEffects(jobId, effects, null);
+      usage = { inputTokens: applied.inputTokens, outputTokens: applied.outputTokens, costMicros: applied.costMicros };
+      toolCalls = [{ tool: "calendar-sync", input: {}, output: { changedDates: changed.changedDates } }, ...replanRecords(applied.replanFailures)];
     } else {
       const step = await DBOS.runStep(() => agentStep(jobId, messageId, meta), { name: "agent" });
       intent = step.intent;
       toolCalls = step.toolCalls;
       await DBOS.runStep(() => reply(rt, messageId, meta.person, meta.channel, step.reply), { name: "reply" });
       const more = await applyEffects(jobId, step.effects, meta.person);
+      toolCalls = [...toolCalls, ...replanRecords(more.replanFailures)];
       usage = { inputTokens: step.inputTokens + more.inputTokens, outputTokens: step.outputTokens + more.outputTokens, costMicros: step.costMicros + more.costMicros };
     }
   } catch (e) {

@@ -1,4 +1,4 @@
-import type { LocalDate } from "@household/contracts";
+import { Limits, type LocalDate } from "@household/contracts";
 import { z } from "zod";
 import type { HourlyForecast, WeatherSource } from "../ports.ts";
 import { defaultFetch, expectOk, type Fetch } from "./http.ts";
@@ -28,7 +28,8 @@ export class OpenMeteoWeather implements WeatherSource {
     url.searchParams.set("timezone", timeZone);
     url.searchParams.set("start_date", date);
     url.searchParams.set("end_date", date);
-    const response = await expectOk(await this.#fetch(url.toString()), "Open-Meteo forecast");
+    // limit: weatherTimeoutMs
+    const response = await expectOk(await this.#fetch(url.toString(), { signal: AbortSignal.timeout(Limits.weatherTimeoutMs.value) }), "Open-Meteo forecast");
     const body = zForecast.parse(await response.json());
     return body.hourly.time.map((time, i) => ({
       hour: `${time.slice(0, 13)}:00`,
