@@ -51,7 +51,7 @@ function ListPanel({ list }: { list: List }) {
   const removeItem = useMutation(trpc.removeListItem.mutationOptions());
   const update = useMutation(trpc.updateList.mutationOptions(settle));
   const removeList = useMutation(trpc.removeList.mutationOptions(settle));
-  const { isDeleted, remove } = useUndo();
+  const { isDeleted, remove, flush } = useUndo();
   const [editing, setEditing] = useState(false);
   const [deleting, setDeleting] = useState(false);
   /**
@@ -123,7 +123,11 @@ function ListPanel({ list }: { list: List }) {
       adder={
         <AddItemField
           label={`Add an item to ${list.name}`}
-          onAdd={(text) => saved(() => add.mutateAsync({ listId: list.id, text }), text)}
+          onAdd={async (text) => {
+            // A delete still in its Undo window is sent first, so "milk" re-added is a new item (AR-5).
+            await flush();
+            return saved(() => add.mutateAsync({ listId: list.id, text }), text);
+          }}
         />
       }
     >

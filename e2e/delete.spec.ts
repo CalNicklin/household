@@ -162,3 +162,19 @@ test("[PRV-1] a delete that does not go through comes back, and the screen says 
   await expect(toast(page).getByRole("button", { name: "Undo" })).toHaveCount(0);
   await expect(item(page, "kitchen roll")).toBeVisible();
 });
+
+test("[PRV-1][CAP-6] an item deleted and added again inside the Undo window is added, and stays", async ({ page }) => {
+  await page.clock.install();
+  await login(page);
+  await page.goto("/lists");
+  await list(page, "Shopping").getByRole("button", { name: "Delete kitchen roll" }).click();
+  await expect(item(page, "kitchen roll")).toHaveCount(0);
+  const add = list(page, "Shopping").getByRole("textbox", { name: "Add an item to Shopping" });
+  await add.fill("kitchen roll");
+  await add.press("Enter");
+  await expect(item(page, "kitchen roll")).toBeVisible();
+  await expect(list(page, "Shopping").getByRole("alert")).toHaveCount(0);
+  await letUndoLapse(page);
+  await page.reload();
+  await expect(item(page, "kitchen roll")).toBeVisible();
+});

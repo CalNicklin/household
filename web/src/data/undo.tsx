@@ -19,6 +19,11 @@ type Undo = {
   /** Take `key` off the screen, show `message` with Undo, and run `commit` when the window ends. */
   remove: (key: string, message: string, commit: () => Promise<unknown>) => void;
   undo: () => void;
+  /**
+   * Send the pending delete now, and resolve once it has landed (or failed). An add waits for this,
+   * so re-adding something just deleted makes a new item rather than finding the old one (AR-5).
+   */
+  flush: () => Promise<void>;
 };
 
 const Ctx = createContext<Undo | null>(null);
@@ -37,13 +42,13 @@ export function UndoProvider({ children }: { children: ReactNode }) {
   const restore = useCallback((key: string) => setDeleted((prev) => new Set([...prev].filter((k) => k !== key))), []);
 
   /** Send the pending delete now. */
-  const flush = useCallback(() => {
+  const flush = useCallback((): Promise<void> => {
     clearTimer();
     const p = current.current;
     current.current = null;
     setPending(null);
-    if (p === null) return;
-    void p.commit().then(
+    if (p === null) return Promise.resolve();
+    return p.commit().then(
       () => queryClient.invalidateQueries(),
       () => {
         restore(p.key);
@@ -52,17 +57,17 @@ export function UndoProvider({ children }: { children: ReactNode }) {
         // limit: undoWindowMs
         window.setTimeout(() => setPending((now) => (now?.key === p.key && !now.undoable ? null : now)), Limits.undoWindowMs.value);
       },
-    );
+    ).then(() => undefined);
   }, [clearTimer, queryClient, restore]);
 
   const remove = useCallback(
     (key: string, message: string, commit: () => Promise<unknown>) => {
-      flush();
+      void flush();
       setDeleted((prev) => new Set([...prev, key]));
       current.current = { key, message, commit };
       setPending({ key, message, undoable: true });
       // limit: undoWindowMs
-      timer.current = window.setTimeout(flush, Limits.undoWindowMs.value);
+      timer.current = window.setTimeout(() => void flush(), Limits.undoWindowMs.value);
     },
     [flush],
   );
@@ -81,11 +86,11 @@ export function UndoProvider({ children }: { children: ReactNode }) {
     const onVisibility = () => {
       const hidden = document.visibilityState === "hidden";
       setLeaving(hidden);
-      if (hidden) flush();
+      if (hidden) void flush();
     };
     const onPageHide = () => {
       setLeaving(true);
-      flush();
+      void flush();
     };
     const onPageShow = () => setLeaving(false);
     document.addEventListener("visibilitychange", onVisibility);
@@ -99,7 +104,7 @@ export function UndoProvider({ children }: { children: ReactNode }) {
   }, [flush]);
 
   const isDeleted = useCallback((key: string) => deleted.has(key), [deleted]);
-  const value = useMemo(() => ({ pending, isDeleted, remove, undo }), [pending, isDeleted, remove, undo]);
+  const value = useMemo(() => ({ pending, isDeleted, remove, undo, flush }), [pending, isDeleted, remove, undo, flush]);
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
 
