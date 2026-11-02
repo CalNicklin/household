@@ -1,4 +1,4 @@
-import { type AnswerPick, type ConversationView, ExchangeState, JobStatus, zAnswerPick } from "@household/contracts";
+import { ActionKind, type AnswerPick, type ConversationView, ExchangeState, JobStatus, zAnswerPick } from "@household/contracts";
 import type { Runtime } from "../runtime.ts";
 import { localDate, startOfLocalDay } from "../time.ts";
 
@@ -14,12 +14,14 @@ function pickOf(toolCalls: readonly { tool: string; output: unknown }[]): Answer
  * HOU-159: today's conversation between this person and the house, oldest first: each thing they
  * said in the app (taps are not things said) and the house's reply. Only today's, in the house's
  * time zone, so yesterday's is gone. HOU-149: an answer from `what_now` also carries the one thing
- * it named, so the screen shows the thing and its reason rather than prose.
+ * it named, so the screen shows the thing and its reason rather than prose. HOU-173: an accept tap
+ * is the exception, so its answer ("Pencilled in for Wednesday morning") shows as the confirmation.
  */
 export async function conversationView(rt: Runtime, person: string): Promise<ConversationView> {
   const api = rt.system("views");
   const since = startOfLocalDay(localDate(rt.ports.clock.now(), rt.timeZone), rt.timeZone).toISOString();
-  const exchanges = (await api.jobs.exchanges({ person, since })).filter((e) => !e.tap);
+  // HOU-173: an accept is the one tap whose answer is news ("Pencilled in for Wednesday morning"), so it shows.
+  const exchanges = (await api.jobs.exchanges({ person, since })).filter((e) => !e.tap || e.action === ActionKind.accept);
   return exchanges.map((e) => {
     const said = e.redacted || e.text.trim() === "" ? null : e.text;
     if (e.reply !== null) return { id: e.id, said, saidAt: e.receivedAt, state: ExchangeState.answered, reply: { ...e.reply, pick: e.job === null ? null : pickOf(e.job.toolCalls) } };
