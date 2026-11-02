@@ -58,7 +58,13 @@ export async function ensurePostgres(): Promise<{ url: string; stop: () => Promi
   const fresh = !existsSync(path.join(EMBEDDED_DIR, "PG_VERSION"));
   if (fresh) {
     mkdirSync(path.dirname(EMBEDDED_DIR), { recursive: true });
-    writeFileSync(EMBEDDED_PASSWORD_FILE, randomBytes(18).toString("base64url"), { mode: 0o600 });
+    // Exclusive create: when two runs start the server for the first time at once, both use the one
+    // password that was written first, never one each.
+    try {
+      writeFileSync(EMBEDDED_PASSWORD_FILE, randomBytes(18).toString("base64url"), { mode: 0o600, flag: "wx" });
+    } catch (e) {
+      if (!(e instanceof Error && "code" in e && e.code === "EEXIST")) throw e;
+    }
   }
   const password = embeddedPassword();
   if (password === undefined) throw new Error(`${EMBEDDED_PASSWORD_FILE} is missing: delete ${EMBEDDED_DIR} (test data only) and it will be made again`);

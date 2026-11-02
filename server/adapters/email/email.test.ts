@@ -1,5 +1,4 @@
-import { Practice } from "@household/contracts";
-import { Limits } from "@household/contracts";
+import { Limits, Practice } from "@household/contracts";
 import type { Hono } from "hono";
 import { afterAll, beforeAll, describe, expect, test } from "vitest";
 import type { TestHousehold } from "../../testing/household.ts";

@@ -1,5 +1,4 @@
-import { Practice } from "@household/contracts";
-import { Limits } from "@household/contracts";
+import { Limits, Practice } from "@household/contracts";
 import { evidence, expect, login, reset, say, telegram, test } from "./fixtures.ts";
 
 test.beforeEach(async ({ request }) => reset(request));

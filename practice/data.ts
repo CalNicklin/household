@@ -1,9 +1,8 @@
-import { Practice } from "@household/contracts";
 /**
  * QA-9: the practice household. Made-up people, calendar, parcels and supermarket account.
  * Automations are proven here before they touch the real house.
  */
-import { BacklogTag, Channel, NurseryEventKind, PersonRole, Weekday } from "@household/contracts";
+import { BacklogTag, Channel, NurseryEventKind, PersonRole, Practice, Weekday } from "@household/contracts";
 
 export const PRACTICE_HOUSEHOLD = "practice";
 export const PRACTICE_TZ = "Europe/London";

@@ -1,5 +1,4 @@
-import { Practice } from "@household/contracts";
-import { type InboundMessage, JobStatus, zInboundMessage } from "@household/contracts";
+import { type InboundMessage, JobStatus, Practice, zInboundMessage } from "@household/contracts";
 import type { Hono } from "hono";
 import { type Adapter, type HttpEnv, loadAdapters } from "../adapters/registry.ts";
 import { createApp } from "../http/app.ts";
