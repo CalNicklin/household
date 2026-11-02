@@ -3,6 +3,8 @@ import { chmodSync, copyFileSync, mkdirSync, mkdtempSync, readdirSync, readFileS
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
+import { parse } from "yaml";
+import { z } from "zod";
 
 /**
  * HOU-175: the real household-common.sh, household-deploy.sh, -setup.sh and -restore.sh, run by bash against
@@ -222,5 +224,34 @@ describe("HOU-175: every command that starts the house validates the sites first
         expect(r.stderr, `${name} ${sites} named Caddy's path, not the server's`).not.toContain("/etc/caddy/sites/");
         expect(r.calls.filter((c) => /^docker compose (up|run --rm -T --no-deps app)/.test(c) || c.startsWith("restore.sh")), `${name} started something with ${sites} sites`).toEqual([]);
       }
+  });
+});
+
+describe("HOU-175: Caddy's front address (compose.caddy-sites.yml's entrypoint)", () => {
+  // The script compose runs, with compose's `$$` turned back into `$`, run by sh with a stand-in `ip`.
+  const caddyService = z.object({ services: z.object({ caddy: z.object({ entrypoint: z.array(z.string()), command: z.array(z.string()) }) }) });
+  const { entrypoint, command } = caddyService.parse(parse(readFileSync(path.join(deploy, "compose.caddy-sites.yml"), "utf8"))).services.caddy;
+  const script = (entrypoint[2] ?? "").replaceAll("$$", "$");
+  function start(route: string, run: string[]) {
+    const root = mkdtempSync(path.join(tmpdir(), "hou-175-front-"));
+    made.push(root);
+    writeFileSync(path.join(root, "ip"), `#!/bin/sh\n[ "$*" = "-4 route get 1.1.1.1" ] && printf '%s\\n' '${route}'\n`, { mode: 0o755 });
+    return spawnSync(entrypoint[0] ?? "", [entrypoint[1] ?? "", script, entrypoint[3] ?? "", ...run], { encoding: "utf8", env: { PATH: `${root}:/usr/bin:/bin` } });
+  }
+
+  it("[FB-5] sets CADDY_FRONT_IP to the default route's source address, then runs Caddy's command", () => {
+    expect(entrypoint.slice(0, 2)).toEqual(["/bin/sh", "-c"]);
+    expect(command).toEqual(["caddy", "run", "--config", "/etc/caddy/Caddyfile", "--adapter", "caddyfile"]);
+    // busybox ip's own output in caddy:2.10.2-alpine (two spaces before src).
+    const r = start("1.1.1.1 via 172.18.0.1 dev eth0  src 172.18.0.3 ", ["sh", "-c", 'echo "front=$CADDY_FRONT_IP args=$*"', "x", "run", "--config"]);
+    expect(r.status, r.stderr).toBe(0);
+    expect(r.stdout).toBe("front=172.18.0.3 args=run --config\n");
+  });
+
+  it("[FB-5] with no default route there is no front address, and Caddy doesn't start", () => {
+    const r = start("", ["sh", "-c", "echo started"]);
+    expect(r.status).toBe(1);
+    expect(r.stdout).toBe("");
+    expect(r.stderr).toContain("no default route, so no front address to serve on");
   });
 });

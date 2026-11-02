@@ -130,8 +130,8 @@ describe("HOU-175: other apps' sites on the house's Caddy", () => {
     // In the global options, so it binds the imported sites too; present only through the overlay's mount.
     expect(read("Caddyfile")).toMatch(/^\{\n\tadmin off\n(\t#.*\n)*\timport \/etc\/caddy\/front\/\*\.caddy\n/m);
     expect(read("Caddyfile.sites").replace(/^#.*\n/gm, "")).toBe("default_bind {$CADDY_FRONT_IP}\n");
-    // The entrypoint works it out at start; deploy/test-deploy.sh shows a preview refused while the site works,
-    // and deploy/sites.test.ts that the validation refuses any other listener.
+    // deploy/sites.test.ts runs the entrypoint that works out the front address, and the validation that
+    // refuses any other listener; deploy/test-deploy.sh shows a preview refused while the site works.
   });
 
   // The source lines that set this up; deploy/test-deploy.sh shows a non-root user can neither add nor change a site.
