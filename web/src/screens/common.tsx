@@ -1,4 +1,4 @@
-import { type Block, type ConversationView, ExchangeState, type NotifyAction } from "@household/contracts";
+import { ActionKind, type Block, type ConversationView, ExchangeState, type NotifyAction } from "@household/contracts";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect } from "react";
 import type { BlockHandlers } from "../blocks/BlockRenderer.tsx";
@@ -51,12 +51,15 @@ function useSay() {
 
 /** One-tap buttons: hide the block straight away (HOME-5), then send the tap as a message. */
 export function useBlockHandlers(version: number): BlockHandlers & { isHidden: (block: Block) => boolean } {
-  const { hidden, hide } = useUiState();
+  const { hidden, hide, markSaid } = useUiState();
   const queryClient = useQueryClient();
+  const newestExchange = useNewestExchange();
   return {
     isHidden: (block) => hidden.has(`${version}:${block.id}`),
     onAction: (block: Block, action: NotifyAction) => {
       hide(`${version}:${block.id}`);
+      // HOU-173: an accept's answer is news ("Pencilled in for Wednesday morning"), so the conversation opens for it.
+      if (action.kind === ActionKind.accept) markSaid(newestExchange(), action.label);
       void say({ text: action.label, ref: action.ref, action: action.kind, ...(action.value === undefined ? {} : { value: action.value }) }).then(() => queryClient.invalidateQueries());
     },
   };

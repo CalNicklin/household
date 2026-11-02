@@ -8,6 +8,7 @@ import {
   BlockType,
   type CalendarEvent,
   CalendarOwnerKind,
+  type DayPart,
   type LocalDate,
   type Mode,
   ModeLabel,
@@ -26,8 +27,10 @@ import { contextLine, eventsOn, type HouseFacts, modeOn, nameOf } from "../rules
 import type { RuleItem } from "../rules/nudges.ts";
 import { reminderPeople, reminderSection } from "../rules/remind.ts";
 import { firstDayBlocks, type HouseFill } from "./first-day.ts";
+import { pencilValue } from "./pencil.ts";
 
-export type BacklogPick = { itemId: string; title: string; why: string; person: string | null };
+/** `slotDate` and `dayPart`: where the slot was found, which "Pencil it in" keeps (HOU-173). */
+export type BacklogPick = { itemId: string; title: string; why: string; person: string | null; slotDate: LocalDate; dayPart: DayPart };
 /** `fallback`: the thin-house answer (HOU-149), offered only when nothing else is, and not in quiet hours. */
 export type OneThing = { ref: string; title: string; why: string; actions: NotifyAction[]; fallback?: true };
 
@@ -158,7 +161,8 @@ function reminderBlocks(input: ComposeInput): Block[] {
         type: BlockType.reminder,
         section,
         placement: Placement.main,
-        reason: r.time === null ? `${asked}, with no time: it stays here today` : `${asked} at ${r.time}`,
+        // HOU-173: a later day's plan says which day, not "today".
+        reason: r.time === null ? `${asked}, with no time: it stays here ${date === localDate(now, facts.timeZone) ? "today" : `on ${shortWeekday(date)}`}` : `${asked} at ${r.time}`,
         provenance: Provenance.person,
         time: r.time,
         title: r.text,
@@ -292,7 +296,9 @@ export function compose(input: ComposeInput): Block[] {
       action: n.actions[0] ?? { kind: ActionKind.done, label: "Done", ref: n.key },
     });
   }
-  if (input.pick !== null)
+  if (input.pick !== null) {
+    // HOU-173: both buttons carry the slot, so the tap is kept against this plan's day and says where it went.
+    const value = pencilValue({ date: input.pick.slotDate, dayPart: input.pick.dayPart });
     body.push({
       id: `backlog:${input.pick.itemId}`,
       type: BlockType.backlogPick,
@@ -303,10 +309,11 @@ export function compose(input: ComposeInput): Block[] {
       title: input.pick.title,
       ref: `backlog:${input.pick.itemId}`,
       actions: [
-        { kind: ActionKind.accept, label: "Pencil it in", ref: `backlog:${input.pick.itemId}` },
-        { kind: ActionKind.notToday, label: "Not now", ref: `backlog:${input.pick.itemId}` },
+        { kind: ActionKind.accept, label: "Pencil it in", ref: `backlog:${input.pick.itemId}`, value },
+        { kind: ActionKind.notToday, label: "Not now", ref: `backlog:${input.pick.itemId}`, value },
       ],
     });
+  }
   for (const r of input.shopping) {
     const ref = `shopping:${r.id}`;
     // HOU-157: every shop block is planner-made, so each has a no-guilt dismiss (HOME-4).
