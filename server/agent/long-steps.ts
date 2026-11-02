@@ -36,7 +36,7 @@ async function shop(rt: Runtime, step: Extract<LongStep, { tool: typeof LongTool
   }
   const now = rt.ports.clock.now();
   const at = now.toISOString();
-  const runId = await api.shopping.addRun({ requestId: step.requestId, log: result.log.map((line) => ({ at, line })), screenshots: keys });
+  const runId = await api.shopping.addRun({ requestId: step.requestId, person: request.person, log: result.log.map((line) => ({ at, line })), screenshots: keys });
   if (result.kind === "added") await api.shopping.recordAdd({ requestId: step.requestId, sku: result.product.sku, name: result.product.name });
   await api.shopping.update({
     id: step.requestId,

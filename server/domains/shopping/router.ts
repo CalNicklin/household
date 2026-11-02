@@ -1,9 +1,9 @@
-import { type ShoppingRequest, ShoppingStatus, zBasketAddInput, zIdInput, zPersonInput, zShoppingRequest, zShoppingRequestInput, zShoppingRequestUpdate, zShoppingRun, zShoppingRunInput, zSummaryInput } from "@household/contracts";
+import { DeletableShoppingStatuses, DeletedThing, type ShoppingRequest, ShoppingStatus, zBasketAddInput, zIdInput, zPersonInput, zShoppingRequest, zShoppingRequestInput, zShoppingRequestUpdate, zShoppingRun, zShoppingRunInput, zSummaryInput } from "@household/contracts";
 import { and, desc, eq, gt, inArray, ne } from "drizzle-orm";
 import { z } from "zod";
 import type { DomainDb } from "../../db/index.ts";
 import { iso } from "../../db/map.ts";
-import { actingPerson, actorProcedure, forbid, readProcedure, router, systemProcedure } from "../../trpc.ts";
+import { actingPerson, actorProcedure, forbid, logDeleted, personProcedure, readProcedure, router, systemProcedure } from "../../trpc.ts";
 import * as schema from "./schema.ts";
 
 export type ShoppingDb = DomainDb<typeof schema>;
@@ -54,6 +54,23 @@ export function shoppingRouter(db: ShoppingDb) {
       ctx.publish("shopping");
       return toRequest(updated);
     }),
+    /**
+     * HOU-158: a person deletes a request that went nowhere, anyone's, from the Shop screen. Only a
+     * person (PRV-1): no job or system path reaches this. A request the helper is still working on, or
+     * whose item it put in the basket, is refused (AUT-4). Logged with who did it.
+     */
+    remove: personProcedure.input(zIdInput).mutation(async ({ ctx, input }) => {
+      const [row] = await db
+        .delete(schema.requests)
+        .where(and(eq(schema.requests.id, input.id), inArray(schema.requests.status, [...DeletableShoppingStatuses])))
+        .returning();
+      if (row === undefined) {
+        if ((await db.query.requests.findFirst({ where: eq(schema.requests.id, input.id) })) !== undefined) forbid("only a request that went nowhere can be deleted");
+        return;
+      }
+      logDeleted(DeletedThing.shoppingRequest, row.id, ctx.actor.person, row.person);
+      ctx.publish("shopping");
+    }),
     addRun: systemProcedure.input(zShoppingRunInput).output(z.string()).mutation(async ({ ctx, input }) => {
       const [row] = await db.insert(schema.runs).values({ ...input, createdAt: ctx.now }).returning();
       if (row === undefined) throw new Error("insert failed");
@@ -81,6 +98,8 @@ export function shoppingRouter(db: ShoppingDb) {
     }),
     exportPerson: systemProcedure.input(zPersonInput).query(async ({ input }) => ({ requests: await db.select().from(schema.requests).where(eq(schema.requests.person, input.person)) })),
     deletePerson: systemProcedure.input(zPersonInput).mutation(async ({ input }) => {
+      // Their runs too, including ones whose request a person already deleted (HOU-158).
+      await db.delete(schema.runs).where(eq(schema.runs.person, input.person));
       await db.delete(schema.requests).where(eq(schema.requests.person, input.person));
       await db.delete(schema.summaries).where(eq(schema.summaries.person, input.person));
     }),

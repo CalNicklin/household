@@ -100,7 +100,7 @@ export function Confirm({ question, confirmLabel, onConfirm, onCancel }: { quest
   );
 }
 
-/** One item: tick it, tap its words to rename it, or delete it (asks first). */
+/** One item: tick it, tap its words to rename it, or delete it (the screen then offers Undo, HOU-158). */
 export function CheckRow({
   text,
   checked,
@@ -118,7 +118,6 @@ export function CheckRow({
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(text);
   const [error, setError] = useState<string | null>(null);
-  const [confirming, setConfirming] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   /** While a rename is saving the field is read-only, so nothing typed in the meantime can be lost. */
   const [saving, setSaving] = useState(false);
@@ -190,21 +189,9 @@ export function CheckRow({
           {text}
         </button>
       )}
-      {confirming ? (
-        <Confirm
-          question="Delete this item?"
-          confirmLabel="Delete"
-          onCancel={() => setConfirming(false)}
-          onConfirm={() => {
-            setConfirming(false);
-            onRemove();
-          }}
-        />
-      ) : (
-        <button type="button" className="ds-check-row__delete" aria-label={`Delete ${text}`} onClick={() => setConfirming(true)}>
-          <CloseIcon size={16} />
-        </button>
-      )}
+      <button type="button" className="ds-check-row__delete" aria-label={`Delete ${text}`} onClick={onRemove}>
+        <CloseIcon size={16} />
+      </button>
     </div>
   );
 }
@@ -250,8 +237,11 @@ export function AddItemField({ label, onAdd }: { label: string; onAdd: (text: st
 
 export type MenuEntry = { key: string; label: string; onSelect: () => void };
 
-/** A small menu behind one button. Closes on a choice, a tap outside, or Escape. */
-export function Menu({ label, entries }: { label: string; entries: readonly MenuEntry[] }) {
+/**
+ * A small menu behind one button. Closes on a choice, a tap outside, or Escape. A list's title uses
+ * the chevron; a row uses "…" (HOU-158).
+ */
+export function Menu({ label, entries, icon = "chevron" }: { label: string; entries: readonly MenuEntry[]; icon?: "chevron" | "more" }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -273,7 +263,7 @@ export function Menu({ label, entries }: { label: string; entries: readonly Menu
     <div className="ds-menu" ref={ref}>
       <button type="button" className="ds-menu__button" aria-label={label} aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen((o) => !o)}>
         <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-          <path d="M6 9l6 6 6-6" />
+          {icon === "chevron" ? <path d="M6 9l6 6 6-6" /> : <path d="M5 12h.01M12 12h.01M19 12h.01" strokeWidth="3" />}
         </svg>
       </button>
       {open ? (

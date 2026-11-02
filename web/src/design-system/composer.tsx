@@ -275,3 +275,21 @@ function Answer({ heading, title, detail, onDismiss }: { heading: string; title:
     </section>
   );
 }
+
+/**
+ * HOU-158: what was just deleted, with Undo, for a few seconds, pinned to the bottom of the screen
+ * so it shows wherever the row was. Undo is a full 44px button (HOME-10). With no `onUndo` it is
+ * just a line, for a delete that failed and was put back.
+ */
+export function UndoToast({ message, onUndo }: { message: string; onUndo: (() => void) | null }) {
+  return (
+    <section className="ds-undo" role="status" aria-live="polite" aria-label="Deleted">
+      <p className="ds-undo__text">{message}</p>
+      {onUndo === null ? null : (
+        <Button variant="secondary" onClick={onUndo}>
+          Undo
+        </Button>
+      )}
+    </section>
+  );
+}

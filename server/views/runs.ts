@@ -7,10 +7,11 @@ export async function runView(rt: Runtime, id: string): Promise<RunView | null> 
   const api = rt.system("views");
   const run = await api.shopping.run({ id });
   if (run === null) return null;
-  const request = await api.shopping.get({ id: run.requestId });
+  // HOU-158: a person may have deleted the request since; the run is still openable.
+  const request = run.requestId === null ? null : await api.shopping.get({ id: run.requestId });
   return {
     id: run.id,
-    item: request?.item ?? "",
+    item: request?.item ?? (run.requestId === null ? "A deleted request" : ""),
     status: request?.status ?? "",
     chosen: request?.chosen ?? null,
     log: run.log,

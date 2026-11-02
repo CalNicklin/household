@@ -2,6 +2,7 @@ import { type List, type ListItem, type ListsView, ListWriteOutcome, type ListWr
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRef, useState } from "react";
 import { useTRPC } from "../data/trpc.ts";
+import { useUndo } from "../data/undo.tsx";
 import { AddItemField, Button, ChecklistCard, ChecklistTitle, ChecklistTitleEditor, CheckRow, Confirm, Grid3, Header, Menu, Page, Row, Text } from "../design-system/index.ts";
 import { FooterComposer, navFor } from "./common.tsx";
 
@@ -27,10 +28,14 @@ function useListsCache() {
   const trpc = useTRPC();
   const queryClient = useQueryClient();
   const key = trpc.lists.queryKey();
-  const patchItem = (id: string, change: (item: ListItem) => ListItem | null) =>
-    queryClient.setQueryData<ListsView>(key, (old) => old?.map((l) => ({ ...l, items: l.items.flatMap((i) => (i.id === id ? [change(i)].filter((x) => x !== null) : [i])) })));
+  const patchItem = (id: string, change: (item: ListItem) => ListItem) =>
+    queryClient.setQueryData<ListsView>(key, (old) => old?.map((l) => ({ ...l, items: l.items.map((i) => (i.id === id ? change(i) : i)) })));
   return { patchItem, refresh: () => queryClient.invalidateQueries({ queryKey: key }) };
 }
+
+/** HOU-158: what the Undo window holds for a list, and for one of its items. */
+const listKey = (id: string) => `list:${id}`;
+const itemKey = (id: string) => `list-item:${id}`;
 
 /** What one of an item's writes resolves to: a tick, a rename, or a delete. */
 type ItemWrite = ListItem | ListWriteResult | void;
@@ -46,6 +51,7 @@ function ListPanel({ list }: { list: List }) {
   const removeItem = useMutation(trpc.removeListItem.mutationOptions());
   const update = useMutation(trpc.updateList.mutationOptions(settle));
   const removeList = useMutation(trpc.removeList.mutationOptions(settle));
+  const { isDeleted, remove, flush } = useUndo();
   const [editing, setEditing] = useState(false);
   const [deleting, setDeleting] = useState(false);
   /**
@@ -107,7 +113,8 @@ function ListPanel({ list }: { list: List }) {
               onCancel={() => setDeleting(false)}
               onConfirm={() => {
                 setDeleting(false);
-                removeList.mutate({ id: list.id });
+                // HOU-158: asked first, then Undo for a few seconds before it is sent.
+                remove(listKey(list.id), `Deleted the list “${list.name}”`, () => removeList.mutateAsync({ id: list.id }));
               }}
             />
           ) : null}
@@ -116,11 +123,17 @@ function ListPanel({ list }: { list: List }) {
       adder={
         <AddItemField
           label={`Add an item to ${list.name}`}
-          onAdd={(text) => saved(() => add.mutateAsync({ listId: list.id, text }), text)}
+          onAdd={async (text) => {
+            // A delete still in its Undo window is sent first, so "milk" re-added is a new item.
+            await flush();
+            return saved(() => add.mutateAsync({ listId: list.id, text }), text);
+          }}
         />
       }
     >
-      {list.items.map((item) => (
+      {list.items
+        .filter((item) => !isDeleted(itemKey(item.id)))
+        .map((item) => (
         <CheckRow
           key={item.id}
           text={item.text}
@@ -129,11 +142,12 @@ function ListPanel({ list }: { list: List }) {
             patchItem(item.id, (i) => ({ ...i, checked }));
             inOrder(item.id, () => check.mutateAsync({ id: item.id, checked })).catch(() => undefined);
           }}
-          onRename={(text) => saved(() => inOrder(item.id, () => rename.mutateAsync({ id: item.id, text })), text)}
-          onRemove={() => {
-            patchItem(item.id, () => null);
-            inOrder(item.id, () => removeItem.mutateAsync({ id: item.id })).catch(() => undefined);
+          onRename={async (text) => {
+            // Likewise for a rename onto the name of an item whose delete is still pending.
+            await flush();
+            return saved(() => inOrder(item.id, () => rename.mutateAsync({ id: item.id, text })), text);
           }}
+          onRemove={() => remove(itemKey(item.id), `Deleted “${item.text}” from ${list.name}`, () => inOrder(item.id, () => removeItem.mutateAsync({ id: item.id })))}
         />
       ))}
     </ChecklistCard>
@@ -148,17 +162,19 @@ export function ListsScreen() {
   const trpc = useTRPC();
   const lists = useQuery(trpc.lists.queryOptions());
   const { refresh } = useListsCache();
+  const { isDeleted } = useUndo();
+  const shown = (lists.data ?? []).filter((l) => !isDeleted(listKey(l.id)));
   const create = useMutation(trpc.createList.mutationOptions({ onSettled: refresh }));
   return (
     <Page label="Lists">
       <Header title="Lists" line="Shopping and simple lists, shared by everyone" nav={navFor("/lists")} />
       <FooterComposer placeholder="Add to a list, or ask the house anything" />
       <Grid3>
-        {(lists.data ?? []).map((l) => (
+        {shown.map((l) => (
           <ListPanel key={l.id} list={l} />
         ))}
       </Grid3>
-      {lists.data?.length === 0 ? <Text tone="muted">No lists yet.</Text> : null}
+      {lists.data !== undefined && shown.length === 0 ? <Text tone="muted">No lists yet.</Text> : null}
       <Row>
         <Button variant="secondary" onClick={() => create.mutate({ ...NEW_LIST })}>
           New list
