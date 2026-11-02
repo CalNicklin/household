@@ -109,11 +109,14 @@ describe("HOU-175: other apps' sites on the house's Caddy", () => {
     expect(caddy.network_mode).toBeUndefined();
     expect(caddy["networks"]).toBeUndefined();
     expect(caddy.privileged ?? false).toBe(false);
-    expect(Object.keys(caddy).sort()).toEqual(["extra_hosts", "labels", "volumes"]);
+    expect(Object.keys(caddy).sort()).toEqual(["command", "entrypoint", "extra_hosts", "labels", "volumes"]);
+    // The entrypoint only works out the front address, then runs the command it is given (Caddy's own).
+    expect(caddy["command"]).toEqual(["caddy", "run", "--config", "/etc/caddy/Caddyfile", "--adapter", "caddyfile"]);
+    expect(String((caddy["entrypoint"] as string[])[2])).toMatch(/exec "\$\$@"\n$/);
   });
 
   it("[PRV-6] the sites reach Caddy read-only, and Caddy gets only a name for the host", () => {
-    expect(caddy.volumes).toEqual(["${SITES_DIR:?}:/etc/caddy/sites:ro"]);
+    expect(caddy.volumes).toEqual(["${SITES_DIR:?}:/etc/caddy/sites:ro", "./Caddyfile.sites:/etc/caddy/front/front.caddy:ro"]);
     expect(caddy["extra_hosts"]).toEqual(["host.docker.internal:host-gateway"]);
     expect(common).toMatch(/^SITES_DIR="\$\{SITES_DIR:-\/etc\/household\/sites\}"$/m);
     expect(read("Caddyfile")).toMatch(/^import \/etc\/caddy\/sites\/\*\.caddy$/m);
@@ -132,10 +135,22 @@ describe("HOU-175: other apps' sites on the house's Caddy", () => {
     expect(check).toMatch(/\[ -n "\$found" \]\n\}$/);
   });
 
-  it("[PLT-8] install.sh makes the directory root's (0755) and puts nothing in it; the deploy user can't add a site", () => {
+  it("[FB-5] while sites are served, every site listens only on Caddy's front address, never where the PR previews reach it", () => {
+    // In the global options, so it binds the imported sites too; present only through the overlay's mount.
+    expect(read("Caddyfile")).toMatch(/^\{\n\tadmin off\n(\t#.*\n)*\timport \/etc\/caddy\/front\/\*\.caddy\n/m);
+    expect(read("Caddyfile.sites").replace(/^#.*\n/gm, "")).toBe("default_bind {$CADDY_FRONT_IP}\n");
+    // The default route's source address: the house's network (the previews' is internal, with no gateway).
+    expect(String((caddy["entrypoint"] as string[])[2])).toContain("ip -4 route get 1.1.1.1");
+    expect(String((caddy["entrypoint"] as string[])[2])).toContain('export CADDY_FRONT_IP="$$front"');
+    // deploy/test-deploy.sh shows a container on household-previews refused by Caddy while the site works.
+  });
+
+  // The source lines that set this up; deploy/test-deploy.sh shows a non-root user can neither add nor change a site.
+  it("[PLT-8] install.sh's lines make the directory root's (0755) and put nothing in it, and keep the deploy user non-root", () => {
     expect(install).toMatch(/^install -d -o root -g root -m 755 "\$etc\/sites"$/m);
     expect(install.match(/\$etc\/sites/g)).toHaveLength(1);
     expect(install).toContain('"$repo/deploy/compose.caddy-sites.yml"');
+    expect(install).toContain('"$repo/deploy/Caddyfile.sites"');
     // The deploy user stays a non-root user outside the docker group whose keys run exactly two commands,
     // so it can neither write /etc/household/sites nor start a Caddy with other files.
     expect(install).toMatch(/^echo 'household ALL=\(root\) NOPASSWD: \/usr\/local\/sbin\/household-deploy, \/usr\/local\/sbin\/household-preview' > "\$rule"$/m);
@@ -150,7 +165,8 @@ describe("HOU-175: other apps' sites on the house's Caddy", () => {
       const validate = text.search(/^(if ! )?sites_valid\b/m);
       expect(validate, `${file} never validates the sites`).toBeGreaterThan(0);
       expect(validate, `${file} starts something before validating`).toBeLessThan(text.indexOf(before));
-      expect(text.slice(validate)).toMatch(/^.*exit 1/m);
+      // Its failure stops the command on the same line or in the if block right after it.
+      expect(text.slice(validate).split("\n").slice(0, 4).join("\n"), `${file} carries on after invalid sites`).toMatch(/^(sites_valid \|\| \{ .*; exit 1; \}|if ! sites_valid; then\n(  .*\n)+  exit 1)$/m);
     }
   });
 });

@@ -1,12 +1,27 @@
 # HOU-175: extra sites the house's Caddy serves for other apps on this server (the trader dashboards), from
 # root-owned *.caddy files in /etc/household/sites. Added to the real house's project by household-common.sh
 # only when that directory is root's alone and holds a *.caddy file; without one the house runs exactly as
-# before. It gives Caddy those files, read-only, and a name for the host, and nothing else: no port, no
-# network, no volume of the house's. household-deploy validates the combined config before Caddy uses it.
+# before. It gives Caddy those files, read-only, and a name for the host: no port, network, volume or memory
+# of the house's changes. While they are served, Caddy listens only on its front address (Caddyfile.sites),
+# so the PR previews, which reach Caddy on another network, can't reach any site. household-deploy
+# validates the combined config before Caddy uses it.
 services:
   caddy:
     volumes:
       - ${SITES_DIR:?}:/etc/caddy/sites:ro
+      - ./Caddyfile.sites:/etc/caddy/front/front.caddy:ro
+    # The front address Caddyfile.sites binds to, worked out at start. With no default route there is none,
+    # and Caddy doesn't start (household-deploy's validation runs this too, so it refuses before switching).
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        front="$$(ip -4 route get 1.1.1.1 2> /dev/null | sed -n 's/.* src \([0-9.]*\).*/\1/p')"
+        [ -n "$$front" ] || { echo "caddy: no default route, so no front address to serve on" >&2; exit 1; }
+        export CADDY_FRONT_IP="$$front"
+        exec "$$@"
+      - caddy-front
+    command: [caddy, run, --config, /etc/caddy/Caddyfile, --adapter, caddyfile]
     # The host as Docker's bridge gateway sees it. A site reaches only what listens there (docs/OPERATIONS.md:
     # the trader services listen on the gateway address, never publicly on their own ports).
     extra_hosts: ["host.docker.internal:host-gateway"]

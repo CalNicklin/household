@@ -39,7 +39,7 @@ install -m 755 "$repo"/deploy/household-*.sh "$repo/scripts/backup.sh" "$repo/sc
 for c in deploy setup backup restore preview telegram google email status; do ln -sfn "$lib/household-$c.sh" "/usr/local/sbin/household-$c"; done
 # Credential files only the app (uid 10001 in its image) can read, mounted read-only into it.
 install -d -o 10001 -g root -m 700 "$dir/credentials"
-install -m 644 "$repo/deploy/compose.yml" "$repo/deploy/compose.hindsight.yml" "$repo/deploy/compose.caddy-previews.yml" "$repo/deploy/compose.mail.yml" "$repo/deploy/compose.caddy-sites.yml" "$repo/deploy/Caddyfile" "$repo/deploy/Caddyfile.previews" "$repo/deploy/Caddyfile.mail" "$dir/"
+install -m 644 "$repo/deploy/compose.yml" "$repo/deploy/compose.hindsight.yml" "$repo/deploy/compose.caddy-previews.yml" "$repo/deploy/compose.mail.yml" "$repo/deploy/compose.caddy-sites.yml" "$repo/deploy/Caddyfile" "$repo/deploy/Caddyfile.previews" "$repo/deploy/Caddyfile.mail" "$repo/deploy/Caddyfile.sites" "$dir/"
 # HOU-175: other apps' sites for the house's Caddy (the trader dashboards). Root's alone, and empty here: the
 # trader side puts its *.caddy files in it as root, and household-common.sh uses it only while root alone
 # can write it. The `household` deploy user can't add a site.

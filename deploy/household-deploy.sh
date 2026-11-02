@@ -36,7 +36,7 @@ token=""
 echo "have $image"
 
 # The deploy files are pinned on the server; say so when this image carries different ones.
-for f in compose.yml compose.hindsight.yml compose.mail.yml compose.caddy-sites.yml Caddyfile Caddyfile.mail; do
+for f in compose.yml compose.hindsight.yml compose.mail.yml compose.caddy-sites.yml Caddyfile Caddyfile.mail Caddyfile.sites; do
   theirs="$(docker run --rm --network none --memory 32m --entrypoint sha256sum "$image" "/app/deploy/$f" 2> /dev/null | cut -d' ' -f1 || true)"
   ours="$(sha256sum "$HOUSEHOLD_DIR/$f" 2> /dev/null | cut -d' ' -f1 || true)"
   if [ -n "$theirs" ] && [ "$theirs" != "$ours" ]; then echo "note: deploy/$f changed in this image; re-run deploy/install.sh on the server to use it"; fi

@@ -2,6 +2,9 @@
 # HOUSEHOLD_DOMAIN itself; the app behind it asks for a login for everything but /healthz.
 {
 	admin off
+	# HOU-175: with other apps' sites, every site is served only on Caddy's front address (Caddyfile.sites),
+	# never where the PR previews reach Caddy. Matches nothing without them.
+	import /etc/caddy/front/*.caddy
 	# FB-5: a preview's certificate is got when it is first visited, and only if Caddyfile.previews says
 	# that preview is running. Unused while there are no previews.
 	on_demand_tls {

@@ -44,7 +44,7 @@ sites_usable() {
   local f found=""
   [ -d "$SITES_DIR" ] || return 1
   if [ -L "$SITES_DIR" ] || [ "$(stat -c %u "$SITES_DIR")" != 0 ] || (( 0$(stat -c %a "$SITES_DIR") & 022 )); then
-    echo "note: $SITES_DIR is not root's alone (root-owned, mode 755), so the house's Caddy serves no extra sites" >&2
+    echo "note: $SITES_DIR is not root's alone (it must be a directory owned by root, writable by no group or other user), so the house's Caddy serves no extra sites" >&2
     return 1
   fi
   for f in "$SITES_DIR"/*.caddy; do

@@ -24,6 +24,7 @@ cleanup() {
   docker rm -f household-test-registry > /dev/null 2>&1 || true
   docker image rm -f "$local_image" > /dev/null 2>&1 || true
   [ -z "${stub:-}" ] || kill "$stub" 2> /dev/null || true
+  [ -z "${previews_net:-}" ] || docker network rm household-previews > /dev/null 2>&1 || true
   rm -rf "$work" "${sites_root:-}"
 }
 trap cleanup EXIT
@@ -44,7 +45,7 @@ echo "pushed $digest"
 step "the server as install.sh leaves it: deploy files, settings, secrets generated in place"
 install -d -m 750 "$work/srv"
 install -d -o 10001 -m 700 "$work/srv/credentials"
-cp "$repo"/deploy/compose.yml "$repo"/deploy/compose.hindsight.yml "$repo"/deploy/compose.caddy-sites.yml "$repo"/deploy/Caddyfile "$work/srv/"
+cp "$repo"/deploy/compose.yml "$repo"/deploy/compose.hindsight.yml "$repo"/deploy/compose.caddy-sites.yml "$repo"/deploy/compose.caddy-previews.yml "$repo"/deploy/Caddyfile "$repo"/deploy/Caddyfile.sites "$repo"/deploy/Caddyfile.previews "$work/srv/"
 # HOU-175: where the trader side's *.caddy files would be; it doesn't exist until the sites step below.
 sites_root="$(mktemp -d)"
 chmod 755 "$sites_root"
@@ -55,6 +56,7 @@ HOUSEHOLD_REPO=localhost:5000/household
 BACKUP_DEST=$work/backups
 BACKUP_KEEP=1
 SITES_DIR=$sites
+PREVIEWS_DIR=$work/previews
 CONF
 docker run --rm --network none --memory 128m -v "$repo/scripts/env-init.ts:/env-init.ts:ro" -v "$work/srv:/work" -w /work node:22-bookworm-slim node /env-init.ts --real > /dev/null
 echo "HOUSEHOLD_DOMAIN=localhost" >> "$work/srv/.env"
@@ -195,6 +197,27 @@ trader="$(printf 'trader.localhost {\n\tbasic_auth {\n\t\tcal %s\n\t}\n\treverse
 house_ok() { [ "$(curl -sk --resolve localhost:443:127.0.0.1 https://localhost/healthz)" = ok ] || fail "the house stopped serving: $1"; }
 trader_code() { curl -sk -o /dev/null -w '%{http_code}' --resolve trader.localhost:443:127.0.0.1 "$@" https://trader.localhost/; }
 
+# The PR previews' network, with the house's Caddy on it (as install.sh --preview-domain leaves it), and a
+# stand-in preview on it: what does it get from Caddy for <host> on <port>?
+docker network inspect household-previews > /dev/null 2>&1 && fail "a household-previews network already exists here; nothing was touched"
+docker network create --internal household-previews > /dev/null
+previews_net=yes
+install -d -m 755 "$work/previews/live"
+echo "PREVIEW_DOMAIN=preview.localhost" >> "$work/srv/.env"
+deploy_sites previews-on || { cat "$work/previews-on.log" >&2; fail "the house did not deploy with the previews' overlay"; }
+from_preview() { # <port> <host>
+  local ip
+  ip="$(docker inspect -f '{{(index .NetworkSettings.Networks "household-previews").IPAddress}}' household-caddy-1)"
+  docker run --rm --network household-previews --memory 64m --entrypoint node "$local_image" -e '
+    const [ip, port, host] = process.argv.slice(1);
+    const req = require(port === "443" ? "https" : "http").request({ host: ip, port, servername: host, headers: { host }, rejectUnauthorized: false, timeout: 5000 }, (r) => { console.log(`answered ${r.statusCode}`); process.exit(0); });
+    req.on("error", (e) => { console.log(e.code === "ECONNREFUSED" ? "refused" : `error ${e.code}`); process.exit(0); });
+    req.on("timeout", () => { console.log("timeout"); process.exit(0); });
+    req.end();' "$ip" "$1" "$2"
+}
+# Without other apps' sites nothing changes: a preview reaches Caddy as the internet does (FB-5).
+[ "$(from_preview 443 localhost)" = "answered 200" ] || fail "the stand-in preview could not reach Caddy without sites: $(from_preview 443 localhost)"
+
 # A directory someone besides root can write: left out, and the house deploys exactly as before.
 before="$(caddy_now)"
 install -d -m 775 "$sites"
@@ -226,7 +249,15 @@ for _ in $(seq 30); do [ "$(trader_code)" = 401 ] && break; sleep 1; done
 [ "$(trader_code)" = 401 ] || fail "the trader site answered $(trader_code) without its login"
 [ "$(curl -sk --resolve trader.localhost:443:127.0.0.1 -u "cal:$site_password" https://trader.localhost/)" = "trader stub trader.localhost" ] || fail "the trader site did not reach the stub on the host"
 house_ok "with a valid site"
+[ "$(curl -s -o /dev/null -w '%{http_code}' http://localhost/healthz)" = 308 ] || fail "plain HTTP no longer redirects with a site"
 echo "trader.localhost reaches the stub on $gateway:$port through Caddy, behind its login; the house serves as before"
+# FB-5: a PR preview reaches Caddy on the previews' network, where nothing listens while sites are served.
+for p in 443 80; do
+  got="$(from_preview "$p" trader.localhost)"
+  [ "$got" = refused ] || fail "a preview asking Caddy for trader.localhost on port $p got: $got"
+done
+[ "$(from_preview 443 localhost)" = refused ] || fail "a preview still reaches Caddy while sites are served"
+echo "a preview asking Caddy for trader.localhost (443 and 80) is refused, while the host reaches it"
 
 # An invalid site: the deploy refuses before switching anything, names the file, and nothing stops serving.
 before="$(caddy_now)"
