@@ -1,4 +1,4 @@
-import { Channel, type LocalDate, type Reminder, ReminderStatus } from "@household/contracts";
+import { type LocalDate, type Reminder, ReminderStatus } from "@household/contracts";
 import { matchReminders, type ReminderWhen } from "../rules/remind.ts";
 import { addLocalDays, localDate, localTime, longDate } from "../time.ts";
 import type { JobScope } from "./scope.ts";
@@ -24,8 +24,6 @@ export const closedSay = (status: ReminderStatus): string => (status === Reminde
 
 /** The reminder a person means, or what to ask them instead. `ref` is the About ref when they said "this". */
 export async function findReminder(scope: JobScope, which: string, ref: string | null | undefined): Promise<{ reminder: Reminder } | { say: string }> {
-  // PRV-1: an email carries words someone else wrote (an order, a forward), never the person's own ask.
-  if (scope.channel === Channel.email) return { say: "" };
   const today = localDate(scope.rt.ports.clock.now(), scope.rt.timeZone);
   // The one they are looking at, if it fits what they said ("that one" fits any); never one they didn't name.
   if (ref?.startsWith("reminder:") === true) {

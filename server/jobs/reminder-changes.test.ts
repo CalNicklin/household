@@ -2,6 +2,7 @@ import { ActionKind, ActorKind, type Block, BlockType, Channel, ReminderStatus, 
 import { afterAll, beforeAll, describe, expect, test } from "vitest";
 import { findReminder } from "../agent/reminders.ts";
 import { jobScope } from "../agent/scope.ts";
+import { houseTools } from "../agent/tools.ts";
 import { acceptTimer } from "../coordinator/accept.ts";
 import { testHousehold, type TestHousehold } from "../testing/household.ts";
 import { atLocal } from "../time.ts";
@@ -83,8 +84,10 @@ describe("HOU-174: a reminder is moved or cancelled when a person asks, never du
     const app = jobScope(h.rt, "j", "app-message", "tom", Channel.app);
     expect(await findReminder(app, "that one", `reminder:${r.id}`)).toEqual({ reminder: r });
     expect(await findReminder(app, "the swimming reminder", `reminder:${r.id}`)).toMatchObject({ say: expect.stringContaining("I couldn't tell which reminder") });
-    // An email's words are someone else's (a forwarded order), never the person asking: nothing is found to change.
-    expect(await findReminder(jobScope(h.rt, "j", "email-message", "tom", Channel.email), "the BoyBoy reminder", `reminder:${r.id}`)).toEqual({ say: "" });
+    // An email's words are someone else's (a forwarded order), never the person asking: neither tool changes anything.
+    const email = houseTools(jobScope(h.rt, "j", "email-message", "tom", Channel.email));
+    expect(await email.cancel_reminder.execute?.({ which: "the BoyBoy reminder", ref: `reminder:${r.id}` }, {})).toEqual({ cancelled: false, say: "" });
+    expect(await email.change_reminder.execute?.({ which: "the BoyBoy reminder", ref: `reminder:${r.id}`, when: "06:00" }, {})).toEqual({ changed: false, say: "" });
     expect((await upcoming()).map((x) => x.time)).toEqual(["07:30"]);
   });
 
