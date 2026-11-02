@@ -78,6 +78,8 @@ describe("HOU-156: a mode set ahead for a later day", () => {
     const [away] = await h.rt.system("t").household.modesBetween({ from: atLocal("2026-11-09", 12, 0, TZ).toISOString(), to: atLocal("2026-11-09", 13, 0, TZ).toISOString() });
     expect(away).toMatchObject({ mode: ModeKind.away, startsAt: atLocal(SAT, 0, 0, TZ).toISOString(), endsAt: atLocal("2026-11-10", 0, 0, TZ).toISOString() });
     await h.sayAndWait("we're not away from Saturday until Monday after all");
+    const cleared = await h.rt.system("t").household.modesBetween({ from: atLocal(SAT, 0, 0, TZ).toISOString(), to: atLocal("2026-11-10", 0, 0, TZ).toISOString() });
+    expect(cleared.filter((m) => m.mode !== ModeKind.normal)).toEqual([]);
   });
 
   test("[PRO-2] a day it can't read sets nothing and asks which day", async () => {

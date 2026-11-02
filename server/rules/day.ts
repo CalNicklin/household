@@ -25,7 +25,11 @@ export type HouseFacts = {
   sitters: Sitter[];
   sitterBookings: SitterBooking[];
   arrivals: Arrival[];
-  /** HOU-156: every mode in effect at some point in the window, including those set ahead. */
+  /**
+   * HOU-156: every mode in effect at some point in the window, including those set ahead. Read a
+   * day's mode with `modeOn`. Plans save these facts, so readers of saved plans (scripts/record-day.ts)
+   * read `modes` too; plans saved before HOU-156 have the old `mode` instead.
+   */
   modes: Mode[];
   /** Hourly forecast per local date. */
   forecast: Record<LocalDate, HourlyForecast[]>;

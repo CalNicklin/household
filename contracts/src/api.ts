@@ -16,7 +16,8 @@ export const zResolveIdentityInput = z.object({ channel: zChannel, address: z.st
 export const zLoginInput = z.object({ username: z.string(), password: z.string() });
 /**
  * HOU-156: a mode starts now unless `startsAt` names a later time ("we're away this weekend"). For
- * `normal`, the span from start to `endsAt` is cleared of other modes and nothing else is recorded.
+ * `normal`, the span from start to `endsAt` is cleared of other modes, and the row recorded for it
+ * lasts no time (it ends where it starts), so it never shows as a day's mode.
  */
 export const zSetModeRequest = z.object({ mode: zModeKind, startsAt: z.iso.datetime({ offset: true }).optional(), endsAt: z.iso.datetime({ offset: true }) });
 export const zPersonSettingsPatch = zPersonSettings.omit({ person: true }).partial();
