@@ -28,7 +28,11 @@ export async function findReminder(scope: JobScope, which: string, ref: string |
   // The one they are looking at, if it fits what they said ("that one" fits any); never one they didn't name.
   if (ref?.startsWith("reminder:") === true) {
     const reminder = await scope.api.backlog.getReminder({ id: ref.slice("reminder:".length) });
-    if (reminder?.status === ReminderStatus.open && matchReminders([reminder], which, today).length === 1) return { reminder };
+    if (reminder !== null && matchReminders([reminder], which, today).length === 1) {
+      if (reminder.status === ReminderStatus.open) return { reminder };
+      // HOU-177: the one they are looking at is already closed: say so, never take another in its place.
+      return { say: `${reminderLine(reminder, today)}. ${closedSay(reminder.status)} Nothing was changed.` };
+    }
   }
   const open = await scope.api.backlog.upcomingReminders({ from: today });
   const found = matchReminders(open, which, today);
@@ -39,7 +43,9 @@ export async function findReminder(scope: JobScope, which: string, ref: string |
     // in its place. Only when what they said narrows it down ("that reminder" alone names none of them).
     const closed = await scope.api.backlog.upcomingReminders({ from: today, closed: true });
     const gone = matchReminders(closed, which, today);
-    if (gone.length > 0 && (gone.length < closed.length || closed.length === 1)) return { say: `${gone.map((r) => `${reminderLine(r, today)}. ${closedSay(r.status)}`).join(" ")} Nothing was changed.` };
+    // What they said picked these out: fewer than all of them, or the only one there is.
+    const named = gone.length > 0 && (gone.length < closed.length || closed.length === 1);
+    if (named) return { say: `${gone.map((r) => `${reminderLine(r, today)}. ${closedSay(r.status)}`).join(" ")} Nothing was changed.` };
   }
   if (open.length === 0) return { say: "There are no reminders coming up." };
   // Never a guess: several could match, or none does, so ask which.

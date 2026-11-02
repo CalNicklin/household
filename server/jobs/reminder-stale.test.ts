@@ -65,6 +65,13 @@ describe("HOU-177: the screen and the house agree on which reminders are open", 
     expect(last?.reply?.text).toBe("That's already done.");
   });
 
+  test("[CAP-10][PRV-1] 'cancel that one' about a reminder already done says so, and never cancels the only open one instead", async () => {
+    const nine = (await h.rt.system("t").backlog.upcomingReminders({ from: MON, closed: true })).find((r) => r.time === "09:00");
+    if (nine === undefined) throw new Error("no 09:00 reminder");
+    expect(await said("cancel that reminder", `reminder:${nine.id}`)).toMatch(/^09:00 Wednesday 4 November: .*That's already done\. Nothing was changed\.$/);
+    expect((await h.rt.system("t").backlog.upcomingReminders({ from: MON })).map((r) => r.time)).toEqual(["07:30"]);
+  });
+
   test("[CAP-10] a saved plan's reminder card shows only while its reminder is open at that time", async () => {
     const saved = (await h.rt.system("t").plans.latest({ date: TUE }))?.blocks ?? [];
     const [seven] = await h.rt.system("t").backlog.upcomingReminders({ from: MON });
