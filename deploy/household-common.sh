@@ -42,10 +42,11 @@ if grep -qE '^MAIL_DOMAIN=.+' "$HOUSEHOLD_DIR/.env"; then COMPOSE_FILE="$COMPOSE
 # HOU-175: the house's Caddy also serves the sites in $SITES_DIR, but only when root alone can change what it
 # would load: the directory and every *.caddy in it owned by root, not writable by group or others, and no
 # symlinks. Otherwise the overlay is left out (saying why), and the house runs exactly as without it.
-# The *.caddy files Caddy's import would load: Go's glob matches hidden names too, so bash's must as well.
+# The *.caddy files Caddy's import would load: Go's glob matches hidden names (`.x.caddy`, and `.caddy`
+# itself) too, so this lists them as well.
 sites_files() {
   local f
-  for f in "$SITES_DIR"/*.caddy "$SITES_DIR"/.*.caddy; do
+  for f in "$SITES_DIR"/*.caddy "$SITES_DIR"/.*.caddy "$SITES_DIR"/.caddy; do
     if [ -e "$f" ] || [ -L "$f" ]; then printf '%s\n' "$f"; fi
   done
 }

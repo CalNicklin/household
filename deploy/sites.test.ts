@@ -127,6 +127,7 @@ describe("HOU-175: which sites the house's Caddy takes (household-common.sh)", (
         writeFileSync(path.join(s.sites, ".old.caddy"), "x\n");
         chmodSync(path.join(s.sites, ".old.caddy"), 0o664);
       }, /\.old\.caddy is not a root-owned file/],
+      ["a file named just .caddy", (s) => symlinkSync("/etc/hostname", path.join(s.sites, ".caddy")), /sites\/\.caddy is not a root-owned file/],
       ["a hidden symlink", (s) => symlinkSync("/etc/hostname", path.join(s.sites, ".link.caddy")), /\.link\.caddy is not a root-owned file/],
     ];
     for (const [what, spoil, note] of cases) {
