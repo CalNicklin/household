@@ -142,7 +142,11 @@ function ListPanel({ list }: { list: List }) {
             patchItem(item.id, (i) => ({ ...i, checked }));
             inOrder(item.id, () => check.mutateAsync({ id: item.id, checked })).catch(() => undefined);
           }}
-          onRename={(text) => saved(() => inOrder(item.id, () => rename.mutateAsync({ id: item.id, text })), text)}
+          onRename={async (text) => {
+            // Likewise for a rename onto the name of an item whose delete is still pending.
+            await flush();
+            return saved(() => inOrder(item.id, () => rename.mutateAsync({ id: item.id, text })), text);
+          }}
           onRemove={() => remove(itemKey(item.id), `Deleted “${item.text}” from ${list.name}`, () => inOrder(item.id, () => removeItem.mutateAsync({ id: item.id })))}
         />
       ))}
