@@ -73,7 +73,13 @@ export function useBlockHandlers(version: number): BlockHandlers & { isHidden: (
       void send({ kind: ActionKind.retime, label, ref, value: time });
     },
     // HOU-174: like a backlog item's Delete (HOU-158): gone at once, sent when the Undo window ends.
-    onDelete: (block, ref, title) => remove(`block:${block.id}`, `Deleted “${title}”`, () => send({ kind: ActionKind.cancel, label: ActionLabel[ActionKind.cancel], ref })),
+    // HOU-177: once sent, its answer opens the conversation: "Cancelled …", or why nothing was.
+    onDelete: (block, ref, title) =>
+      remove(`block:${block.id}`, `Deleted “${title}”`, () => {
+        const label = ActionLabel[ActionKind.cancel];
+        markSaid(newestExchange(), label);
+        return send({ kind: ActionKind.cancel, label, ref });
+      }),
   };
 }
 

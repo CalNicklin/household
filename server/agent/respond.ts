@@ -3,7 +3,7 @@ import { START_REF_PREFIX } from "../planner/first-day.ts";
 import { forecasts } from "../planner/gather.ts";
 import { parsePencil, pencilledLine } from "../planner/pencil.ts";
 import { addLocalDays, localDate, localHour, longDate, weekdayOf } from "../time.ts";
-import { cancelReminder, changeReminder, closedSay } from "./reminders.ts";
+import { cancelReminder, changeReminder, closedSay, replanFor } from "./reminders.ts";
 import type { JobScope } from "./scope.ts";
 
 export function dayPartOf(hour: number): DayPart {
@@ -63,6 +63,8 @@ async function respondToReminder(scope: JobScope, ref: string, action: ActionKin
     await scope.api.backlog.reminderDone({ id: reminder.id });
     scope.effects.closeRefs.push({ ref, status: "done" });
     replan(date);
+    // HOU-177: and the day before it, whose plan shows it under Tomorrow.
+    await replanFor(scope, [reminder.date]);
     return `Done: ${reminder.text}.`;
   }
   if (action === ActionKind.snooze || action === ActionKind.notToday) {
@@ -72,6 +74,8 @@ async function respondToReminder(scope: JobScope, ref: string, action: ActionKin
     scope.effects.closeRefs.push({ ref, status: "dismissed" });
     replan(date);
     replan(addLocalDays(date, 1));
+    // HOU-177: and the days that showed it or will show it, from its old day to its new one.
+    await replanFor(scope, [reminder.date, to]);
     return to === addLocalDays(date, 1) ? `Moved to tomorrow: ${reminder.text}.` : `Moved to ${longDate(to)}: ${reminder.text}.`;
   }
   // HOU-174: a person's Change time or Delete on the reminder (PRV-1: they asked). Never from an email,

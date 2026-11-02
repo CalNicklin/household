@@ -67,6 +67,8 @@ test("[CAP-10][PRV-1] a reminder's '…' menu changes its time and deletes it wi
   // limit: undoWindowMs
   await page.clock.fastForward(Limits.undoWindowMs.value);
   await expect(toast).toHaveCount(0);
+  // HOU-177: once sent, the house's answer opens the conversation.
+  await expect(page.getByRole("status")).toContainText("Cancelled the 21:15 reminder today: Lock the shed.");
   // Sent once the window ends: the reminder is cancelled, so a fresh load of Today leaves it out too.
   await expect(async () => {
     await page.reload();
@@ -90,4 +92,38 @@ test("[CAP-10][PRV-1] a reminder's '…' menu changes its time and deletes it wi
   await expect(boyBoy).toHaveCount(1);
   await expect(boyBoy.getByText("07:30")).toBeVisible();
   await evidence(page, "HOU-174-week-one-left");
+});
+
+/**
+ * HOU-177: Cal's case. Done on the 09:00 BoyBoy reminder from Tuesday's Tomorrow takes it off Tuesday
+ * too, and "cancel the 9 o'clock BoyBoy reminder" then says it's done, never offering the 07:30 one.
+ */
+test("[CAP-10][PRV-1] a reminder done from Tomorrow leaves Week; 'cancel the 9 o'clock BoyBoy reminder' says it's already done and offers no other (HOU-177)", async ({ page }) => {
+  await login(page);
+  await say(page, "remind me on Wednesday at 9 to check their opinion on BoyBoy's lunchtime nap");
+  await expect(page.getByRole("status")).toContainText("I'll remind you at 09:00 Wednesday 4 November");
+  await say(page, "remind me on Wednesday at 7:30 to ask at dropoff about BoyBoy's lunchtime nap");
+  await expect(page.getByRole("status")).toContainText("I'll remind you at 07:30 Wednesday 4 November");
+  await page.goto("/week");
+  const tuesday = page.getByRole("region", { name: "Tuesday 3 November" });
+  const nine = () => tuesday.locator(".ds-card").filter({ hasText: "Check their opinion on BoyBoy's lunchtime nap" });
+  const seven = () => tuesday.locator(".ds-card").filter({ hasText: "Ask at dropoff about BoyBoy's lunchtime nap" });
+  await expect(nine().getByText("09:00")).toBeVisible();
+  await expect(seven().getByText("07:30")).toBeVisible();
+  await evidence(page, "HOU-177-week-both");
+
+  await nine().getByRole("button", { name: "Done" }).click();
+  await expect(nine()).toHaveCount(0);
+  // Not just hidden on this screen: a fresh load of Week leaves it out of Tuesday as well.
+  await expect(async () => {
+    await page.reload();
+    await expect(seven().getByText("07:30")).toBeVisible();
+    await expect(nine()).toHaveCount(0);
+  }).toPass();
+  await evidence(page, "HOU-177-week-done");
+
+  await say(page, "cancel the 9 o'clock BoyBoy reminder");
+  await expect(page.getByRole("status")).toContainText("09:00 Wednesday 4 November: Check their opinion on BoyBoy's lunchtime nap. That's already done. Nothing was changed.");
+  await expect(seven().getByText("07:30")).toBeVisible();
+  await evidence(page, "HOU-177-already-done");
 });

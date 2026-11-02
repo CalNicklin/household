@@ -31,17 +31,24 @@ export async function findReminder(scope: JobScope, which: string, ref: string |
     if (reminder?.status === ReminderStatus.open && matchReminders([reminder], which, today).length === 1) return { reminder };
   }
   const open = await scope.api.backlog.upcomingReminders({ from: today });
-  if (open.length === 0) return { say: "There are no reminders coming up." };
   const found = matchReminders(open, which, today);
   const [only] = found;
   if (found.length === 1 && only !== undefined) return { reminder: only };
+  if (found.length === 0) {
+    // HOU-177: the one they named is already done, on the Backlog or cancelled: say so, never offer another
+    // in its place. Only when what they said narrows it down ("that reminder" alone names none of them).
+    const closed = await scope.api.backlog.upcomingReminders({ from: today, closed: true });
+    const gone = matchReminders(closed, which, today);
+    if (gone.length > 0 && (gone.length < closed.length || closed.length === 1)) return { say: `${gone.map((r) => `${reminderLine(r, today)}. ${closedSay(r.status)}`).join(" ")} Nothing was changed.` };
+  }
+  if (open.length === 0) return { say: "There are no reminders coming up." };
   // Never a guess: several could match, or none does, so ask which.
   const list = (found.length > 1 ? found : open).map((r) => reminderLine(r, today)).join("; ");
   return { say: found.length > 1 ? `Which one? ${list}. Say its time or what it's about.` : `I couldn't tell which reminder you mean. Coming up: ${list}.` };
 }
 
 /** Today and tomorrow's screens, and any other day already planned, that showed or will show it. */
-async function replanFor(scope: JobScope, dates: readonly LocalDate[]): Promise<void> {
+export async function replanFor(scope: JobScope, dates: readonly LocalDate[]): Promise<void> {
   const today = localDate(scope.rt.ports.clock.now(), scope.rt.timeZone);
   const shownOn = new Set(dates.flatMap((d) => [d, addLocalDays(d, -1)]).filter((d) => d >= today));
   for (const d of [...shownOn].sort()) {

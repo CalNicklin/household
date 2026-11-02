@@ -20,7 +20,7 @@ import {
   zRemindInput,
   zUpcomingRemindersInput,
 } from "@household/contracts";
-import { and, asc, desc, eq, gte, inArray, isNull, lt, lte, type SQL } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray, isNull, lt, lte, ne, type SQL } from "drizzle-orm";
 import { z } from "zod";
 import type { DomainDb } from "../../db/index.ts";
 import { iso } from "../../db/map.ts";
@@ -75,13 +75,13 @@ export function backlogRouter(db: BacklogDb) {
     if (row === undefined) forbid(`no reminder ${id}`);
     return row;
   };
-  /** CAP-10: open reminders matching `when`, by day and time. */
-  const openReminders = async (when: SQL | undefined) =>
+  /** CAP-10: open reminders matching `when`, by day and time. HOU-177: or only the closed ones. */
+  const openReminders = async (when: SQL | undefined, closed = false) =>
     (
       await db
         .select()
         .from(schema.reminders)
-        .where(and(eq(schema.reminders.status, ReminderStatus.open), when))
+        .where(and(closed ? ne(schema.reminders.status, ReminderStatus.open) : eq(schema.reminders.status, ReminderStatus.open), when))
         .orderBy(asc(schema.reminders.date), asc(schema.reminders.time), asc(schema.reminders.createdAt))
     ).map(toReminder);
   const setReminder = async (ctx: { publish: (t: "backlog") => void }, id: string, values: Partial<typeof schema.reminders.$inferInsert>) => {
@@ -234,7 +234,7 @@ export function backlogRouter(db: BacklogDb) {
     upcomingReminders: readProcedure
       .input(zUpcomingRemindersInput)
       .output(z.array(zReminder))
-      .query(async ({ input }) => openReminders(gte(schema.reminders.date, input.from))),
+      .query(async ({ input }) => openReminders(gte(schema.reminders.date, input.from), input.closed === true)),
 
     /**
      * HOU-174: a new day or time for an open reminder, because a person asked (PRV-1). Logged with who
