@@ -63,7 +63,7 @@ const splitItems = (s: string) =>
 
 // CAP-10: "remind me / us / Tom to…", "don't let me forget to… tonight". Who, then (optionally) when, then the thing.
 const REMIND = /^(?:please\s+)?(?:can you\s+)?(?:remind\s+((?:me|us|[a-z]+)(?:(?:\s*,\s*|\s+and\s+)(?:me|us|[a-z]+))*)|don'?t\s+let\s+(me|us)\s+forget)\b\s*(.*)$/i;
-const WHEN = /\b(tonight|this (?:evening|afternoon|morning)|tomorrow(?: (?:morning|afternoon|evening|night))?|later(?: today| on)?|at \d{1,2}(?:[:.]\d{2})?\s*(?:am|pm)?|in (?:an?|\d+|half an?) ?(?:hours?|minutes?|mins?)?|(?:on )?(?:mon|tues|wednes|thurs|fri|satur|sun)day)\b/i;
+const WHEN = /\b(tonight|this (?:evening|afternoon|morning)|tomorrow(?: (?:morning|afternoon|evening|night))?|later(?: today| on)?|at \d{1,2}(?:[:.]\d{2})?\s*(?:am|pm)?|in (?:an?|\d+|half an?) (?:hours?|minutes?|mins?)|(?:on )?(?:mon|tues|wednes|thurs|fri|satur|sun)day)\b/i;
 
 /** "remind us to discuss Wise Owls tonight" → remind({ text, for, when }), or null. */
 function remindCall(text: string): Call | null {

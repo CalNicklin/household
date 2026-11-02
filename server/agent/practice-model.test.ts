@@ -25,6 +25,13 @@ describe("HOU-148: the practice model routes the household's phrases the way a p
     expect(setsModeAhead(tools.map((tool, i) => ({ tool, input: inputs[i] })))).toBe(ahead);
   });
 
+  test("[CAP-10] a reminder keeps its words: only a real time is taken out of them (HOU-172)", async () => {
+    expect((await toolsFor("remind me to put the bins in a bag")).inputs[0]).toMatchObject({ text: "Put the bins in a bag", for: ["me"], when: null });
+    expect((await toolsFor("remind us to discuss Wise Owls tonight")).inputs[0]).toMatchObject({ text: "Discuss Wise Owls", for: ["us"], when: "tonight" });
+    expect((await toolsFor("remind Tom at 8 to put the bins out")).inputs[0]).toMatchObject({ text: "Put the bins out", for: ["Tom"], when: "at 8" });
+    expect((await toolsFor("remind me to call Mum in an hour")).inputs[0]).toMatchObject({ text: "Call Mum", when: "in an hour" });
+  });
+
   test("[MOM-4] a span set ahead names its first and last day (HOU-156)", async () => {
     expect((await toolsFor("we're away from Saturday until Monday")).inputs[0]).toMatchObject({ mode: "away", from: "saturday", until: "monday" });
     expect((await toolsFor("keep the slow day going until tomorrow")).inputs[0]).toMatchObject({ mode: "slow", until: "tomorrow" });

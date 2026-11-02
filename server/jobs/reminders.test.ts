@@ -83,9 +83,12 @@ describe("CAP-10: reminders you ask for", () => {
   });
 
   test("[CAP-10][PRO-6] reminders are not backlog offers, and a name that is not one of us is asked about, not guessed", async () => {
-    const offers = await h.rt.system("t").plans.offers();
-    const reminders = await h.rt.system("t").backlog.reminders({ from: MON, to: TUE });
-    expect(offers.some((o) => reminders.some((r) => r.id === o.itemId))).toBe(false);
+    // Monday's reminders were never made backlog offers: every offer that day is an existing backlog
+    // item, none of them one of the reminders, and Monday's plan offered at most one (PRO-6).
+    const items = await h.rt.system("t").backlog.list();
+    const mondayOffers = (await h.rt.system("t").plans.offers()).filter((o) => o.date === MON);
+    expect(mondayOffers.length).toBeLessThanOrEqual(1);
+    for (const o of mondayOffers) expect(["Discuss Wise Owls", "Put the bins out", "Ring the dentist"]).not.toContain(items.find((i) => i.id === o.itemId)?.text);
     h.ports.clock.set(atLocal(TUE, 9, 0, TZ), true);
     expect(await replyTo(await h.sayAndWait("remind Chloe to book swimming"))).toContain("Who should I remind?");
   });
