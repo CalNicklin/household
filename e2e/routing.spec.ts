@@ -63,3 +63,22 @@ test("[HOME-4][PRO-9] a shopping request that went nowhere is dismissed from the
   // limit: liveUpdateBudgetMs
   await expect(page.getByText("Couldn't find saffron")).toHaveCount(0, { timeout: Limits.liveUpdateBudgetMs.value });
 });
+
+test("[HOME-4] a shop request dismissed on one screen leaves the Shop screen on the other phone within the live-update budget", async ({ page, browser }) => {
+  await login(page);
+  await say(page, "we're out of saffron");
+  await page.goto("/shop");
+  // limit: shoppingBudgetMs
+  await expect(page.getByRole("listitem").filter({ hasText: "saffron" }).getByText("Couldn't find it; nothing was added")).toBeVisible({ timeout: Limits.shoppingBudgetMs.value });
+  const phoneCtx = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+  const phone = await phoneCtx.newPage();
+  await login(phone, "tom");
+  await phone.goto("/shop");
+  await expect(phone.getByRole("listitem").filter({ hasText: "saffron" })).toHaveCount(1);
+  await page.getByRole("listitem").filter({ hasText: "saffron" }).getByRole("button", { name: "Dismiss saffron" }).click();
+  // HOU-161: the dismiss's job and re-plan publish a burst of changes; the other phone still lands its refetch.
+  // limit: liveUpdateBudgetMs
+  await expect(phone.getByRole("listitem").filter({ hasText: "saffron" })).toHaveCount(0, { timeout: Limits.liveUpdateBudgetMs.value });
+  await evidence(phone, "HOU-161-other-phone-after-dismiss");
+  await phoneCtx.close();
+});
