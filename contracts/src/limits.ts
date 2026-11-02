@@ -45,6 +45,7 @@ export const Limits = {
   captureBudgetMs: { value: 5000, reason: "VERIFICATION", note: "CAP-1: appears for both of us within five seconds." },
   shoppingBudgetMs: { value: 600_000, reason: "VERIFICATION", note: "AUT-1: within ten minutes it is in our supermarket basket." },
   undoWindowMs: { value: 5000, reason: "VERIFICATION", note: "PRV-1 / HOU-158: a person's own delete can be taken back for a few seconds before it is sent; five is the usual undo-toast length." },
+  deployWaitMs: { value: 60_000, reason: "VERIFICATION", note: "HOME-6 / HOU-154 / HOU-166: an open screen picks up a deploy by its next minute check at the latest (web/src/data/live.ts). The deploy journey waits no longer than that for a server to start or stop or a screen to reload, then fails, so a hang can't run into FB-2's time budget and leave its server behind." },
   calendarRefreshMs: { value: 60_000, reason: "VERIFICATION", note: "HOME-1: updates within a minute of a calendar change." },
   inboundEmailMaxBytes: { value: 5 * 1024 * 1024, reason: "OWASP_API4", note: "HOU-150: the mail receiver holds a whole message in memory to check and parse it; order confirmations are well under 1 MB, and four at 5 MB fit its 128 MB cap." },
   inboundEmailMaxClients: { value: 4, reason: "OWASP_API4", note: "HOU-150: SMTP sessions at once. Two people forward a few orders a week; more than four at once is a flood, refused before it can fill the receiver's memory." },
