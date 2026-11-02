@@ -2,6 +2,8 @@
   "$schema": "./node_modules/fallow/schema.json",
   "entry": [
     "helper/main.ts",
+    "mail/main.ts",
+    "mail/last-confirmation.ts",
     "practice/supermarket/main.ts",
     "scripts/*.ts",
     "web/src/router.tsx",
@@ -218,6 +220,12 @@
         "name": "helper",
         "patterns": [
           "helper/**"
+        ]
+      },
+      {
+        "name": "mail",
+        "patterns": [
+          "mail/**"
         ]
       },
       {
@@ -483,6 +491,12 @@
         ]
       },
       {
+        "from": "mail",
+        "allow": [
+          "contracts"
+        ]
+      },
+      {
         "from": "tests",
         "allow": [
           "contracts",
@@ -512,6 +526,7 @@
           "web",
           "practice",
           "helper",
+          "mail",
           "tooling"
         ]
       }

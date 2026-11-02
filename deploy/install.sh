@@ -4,24 +4,28 @@
 #   sudo deploy/install.sh --domain house.example.com --deploy-key "ssh-ed25519 AAAA... household-deploy"
 # and, for the PR previews (FB-5), once more with
 #   sudo deploy/install.sh --preview-domain preview.example.com --preview-key "ssh-ed25519 AAAA... household-preview"
+# and, for order emails (HOU-150), once more with
+#   sudo deploy/install.sh --mail-domain orders.example.com
 # It never touches the other apps on the server. It:
 #   - installs the compose file, Caddyfile and household-* commands (re-run it after changing deploy/);
 #   - generates every secret on the server into /srv/household/.env (root only), once;
 #   - finds the existing Hindsight's Docker network so the app can reach it;
 #   - creates the `household` user, whose SSH key can only run household-deploy, via one sudoers rule;
 #   - for previews: installs /srv/household-previews, and a second key that can only run household-preview;
+#   - for order emails: the mail receiver on port 25, taking mail for orders@<mail domain> only;
 #   - switches on the nightly backup.
 set -euo pipefail
 umask 022
 [ "$(id -u)" -eq 0 ] || { echo "run as root: sudo deploy/install.sh ..." >&2; exit 1; }
 repo="$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)"
-domain="" key="" preview_domain="" preview_key=""
+domain="" key="" preview_domain="" preview_key="" mail_domain=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --domain) domain="${2:?}"; shift 2 ;;
     --deploy-key) key="${2:?}"; shift 2 ;;
     --preview-domain) preview_domain="${2:?}"; shift 2 ;;
     --preview-key) preview_key="${2:?}"; shift 2 ;;
+    --mail-domain) mail_domain="${2:?}"; shift 2 ;;
     *) echo "unknown option $1" >&2; exit 2 ;;
   esac
 done
@@ -30,10 +34,10 @@ lib=/usr/local/lib/household dir=/srv/household etc=/etc/household
 install -d -m 755 "$lib" "$etc"
 install -d -m 750 "$dir"
 install -m 755 "$repo"/deploy/household-*.sh "$repo/scripts/backup.sh" "$repo/scripts/restore.sh" "$lib/"
-for c in deploy setup backup restore preview telegram google; do ln -sfn "$lib/household-$c.sh" "/usr/local/sbin/household-$c"; done
+for c in deploy setup backup restore preview telegram google email; do ln -sfn "$lib/household-$c.sh" "/usr/local/sbin/household-$c"; done
 # Credential files only the app (uid 10001 in its image) can read, mounted read-only into it.
 install -d -o 10001 -g root -m 700 "$dir/credentials"
-install -m 644 "$repo/deploy/compose.yml" "$repo/deploy/compose.hindsight.yml" "$repo/deploy/compose.caddy-previews.yml" "$repo/deploy/Caddyfile" "$repo/deploy/Caddyfile.previews" "$dir/"
+install -m 644 "$repo/deploy/compose.yml" "$repo/deploy/compose.hindsight.yml" "$repo/deploy/compose.caddy-previews.yml" "$repo/deploy/compose.mail.yml" "$repo/deploy/Caddyfile" "$repo/deploy/Caddyfile.previews" "$repo/deploy/Caddyfile.mail" "$dir/"
 # FB-5: the PR previews' own directory: their compose file and which of them are running. Nothing of the
 # house's is in it.
 previews=/srv/household-previews
@@ -73,6 +77,19 @@ if [ -n "$preview_domain" ]; then
 fi
 if grep -qE '^PREVIEW_DOMAIN=.+' "$dir/.env"; then
   docker network inspect household-previews > /dev/null 2>&1 || docker network create --internal household-previews > /dev/null
+fi
+
+# HOU-150: order emails forwarded to orders@<mail domain> reach the house through its own receiver on
+# port 25 (household-common.sh adds compose.mail.yml once this is set). Caddy gets the certificate.
+if [ -n "$mail_domain" ]; then
+  [[ "$mail_domain" =~ ^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$ ]] || { echo "--mail-domain must be a lowercase domain, e.g. orders.example.com" >&2; exit 2; }
+  if ss -Hltn 'sport = :25' 2> /dev/null | grep -q . && ! docker ps -q --filter label=com.docker.compose.service=mail --filter label=com.docker.compose.project=household | grep -q .; then
+    echo "something on this server already listens on port 25 (sudo ss -ltnp 'sport = :25'); stop it first, or the house can't start its mail receiver" >&2
+    exit 2
+  fi
+  sed -i '/^MAIL_DOMAIN=/d' "$dir/.env"
+  echo "MAIL_DOMAIN=$mail_domain" >> "$dir/.env"
+  echo "the house takes mail for orders@$mail_domain once it is redeployed"
 fi
 
 # PLT-6: reuse the Hindsight already on the server. It publishes only on the host's 127.0.0.1, which a

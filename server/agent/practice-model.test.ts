@@ -1,9 +1,9 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, test } from "vitest";
 import { z } from "zod";
-import { practiceModel } from "./practice-model.ts";
+import { practiceModel, setsModeAhead } from "./practice-model.ts";
 
-const zPhrases = z.object({ phrases: z.array(z.object({ text: z.string(), expect: z.array(z.array(z.string())) })) });
+const zPhrases = z.object({ phrases: z.array(z.object({ text: z.string(), expect: z.array(z.array(z.string())), ahead: z.boolean().optional() })) });
 const { phrases } = zPhrases.parse(JSON.parse(readFileSync(new URL("../../practice/phrases/routing.json", import.meta.url), "utf8")));
 
 /** The tools the practice model calls for one message, as the agent would prompt it. */
@@ -18,6 +18,17 @@ describe("HOU-148: the practice model routes the household's phrases the way a p
   test.each(phrases)("[CAP-1][AUT-1][MOM-2] $text", async ({ text, expect: acceptable }) => {
     const { tools } = await toolsFor(text);
     expect(acceptable.map((a) => a.join("+"))).toContain(tools.join("+"));
+  });
+
+  test.each(phrases.flatMap((p) => (p.ahead === undefined ? [] : [{ text: p.text, ahead: p.ahead }])))("[MOM-4] set ahead or from now (HOU-156): $text", async ({ text, ahead }) => {
+    const { tools, inputs } = await toolsFor(text);
+    expect(setsModeAhead(tools.map((tool, i) => ({ tool, input: inputs[i] })))).toBe(ahead);
+  });
+
+  test("[MOM-4] a span set ahead names its first and last day (HOU-156)", async () => {
+    expect((await toolsFor("we're away from Saturday until Monday")).inputs[0]).toMatchObject({ mode: "away", from: "saturday", until: "monday" });
+    expect((await toolsFor("keep the slow day going until tomorrow")).inputs[0]).toMatchObject({ mode: "slow", until: "tomorrow" });
+    expect((await toolsFor("keep the slow day going until tomorrow")).inputs[0]).not.toHaveProperty("from");
   });
 
   test("[CAP-1] Cal's printer sentence is one capture of the whole sentence, never split into shop items", async () => {

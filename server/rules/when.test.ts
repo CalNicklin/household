@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { dayIn } from "./when.ts";
+import { dayIn, daysIn } from "./when.ts";
 
 const MON = "2026-11-02";
 const TUE = "2026-11-03";
@@ -26,5 +26,19 @@ describe("PRO-2: the day a reply means", () => {
 
   test("[PRO-2] no day, an impossible date, or a weekday that disagrees with the date gives nothing, never today", () => {
     for (const phrase of ["sometime", "", "next week", "Wednesday 3 November", "31 November", "2026-02-30"]) expect(dayIn(phrase, MON), phrase).toBeNull();
+  });
+});
+
+describe("HOU-156: the days a mode set ahead covers", () => {
+  test("[MOM-4] 'this weekend' is the coming Saturday and Sunday; on a Sunday it is today", () => {
+    for (const phrase of ["this weekend", "the weekend", "weekend"]) expect(daysIn(phrase, MON), phrase).toEqual({ from: "2026-11-07", to: "2026-11-08" });
+    expect(daysIn("this weekend", "2026-11-07")).toEqual({ from: "2026-11-07", to: "2026-11-08" });
+    expect(daysIn("this weekend", "2026-11-08")).toEqual({ from: "2026-11-08", to: "2026-11-08" });
+  });
+
+  test("[PRO-2] any other phrase is the one day dayIn reads, or nothing", () => {
+    expect(daysIn("on Friday", MON)).toEqual({ from: "2026-11-06", to: "2026-11-06" });
+    expect(daysIn("Tuesday 3 November", MON)).toEqual({ from: TUE, to: TUE });
+    for (const phrase of ["next weekend", "sometime", "Wednesday 3 November"]) expect(daysIn(phrase, MON), phrase).toBeNull();
   });
 });

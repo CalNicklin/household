@@ -35,6 +35,22 @@ export const zEmailAttachment = z.object({
   orderLike: z.boolean(),
 });
 
+/**
+ * What the email webhook takes (CH-2, CAP-9): from the house's own mail receiver (HOU-150), or an
+ * inbound-mail service posting JSON. `provenSenders` is set only by the receiver: the addresses it
+ * proved sent the email on (SPF or DKIM aligned with their domain). When it is present, the person is
+ * found among those and nothing else; From and To are then just what the email says.
+ */
+export const zInboundEmail = z.object({
+  from: z.string(),
+  to: z.union([z.string(), z.array(z.string())]),
+  subject: z.string().default(""),
+  text: z.string().default(""),
+  messageId: z.string().min(1),
+  provenSenders: z.array(z.string()).min(1).optional(),
+});
+export type InboundEmail = z.input<typeof zInboundEmail>;
+
 export const zCalendarChangeAttachment = z.object({
   kind: z.literal(AttachmentKind.calendarChange),
   resourceState: z.string(),

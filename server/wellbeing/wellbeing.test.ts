@@ -45,7 +45,7 @@ describe("wellbeing", () => {
   test("[WB-1] it never reads mood from how we write: the scorer takes no message text at all", () => {
     expectTypeOf<keyof ScoreInput>().toEqualTypeOf<"facts" | "person" | "date" | "doneCount" | "healthHeavy">();
     expectTypeOf<keyof HouseFacts>().not.toEqualTypeOf<"messages">();
-    const factKeys: (keyof HouseFacts)[] = ["timeZone", "latitude", "longitude", "people", "events", "rules", "nurseryTerms", "nurseryEvents", "sitters", "sitterBookings", "arrivals", "mode", "forecast"];
+    const factKeys: (keyof HouseFacts)[] = ["timeZone", "latitude", "longitude", "people", "events", "rules", "nurseryTerms", "nurseryEvents", "sitters", "sitterBookings", "arrivals", "modes", "forecast"];
     for (const k of factKeys) expect(k).not.toMatch(/message|text|reply/i);
   });
 
