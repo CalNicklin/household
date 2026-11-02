@@ -4,7 +4,8 @@ import { fakeServer, json } from "./fake-http.ts";
 import { parseTelegramUpdate, TelegramTransport } from "./telegram.ts";
 
 /** HOU-168: made up per run, so no token-shaped literal is in the repo. */
-const TOKEN = `123456:${randomBytes(18).toString("base64url")}`;
+const BOT_SECRET = randomBytes(18).toString("base64url");
+const TOKEN = `123456:${BOT_SECRET}`;
 const servers: { close: () => Promise<void> }[] = [];
 afterEach(async () => {
   await Promise.all(servers.splice(0).map((s) => s.close()));
@@ -44,9 +45,9 @@ describe("Telegram transport", () => {
     const tg = new TelegramTransport({ token: TOKEN, apiBase: server.url });
     const error: unknown = await tg.send("1001", "hi", []).catch((e: unknown) => e);
     expect(error).toBeInstanceOf(Error);
-    expect(String(error)).not.toContain("SECRET");
-    expect(error instanceof Error ? (error.stack ?? "") : "").not.toContain("SECRET");
-    expect(logged.join("\n")).not.toContain("SECRET");
+    expect(String(error)).not.toContain(BOT_SECRET);
+    expect(error instanceof Error ? (error.stack ?? "") : "").not.toContain(BOT_SECRET);
+    expect(logged.join("\n")).not.toContain(BOT_SECRET);
   });
 
   it("[MOM-8] downloads a voice note through getFile", async () => {
