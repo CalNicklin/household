@@ -1,4 +1,5 @@
 import { spawn, spawnSync } from "node:child_process";
+import { Client } from "pg";
 
 /**
  * CODE-11: the only check. tsc, oxlint, Fallow, drizzle-kit check, then the tests (unit and the
@@ -56,6 +57,52 @@ function run(step: Step): Promise<{ ok: boolean; seconds: number }> {
   });
 }
 
+/**
+ * HOU-163: the most connections Postgres had open at once while the steps ran (from pg_stat_activity,
+ * sampled), printed at the end so CI shows how far the run stays under max_connections. The server is
+ * whichever the tests use (server/testing/postgres.ts); until one answers, nothing is sampled.
+ */
+function sampleConnections(): () => Promise<string | null> {
+  const urls = [process.env["TEST_DATABASE_URL"], process.env["DATABASE_URL"], "postgres://postgres:postgres@localhost:5432/postgres", "postgres://postgres:postgres@localhost:54329/postgres"].filter((u): u is string => u !== undefined);
+  let client: Client | null = null;
+  let connecting = false;
+  let peak = 0;
+  let max = 0;
+  const tick = async () => {
+    if (client === null) {
+      if (connecting) return;
+      connecting = true;
+      for (const url of urls) {
+        const c = new Client({ connectionString: url });
+        c.on("error", () => {});
+        try {
+          await c.connect();
+          client = c;
+          break;
+        } catch {
+          await c.end().catch(() => {});
+        }
+      }
+      connecting = false;
+      return;
+    }
+    try {
+      const r = await client.query<{ n: number; max: number }>("select count(*)::int as n, current_setting('max_connections')::int as max from pg_stat_activity where backend_type = 'client backend' and pid <> pg_backend_pid()");
+      peak = Math.max(peak, r.rows[0]?.n ?? 0);
+      max = r.rows[0]?.max ?? max;
+    } catch {
+      // A sample lost while the server is busy or restarting is just skipped.
+    }
+  };
+  const timer = setInterval(() => void tick(), 100);
+  return async () => {
+    clearInterval(timer);
+    await client?.end().catch(() => {});
+    return max === 0 ? null : `peak Postgres connections ${peak} of ${max}`;
+  };
+}
+const stopSampling = sampleConnections();
+
 const timings: string[] = [];
 const results = await Promise.all(
   lanes.map(async (lane) => {
@@ -68,6 +115,8 @@ const results = await Promise.all(
   }),
 );
 const total = (Date.now() - started) / 1000;
+const connections = await stopSampling();
+if (connections !== null) process.stdout.write(`\n${connections}\n`);
 // exitCode, not exit(): exit() can drop the end of a large step's output still queued for a pipe,
 // which in CI is where the failing tests are named (FB-7).
 if (results.includes(false)) {

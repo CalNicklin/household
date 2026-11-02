@@ -25,7 +25,20 @@ export async function migrateAll(env: Env, template?: (d: Domain) => string): Pr
 }
 
 /** The house's settings, its people, their logins and their own settings: what every practice house starts with. */
-async function seedPeople(dbs: ReturnType<typeof connectAll>): Promise<void> {
+type Dbs = ReturnType<typeof connectAll>;
+
+/** Run `fn` over the house's databases: its own pools when given (a running server's), else pools opened and closed here. */
+async function withDbs(env: Env, own: Dbs | undefined, fn: (dbs: Dbs) => Promise<void>): Promise<void> {
+  if (own !== undefined) return fn(own);
+  const dbs = connectAll(env);
+  try {
+    await fn(dbs);
+  } finally {
+    await Promise.all(Object.values(dbs).map((db) => closePool(db.$client)));
+  }
+}
+
+async function seedPeople(dbs: Dbs): Promise<void> {
   const h = dbs.household;
   await h.insert(H.settings).values({ household: data.PRACTICE_HOUSEHOLD, name: "Practice household", timezone: data.PRACTICE_TZ, retainMessages: true, latitude: 51.4545, longitude: -2.5879, healthOwner: "priya" });
   await h.insert(H.people).values(data.people.map((p) => ({ ...p, nurseryDays: [...p.nurseryDays] })));
@@ -42,19 +55,13 @@ async function seedPeople(dbs: ReturnType<typeof connectAll>): Promise<void> {
  * HOU-149: a brand-new house, as `pnpm house:setup` leaves it — settings, the people and their logins,
  * nothing else. No calendar, backlog, rules or sitters, and no plan yet.
  */
-async function seedEmpty(env: Env): Promise<void> {
-  const dbs = connectAll(env);
-  try {
-    await seedPeople(dbs);
-  } finally {
-    await Promise.all(Object.values(dbs).map((db) => closePool(db.$client)));
-  }
+async function seedEmpty(env: Env, own?: Dbs): Promise<void> {
+  await withDbs(env, own, seedPeople);
 }
 
 /** FB-6: people, a week of calendar (via the practice Google), twenty backlog items, three parcels, the shared lists. */
-export async function seedPractice(env: Env, now: Date = new Date(data.PRACTICE_START)): Promise<void> {
-  const dbs = connectAll(env);
-  try {
+export async function seedPractice(env: Env, now: Date = new Date(data.PRACTICE_START), own?: Dbs): Promise<void> {
+  await withDbs(env, own, async (dbs) => {
     await seedPeople(dbs);
     const h = dbs.household;
     for (const s of data.sitters) {
@@ -92,9 +99,7 @@ export async function seedPractice(env: Env, now: Date = new Date(data.PRACTICE_
       await dbs.lists.insert(L.items).values(l.items.map((i, n) => ({ listId: list.id, text: i.text, checked: i.checked, position: n, createdBy: i.createdBy, source: ListItemSource.person, createdAt: now })));
     }
     await dbs.parcels.insert(P.arrivals).values(data.parcels.map((p, i) => ({ ...p, sourceKey: `seed-parcel-${i}`, createdAt: now })));
-  } finally {
-    await Promise.all(Object.values(dbs).map((db) => closePool(db.$client)));
-  }
+  });
 }
 
 export async function resetPractice(env: Env, now?: Date): Promise<void> {
@@ -105,18 +110,14 @@ export async function resetPractice(env: Env, now?: Date): Promise<void> {
 
 /**
  * Empty every practice table in place (the databases and their connections stay) and seed again:
- * the whole practice household, or with `empty` a brand-new house (HOU-149).
+ * the whole practice household, or with `empty` a brand-new house (HOU-149). HOU-163: through the
+ * running server's own pools, so a reset opens no connections beside them.
  */
-export async function truncateAndSeed(env: Env, now: Date, options: { empty?: boolean } = {}): Promise<void> {
-  const dbs = connectAll(env);
-  try {
-    for (const domain of Object.values(Domain)) {
-      const tables = await dbs[domain].$client.query<{ tablename: string }>("select tablename from pg_tables where schemaname = 'public'");
-      if (tables.rows.length > 0) await dbs[domain].$client.query(`truncate ${tables.rows.map((t) => `"${t.tablename}"`).join(", ")} cascade`);
-    }
-  } finally {
-    await Promise.all(Object.values(dbs).map((db) => closePool(db.$client)));
+export async function truncateAndSeed(env: Env, dbs: Dbs, now: Date, options: { empty?: boolean } = {}): Promise<void> {
+  for (const domain of Object.values(Domain)) {
+    const tables = await dbs[domain].$client.query<{ tablename: string }>("select tablename from pg_tables where schemaname = 'public'");
+    if (tables.rows.length > 0) await dbs[domain].$client.query(`truncate ${tables.rows.map((t) => `"${t.tablename}"`).join(", ")} cascade`);
   }
-  if (options.empty === true) await seedEmpty(env);
-  else await seedPractice(env, now);
+  if (options.empty === true) await seedEmpty(env, dbs);
+  else await seedPractice(env, now, dbs);
 }

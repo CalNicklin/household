@@ -16,7 +16,7 @@ let app: Hono<HttpEnv>;
 beforeAll(async () => {
   ({ h, app } = await householdWithApp());
   // A brand-new house: people and logins only, no calendar, backlog or rules, and no plan.
-  await truncateAndSeed(h.env, h.ports.clock.now(), { empty: true });
+  await truncateAndSeed(h.env, h.rt.dbs, h.ports.clock.now(), { empty: true });
 });
 afterAll(async () => h.close());
 
