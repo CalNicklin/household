@@ -12,7 +12,7 @@ export const fontsHref = "https://fonts.googleapis.com/css2?family=Manrope:wght@
 
 export { AlertCard, ArrivalRow, BacklogPickCard, BacklogRow, Card, type CardAction, EventCard, EventRow, ListCard, ModeCard, SuggestionCard } from "./cards.tsx";
 export { AddItemField, ChecklistCard, ChecklistTitle, ChecklistTitleEditor, CheckRow, Confirm, Menu } from "./checklist.tsx";
-export { Answer, Composer, UndoToast } from "./composer.tsx";
+export { Composer, Conversation, type ExchangeLine, UndoToast } from "./composer.tsx";
 export { Button, Chip, Chips, Field, Form, Segmented, Stepper, TextInput, Toggle } from "./controls.tsx";
 export { Columns, Focus, Footer, Grid3, Header, type NavLink, Page, PageBody, Row, Section, Stack } from "./layout.tsx";
 export { ExternalLink, Footnote, Image, Table, Text } from "./text.tsx";

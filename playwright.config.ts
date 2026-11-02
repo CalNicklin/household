@@ -1,4 +1,5 @@
-import { defineConfig, devices } from "@playwright/test";
+import { existsSync } from "node:fs";
+import { defineConfig, devices, webkit } from "@playwright/test";
 import { READY_PORT, STACKS } from "./e2e/stacks.ts";
 
 /**
@@ -14,6 +15,8 @@ export default defineConfig({
   use: { trace: "retain-on-failure", screenshot: "only-on-failure" },
   projects: [
     { name: "ipad", use: { ...devices["iPad (gen 7) landscape"], viewport: { width: 1180, height: 820 }, browserName: "chromium" } },
+    // HOU-159: the composer journeys again in WebKit, Safari's engine, wherever it is installed (CI installs it).
+    ...(existsSync(webkit.executablePath()) ? [{ name: "webkit", testMatch: /conversation\.spec\.ts/, use: { browserName: "webkit" as const } }] : []),
   ],
   webServer: { command: "node e2e/stack.ts", url: `http://localhost:${READY_PORT}/`, reuseExistingServer: !process.env["CI"] },
 });

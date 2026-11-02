@@ -313,6 +313,19 @@ export const JobStatus = {
 export type JobStatus = ValueOf<typeof JobStatus>;
 export const zJobStatus = z.enum(JobStatus);
 
+/**
+ * HOU-159: where one of today's exchanges with the house stands. `quiet` is a message the house
+ * handled without a reply (nothing to say back); `failed` is one whose job failed, so no reply is coming.
+ */
+export const ExchangeState = {
+  waiting: "waiting",
+  answered: "answered",
+  quiet: "quiet",
+  failed: "failed",
+} as const;
+export type ExchangeState = ValueOf<typeof ExchangeState>;
+export const zExchangeState = z.enum(ExchangeState);
+
 export const NotificationStatus = {
   queued: "queued",
   sent: "sent",

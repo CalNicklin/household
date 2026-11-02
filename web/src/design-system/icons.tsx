@@ -76,3 +76,12 @@ export function CloseIcon(props: IconProps) {
     </Svg>
   );
 }
+
+/** HOU-159: send what is in the composer. An arrow up, in the canvas's stroke style. */
+export function SendIcon(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <path d="M12 19V5M5 12l7-7 7 7" />
+    </Svg>
+  );
+}

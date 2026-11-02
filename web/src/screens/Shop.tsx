@@ -96,7 +96,7 @@ export function ShopScreen() {
   return (
     <Page label="Shop">
       <Header title="Shop" line={data?.deliveryDate === null || data === undefined ? "No delivery booked" : `Next delivery ${new Date(data.deliveryDate).toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long" })}`} nav={navFor("/shop")} />
-      <FooterComposer placeholder="“We're out of oat milk” — it goes in the next shop" />
+      <FooterComposer placeholder="Add to the shop, or ask the house anything" />
       <Grid3>
         <Section label="Asked for" tone="suggestion">
           <ListCard label="Asked for">
