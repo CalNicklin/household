@@ -34,7 +34,8 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm exec playwright install --with-deps chromium
+      # HOU-159: WebKit too, for the composer journeys in Safari's engine.
+      - run: pnpm exec playwright install --with-deps chromium webkit
       - run: pnpm check
       - if: always()
         uses: actions/upload-artifact@v4
