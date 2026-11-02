@@ -77,6 +77,7 @@ export const modes = pgTable("modes", {
   mode: text("mode", { enum: values(ModeKind) }).notNull(),
   setBy: text("set_by").notNull().references(() => people.id),
   setAt: at("set_at").notNull(),
+  startsAt: at("starts_at").notNull(),
   endsAt: at("ends_at").notNull(),
 });
 

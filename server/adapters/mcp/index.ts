@@ -56,8 +56,11 @@ export function buildMcpServer(rt: Runtime, person: string): McpServer {
   server.registerTool("backlog", { description: "The shared backlog: could go soon, waiting, just added, parked." }, async () => text(await mcpBacklog(rt)));
   server.registerTool("arrivals", { description: "Parcels expected from order confirmations." }, async () => text(await mcpArrivals(rt)));
   server.registerTool("capture", { description: "Note a thought for the house (it lands on the backlog or the shop).", inputSchema: { text: z.string().min(1) } }, async ({ text: words }) => say(rt, person, words, []));
-  server.registerTool("set_mode", { description: "Set the house's day: slow, sick, away or normal.", inputSchema: { mode: z.enum(["slow", "sick", "away", "normal"]) } }, async ({ mode }) =>
-    say(rt, person, MODE_WORDS[mode], []),
+  // HOU-156: `when` sets it ahead ("this weekend", "on Friday"), read the same way as when said in words (MOM-8).
+  server.registerTool(
+    "set_mode",
+    { description: "Set the house's day: slow, sick, away or normal. Starts now unless `when` names a later day or days ('this weekend', 'on Friday').", inputSchema: { mode: z.enum(["slow", "sick", "away", "normal"]), when: z.string().min(1).optional() } },
+    async ({ mode, when }) => say(rt, person, when === undefined ? MODE_WORDS[mode] : `${MODE_WORDS[mode]} ${when}`, []),
   );
   server.registerTool("dismiss", { description: "Dismiss something on today's screen by its ref, with no guilt.", inputSchema: { ref: z.string().min(1) } }, async ({ ref }) =>
     say(rt, person, "Not today", [{ kind: AttachmentKind.ref, ref, action: ActionKind.notToday }]),

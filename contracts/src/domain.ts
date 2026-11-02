@@ -72,6 +72,8 @@ export const zMode = z.object({
   mode: zModeKind,
   setBy: z.string(),
   setAt: zIsoDateTime,
+  /** HOU-156: when it takes effect: when it was set, or the start of a later day it was set ahead for. */
+  startsAt: zIsoDateTime,
   /** MOM-4: ends at midnight unless extended. */
   endsAt: zIsoDateTime,
 });
