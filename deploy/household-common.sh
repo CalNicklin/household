@@ -31,6 +31,9 @@ if grep -qE '^HINDSIGHT_NETWORK=.+' "$HOUSEHOLD_DIR/.env"; then COMPOSE_FILE="$C
 # FB-5: the house's Caddy also serves the PR previews when install.sh was given --preview-domain.
 if grep -qE '^PREVIEW_DOMAIN=.+' "$HOUSEHOLD_DIR/.env"; then COMPOSE_FILE="$COMPOSE_FILE:$HOUSEHOLD_DIR/compose.caddy-previews.yml"; fi
 
+# HOU-150: the mail receiver for forwarded order emails, when install.sh was given --mail-domain.
+if grep -qE '^MAIL_DOMAIN=.+' "$HOUSEHOLD_DIR/.env"; then COMPOSE_FILE="$COMPOSE_FILE:$HOUSEHOLD_DIR/compose.mail.yml"; fi
+
 household_compose() { docker compose "$@"; }
 
 # The image running now (written by household-deploy once an image is in place).
