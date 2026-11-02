@@ -30,10 +30,13 @@ function start(own: Stack): ChildProcess[] {
   const shopPassword = randomBytes(18).toString("base64url");
   writeFileSync(own.creds, JSON.stringify({ url: `http://localhost:${own.shop}`, username: "practice-shopper", password: shopPassword }));
   chmodSync(own.creds, 0o600);
+  // HOU-168: the helper's token is made up per run too; the journeys read it from this file.
+  const helperToken = randomBytes(18).toString("base64url");
+  writeFileSync(own.helperTokenFile, helperToken, { mode: 0o600 });
   return [
     run(`shop ${own.index}`, ["practice/supermarket/main.ts"], { PORT: String(own.shop), PRACTICE_SUPERMARKET_PASSWORD: shopPassword }),
-    run(`helper ${own.index}`, ["helper/main.ts"], { PORT: String(own.helper), HELPER_TOKEN: "e2e-helper-token", SUPERMARKET_CREDENTIALS_FILE: own.creds, HELPER_DATA_DIR: path.join(own.dataDir, "helper") }),
-    run(`server ${own.index}`, ["server/main.ts"], { PORT: String(own.server), DB_PREFIX: own.dbPrefix, HELPER_URL: `http://localhost:${own.helper}`, HELPER_TOKEN: "e2e-helper-token", PUBLIC_URL: `http://localhost:${own.server}` }),
+    run(`helper ${own.index}`, ["helper/main.ts"], { PORT: String(own.helper), HELPER_TOKEN: helperToken, SUPERMARKET_CREDENTIALS_FILE: own.creds, HELPER_DATA_DIR: path.join(own.dataDir, "helper") }),
+    run(`server ${own.index}`, ["server/main.ts"], { PORT: String(own.server), DB_PREFIX: own.dbPrefix, HELPER_URL: `http://localhost:${own.helper}`, HELPER_TOKEN: helperToken, PUBLIC_URL: `http://localhost:${own.server}` }),
   ];
 }
 

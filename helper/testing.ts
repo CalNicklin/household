@@ -9,7 +9,7 @@ import { readLockedCredentials } from "./secrets.ts";
 export const TEST_USERNAME = "practice-shopper";
 /** A fresh login every run: no password lives in the repo, not even a test one. */
 export const TEST_PASSWORD = randomBytes(18).toString("base64url");
-export const TEST_TOKEN = "test-helper-token";
+export const TEST_TOKEN = randomBytes(18).toString("base64url");
 
 export type HelperFixture = {
   helperUrl: string;

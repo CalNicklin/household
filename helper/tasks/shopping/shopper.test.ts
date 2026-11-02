@@ -1,3 +1,4 @@
+import { randomBytes } from "node:crypto";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -14,14 +15,17 @@ let state: SupermarketState;
 let close: () => Promise<void>;
 let shopper: Shopper;
 
+/** HOU-168: a fresh login every run, as helper/testing.ts makes. */
+const password = randomBytes(12).toString("base64url");
+
 beforeAll(async () => {
-  const sm = await startSupermarket({ port: 0, username: "u", password: "p-secret" });
+  const sm = await startSupermarket({ port: 0, username: "u", password });
   state = sm.state;
   close = sm.close;
   browser = await chromium.launch();
-  const redact = createRedactor(["p-secret"]);
+  const redact = createRedactor([password]);
   const deps: TaskDeps = {
-    credentials: { url: sm.url, username: "u", password: "p-secret" },
+    credentials: { url: sm.url, username: "u", password },
     dataDir: mkdtempSync(path.join(tmpdir(), "shopper-")),
     browser: async () => browser,
     newLog: () => createRunLog(redact, () => {}),

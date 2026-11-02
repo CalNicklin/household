@@ -98,7 +98,7 @@ describe("a PR's preview", () => {
       expect(s["cpus"], `${name} may take every core`).toBeLessThan(1);
       expect(s["pids_limit"], `${name} has no process limit`).toBeGreaterThan(0);
     }
-    // Nothing runs on a token or secret whose practice default is published in server/env.ts.
+    // Nothing runs on a token or secret whose practice default is published (contracts/src/practice.ts).
     for (const name of ["SESSION_SECRET", "MCP_TOKEN", "TELEGRAM_WEBHOOK_SECRET", "EMAIL_WEBHOOK_SECRET", "CALENDAR_WEBHOOK_TOKEN", "HELPER_TOKEN"])
       expect(app?.environment, name).toMatchObject({ [name]: `\${PREVIEW_${name}:?}` });
     // Its volumes are its own (compose prefixes them with household-pr-<n>), never the house's.

@@ -57,7 +57,7 @@ describe("setting up the real house", () => {
         expect(await api.household.resolveIdentity({ channel: "telegram", address: "42" })).toBe("sam");
         const sam = logins?.[0];
         expect(sam === undefined ? null : await api.household.login({ username: sam.username, password: sam.password })).toBe("sam");
-        expect(await api.household.login({ username: "sam", password: "wrong" })).toBeNull();
+        expect(await api.household.login({ username: "sam", password: randomBytes(12).toString("base64url") })).toBeNull();
         expect(await api.household.rules()).toEqual([]);
       } finally {
         await rt.close();

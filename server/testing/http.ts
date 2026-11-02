@@ -1,4 +1,4 @@
-import { type InboundMessage, JobStatus, zInboundMessage } from "@household/contracts";
+import { type InboundMessage, JobStatus, Practice, zInboundMessage } from "@household/contracts";
 import type { Hono } from "hono";
 import { type Adapter, type HttpEnv, loadAdapters } from "../adapters/registry.ts";
 import { createApp } from "../http/app.ts";
@@ -21,8 +21,9 @@ export async function householdWithApp(): Promise<{ h: TestHousehold; app: Hono<
   return { h, app: testApp(h.rt, adapters), adapters };
 }
 
-/** Log in as a practice person and return the session cookie. */
-export async function loginCookie(app: Hono<HttpEnv>, username = "priya", password = "practice"): Promise<string> {
+/** Log in as a practice person (Priya unless named) with the practice login, and return the session cookie. */
+export async function loginCookie(app: Hono<HttpEnv>, username = "priya"): Promise<string> {
+  const password = Practice.login;
   const res = await app.request("/api/login", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ username, password }) });
   const cookie = res.headers.get("set-cookie");
   if (res.status !== 200 || cookie === null) throw new Error(`login failed: ${res.status}`);

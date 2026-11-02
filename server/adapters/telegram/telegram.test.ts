@@ -1,4 +1,4 @@
-import { ActionKind, Limits, Urgency } from "@household/contracts";
+import { ActionKind, Limits, Practice, Urgency } from "@household/contracts";
 import type { Hono } from "hono";
 import { afterAll, beforeAll, describe, expect, test } from "vitest";
 import { notify } from "../../notify/notify.ts";
@@ -15,7 +15,7 @@ beforeAll(async () => {
 });
 afterAll(async () => h.close());
 
-const post = (body: unknown, secret = "practice-telegram-secret") =>
+const post = (body: unknown, secret: string = Practice.settings.TELEGRAM_WEBHOOK_SECRET) =>
   app.request("/webhooks/telegram", { method: "POST", headers: { "content-type": "application/json", "x-telegram-bot-api-secret-token": secret }, body: JSON.stringify(body) });
 
 const textUpdate = (text: string, from = "1001", id = (updateId += 1)) => ({ update_id: id, message: { chat: { id: Number(from) }, from: { id: Number(from) }, text } });

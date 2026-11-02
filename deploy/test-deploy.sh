@@ -53,7 +53,9 @@ CONF
 docker run --rm --network none --memory 128m -v "$repo/scripts/env-init.ts:/env-init.ts:ro" -v "$work/srv:/work" -w /work node:22-bookworm-slim node /env-init.ts --real > /dev/null
 echo "HOUSEHOLD_DOMAIN=localhost" >> "$work/srv/.env"
 # HOU-160: the real house needs its model's key; no call is made with it here.
-echo "ANTHROPIC_API_KEY=placeholder-not-a-key" >> "$work/srv/.env"
+# HOU-168: a stand-in key made up per run, so no key-shaped literal is in the repo.
+model_key="stand-in-$(od -An -N12 -tx1 /dev/urandom | tr -d ' \n')"
+echo "ANTHROPIC_API_KEY=$model_key" >> "$work/srv/.env"
 grep -q '^PRACTICE=false$' "$work/srv/.env" || fail "env-init --real did not write the real house"
 
 # The household-* commands, laid out as install.sh installs them (with backup.sh and restore.sh beside them).
@@ -182,5 +184,5 @@ for _ in $(seq 60); do [ "$(docker inspect -f '{{.State.Health.Status}}' househo
 grep -q '^  sam ' "$work/logins" && [ -n "$(curl -sk -D - -o /dev/null -H 'content-type: application/json' -d "{\"username\":\"sam\",\"password\":\"$password\"}" https://localhost/api/login | grep -i '^set-cookie')" ] || fail "sam's login did not survive the restore"
 echo "backed up to $(basename "$backup") and restored; the house came back healthy"
 # HOU-160: no deploy, refusal, rollback or status output ever carries the key.
-if grep -l 'placeholder-not-a-key' "$work"/*.log; then fail "the API key was printed"; fi
+if grep -lF -e "$model_key" "$work"/*.log; then fail "the API key was printed"; fi
 step "PASS: household-deploy, -setup, -status, -backup and -restore against local Docker"

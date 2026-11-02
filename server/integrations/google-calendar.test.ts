@@ -1,6 +1,12 @@
+import { randomBytes } from "node:crypto";
 import { afterEach, describe, expect, it } from "vitest";
 import { fakeServer, json } from "./fake-http.ts";
 import { GOOGLE_CALENDAR_SCOPE, GoogleCalendarPush, GoogleCalendarSource, listCalendars, parseCalendarNotification, refreshingTokenProvider } from "./google-calendar.ts";
+
+/** HOU-168: made up per run, so no credential-shaped literal is in the repo. */
+const REFRESH = randomBytes(12).toString("base64url");
+const CHANNEL_TOKEN = randomBytes(12).toString("hex");
+const ACCESS = randomBytes(12).toString("base64url");
 
 const servers: { close: () => Promise<void> }[] = [];
 afterEach(async () => {
@@ -161,26 +167,26 @@ describe("Google Calendar source", () => {
   });
 
   it("refreshes the OAuth access token with the refresh-token grant and caches it", async () => {
-    const server = await fakeServer((_req, res) => json(res, 200, { access_token: "fresh-token", expires_in: 3600 }));
+    const server = await fakeServer((_req, res) => json(res, 200, { access_token: ACCESS, expires_in: 3600 }));
     servers.push(server);
-    const get = refreshingTokenProvider({ clientId: "cid", clientSecret: "csecret", refreshToken: "rt", tokenUrl: `${server.url}/token`, clock });
-    expect(await get()).toBe("fresh-token");
-    expect(await get()).toBe("fresh-token");
+    const get = refreshingTokenProvider({ clientId: "cid", clientSecret: randomBytes(12).toString("base64url"), refreshToken: REFRESH, tokenUrl: `${server.url}/token`, clock });
+    expect(await get()).toBe(ACCESS);
+    expect(await get()).toBe(ACCESS);
     expect(server.requests).toHaveLength(1);
     const form = new URLSearchParams(server.requests[0]?.body.toString());
     expect(form.get("grant_type")).toBe("refresh_token");
-    expect(form.get("refresh_token")).toBe("rt");
+    expect(form.get("refresh_token")).toBe(REFRESH);
   });
 
   it("[CH-6][PRV-1] opens and closes a push channel with a shared token, and touches no event", async () => {
     const server = await fakeServer((req, res) => (req.path === "/channels/stop" ? res.writeHead(204).end() : json(res, 200, { kind: "api#channel", id: "ch1", resourceId: "r1", expiration: "1790000000000" })));
     servers.push(server);
     const push = new GoogleCalendarPush({ calendarIds: [FAMILY], getAccessToken: async () => "a", baseUrl: server.url });
-    const out = await push.open(FAMILY, { id: "ch1", address: "https://house.example/webhooks/calendar", token: "tok" });
+    const out = await push.open(FAMILY, { id: "ch1", address: "https://house.example/webhooks/calendar", token: CHANNEL_TOKEN });
     expect(out).toEqual({ resourceId: "r1", expiresAt: new Date(1_790_000_000_000).toISOString() });
     await push.close({ id: "ch1", resourceId: "r1" });
     expect(server.requests.map((r) => `${r.method} ${r.path}`)).toEqual(["POST /calendars/family%40group.calendar.google.com/events/watch", "POST /channels/stop"]);
-    expect(JSON.parse(server.requests[0]?.body.toString() ?? "{}")).toEqual({ id: "ch1", type: "web_hook", address: "https://house.example/webhooks/calendar", token: "tok" });
+    expect(JSON.parse(server.requests[0]?.body.toString() ?? "{}")).toEqual({ id: "ch1", type: "web_hook", address: "https://house.example/webhooks/calendar", token: CHANNEL_TOKEN });
     expect(JSON.parse(server.requests[1]?.body.toString() ?? "{}")).toEqual({ id: "ch1", resourceId: "r1" });
     expect(server.requests[0]?.headers.authorization).toBe("Bearer a");
     const methods = Object.getOwnPropertyNames(GoogleCalendarPush.prototype);
@@ -206,8 +212,8 @@ describe("Google Calendar source", () => {
   });
 
   it("[CH-4][PRV-6] reads push-notification headers so the webhook can dedupe and check the token", () => {
-    const headers = new Headers({ "X-Goog-Channel-ID": "ch1", "X-Goog-Channel-Token": "tok", "X-Goog-Resource-State": "exists", "X-Goog-Message-Number": "17" });
-    expect(parseCalendarNotification(headers)).toEqual({ channelId: "ch1", token: "tok", state: "exists", messageNumber: "17" });
+    const headers = new Headers({ "X-Goog-Channel-ID": "ch1", "X-Goog-Channel-Token": CHANNEL_TOKEN, "X-Goog-Resource-State": "exists", "X-Goog-Message-Number": "17" });
+    expect(parseCalendarNotification(headers)).toEqual({ channelId: "ch1", token: CHANNEL_TOKEN, state: "exists", messageNumber: "17" });
     expect(parseCalendarNotification({ "x-goog-channel-id": "ch1", "x-goog-resource-state": "sync", "x-goog-message-number": "1" })).toEqual({ channelId: "ch1", token: null, state: "sync", messageNumber: "1" });
     expect(parseCalendarNotification({})).toBeNull();
   });

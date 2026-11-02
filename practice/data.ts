@@ -2,13 +2,13 @@
  * QA-9: the practice household. Made-up people, calendar, parcels and supermarket account.
  * Automations are proven here before they touch the real house.
  */
-import { BacklogTag, Channel, NurseryEventKind, PersonRole, Weekday } from "@household/contracts";
+import { BacklogTag, Channel, NurseryEventKind, PersonRole, Practice, Weekday } from "@household/contracts";
 
 export const PRACTICE_HOUSEHOLD = "practice";
 export const PRACTICE_TZ = "Europe/London";
 /** Monday 2 November 2026, 07:00 in London (GMT). The practice clock starts here. */
 export const PRACTICE_START = "2026-11-02T07:00:00.000Z";
-export const PRACTICE_PASSWORD = "practice";
+export const PRACTICE_PASSWORD = Practice.login;
 /** The practice household's app logins (all with PRACTICE_PASSWORD). Public on purpose: nothing behind them is real. */
 export const logins = [
   { personId: "priya", username: "priya" },

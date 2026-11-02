@@ -1,3 +1,4 @@
+import { randomBytes } from "node:crypto";
 import { spawnSync } from "node:child_process";
 import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -11,12 +12,14 @@ import { describe, expect, it } from "vitest";
  * reaches the script without ever being on a command line. A stand-in `docker` records what it was given.
  */
 const script = fileURLToPath(new URL("household-telegram.sh", import.meta.url));
-const TOKEN = "123456:stand-in-bot-token-AAAA";
+/** HOU-168: made up per run, so no token-shaped literal is in the repo. */
+const TOKEN = `123456:${randomBytes(18).toString("base64url")}`;
+const WEBHOOK_SECRET = randomBytes(12).toString("hex");
 
 function run(args: string[]): { status: number | null; docker: string | null; stderr: string } {
   const dir = mkdtempSync(join(tmpdir(), "telegram-"));
   try {
-    writeFileSync(join(dir, ".env"), `HOUSEHOLD_DOMAIN=house.example.test\nTELEGRAM_BOT_TOKEN=${TOKEN}\nTELEGRAM_WEBHOOK_SECRET=s3cret\n`);
+    writeFileSync(join(dir, ".env"), `HOUSEHOLD_DOMAIN=house.example.test\nTELEGRAM_BOT_TOKEN=${TOKEN}\nTELEGRAM_WEBHOOK_SECRET=${WEBHOOK_SECRET}\n`);
     writeFileSync(join(dir, "household.conf"), `HOUSEHOLD_DIR=${dir}\n`);
     writeFileSync(join(dir, "image"), `ghcr.io/calnicklin/household@sha256:${"a".repeat(64)}\n`);
     const fake = join(dir, "docker");

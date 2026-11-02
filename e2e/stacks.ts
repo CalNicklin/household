@@ -10,12 +10,12 @@ export const STACKS = 3;
 /** e2e/stack.ts answers here once every stack's server is up. */
 export const READY_PORT = 3100;
 
-export type Stack = { index: number; server: number; shop: number; helper: number; dbPrefix: string; dataDir: string; creds: string };
+export type Stack = { index: number; server: number; shop: number; helper: number; dbPrefix: string; dataDir: string; creds: string; helperTokenFile: string };
 
 const root = path.resolve(import.meta.dirname, "..");
 
 export function stack(index: number): Stack {
   const base = 3101 + 10 * index;
   const dataDir = path.join(root, ".data", "e2e", String(index));
-  return { index, server: base, shop: base + 1, helper: base + 2, dbPrefix: index === 0 ? "e2e" : `e2e${index}`, dataDir, creds: path.join(dataDir, "supermarket.json") };
+  return { index, server: base, shop: base + 1, helper: base + 2, dbPrefix: index === 0 ? "e2e" : `e2e${index}`, dataDir, creds: path.join(dataDir, "supermarket.json"), helperTokenFile: path.join(dataDir, "helper-token") };
 }

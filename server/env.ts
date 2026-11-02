@@ -1,4 +1,4 @@
-import { CalendarOwnerKind, type HouseCalendar, ModelProvider, zModelProvider } from "@household/contracts";
+import { CalendarOwnerKind, type HouseCalendar, ModelProvider, Practice, zModelProvider } from "@household/contracts";
 import { z } from "zod";
 
 // The app reads the same POSTGRES_PASSWORD the database container gets from .env, and hands it to
@@ -7,8 +7,8 @@ if (process.env["PGPASSWORD"] === undefined && process.env["POSTGRES_PASSWORD"] 
 
 const zEnv = z.object({
   HOUSEHOLD_ID: z.string().default("practice"),
-  /** Postgres server; each domain gets its own database on it (CODE-4). */
-  DATABASE_URL: z.string().default("postgres://postgres:postgres@localhost:5432/postgres"),
+  /** Postgres server; each domain gets its own database on it (CODE-4). Its password is PGPASSWORD, never in the URL. */
+  DATABASE_URL: z.string().default("postgres://postgres@localhost:5432/postgres"),
   /** Prefix for every database name, so a practice household never touches ours (QA-9). */
   DB_PREFIX: z.string().default("practice"),
   PORT: z.coerce.number().default(3001),
@@ -17,12 +17,12 @@ const zEnv = z.object({
   MODEL_ID: z.string().default("practice-1"),
   /** Practice mode wires fake calendar, weather, Telegram and supermarket (QA-9). */
   PRACTICE: z.stringbool().default(true),
-  SESSION_SECRET: z.string().default("practice-only-session-secret-change-me"),
+  SESSION_SECRET: z.string().default(Practice.settings.SESSION_SECRET),
   TELEGRAM_BOT_TOKEN: z.string().optional(),
-  TELEGRAM_WEBHOOK_SECRET: z.string().default("practice-telegram-secret"),
+  TELEGRAM_WEBHOOK_SECRET: z.string().default(Practice.settings.TELEGRAM_WEBHOOK_SECRET),
   TELEGRAM_API_BASE: z.string().default("https://api.telegram.org"),
-  EMAIL_WEBHOOK_SECRET: z.string().default("practice-email-secret"),
-  CALENDAR_WEBHOOK_TOKEN: z.string().default("practice-calendar-token"),
+  EMAIL_WEBHOOK_SECRET: z.string().default(Practice.settings.EMAIL_WEBHOOK_SECRET),
+  CALENDAR_WEBHOOK_TOKEN: z.string().default(Practice.settings.CALENDAR_WEBHOOK_TOKEN),
   /**
    * HOME-1: the calendars the house reads and whose each is, `owner:calendarId` separated by commas,
    * e.g. `cal:cal@gmail.com,chloe:chloe@gmail.com,shared:abc@group.calendar.google.com`. An owner is a
@@ -34,23 +34,23 @@ const zEnv = z.object({
   GOOGLE_ACCESS_TOKEN_FILE: z.string().optional(),
   /** Google Calendar API v3; only tests point it elsewhere (a stand-in Google). */
   GOOGLE_CALENDAR_API: z.string().default("https://www.googleapis.com/calendar/v3"),
-  MCP_TOKEN: z.string().default("practice-mcp-token"),
+  MCP_TOKEN: z.string().default(Practice.settings.MCP_TOKEN),
   HINDSIGHT_URL: z.string().optional(),
   S3_ENDPOINT: z.string().optional(),
   S3_BUCKET: z.string().default("household"),
   S3_ACCESS_KEY_ID: z.string().optional(),
   S3_SECRET_ACCESS_KEY: z.string().optional(),
   /** 32-byte hex key; objects are encrypted before they leave the process (PLT-7). */
-  STORAGE_KEY: z.string().default("00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff"),
+  STORAGE_KEY: z.string().default(Practice.settings.STORAGE_KEY),
   OBJECT_DIR: z.string().default(".data/objects"),
   HELPER_URL: z.string().optional(),
-  HELPER_TOKEN: z.string().default("practice-helper-token"),
+  HELPER_TOKEN: z.string().default(Practice.settings.HELPER_TOKEN),
   WEB_DIST: z.string().default("web/dist/client"),
 });
 export type Env = z.infer<typeof zEnv>;
 
 /**
- * Settings whose practice defaults are public (they are in this file). PRV-6: the real house must set
+ * Settings whose practice defaults are public (contracts/src/practice.ts). PRV-6: the real house must set
  * every one of them; with any left at its practice value the server refuses to start.
  */
 const MUST_BE_SET_FOR_REAL = ["SESSION_SECRET", "STORAGE_KEY", "TELEGRAM_WEBHOOK_SECRET", "EMAIL_WEBHOOK_SECRET", "CALENDAR_WEBHOOK_TOKEN", "MCP_TOKEN", "HELPER_TOKEN"] as const;

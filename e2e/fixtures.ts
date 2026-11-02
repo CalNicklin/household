@@ -1,3 +1,4 @@
+import { Practice } from "@household/contracts";
 import { type APIRequestContext, type APIResponse, test as base, expect, type Page } from "@playwright/test";
 import { z } from "zod";
 import { type Stack, stack } from "./stacks.ts";
@@ -7,7 +8,7 @@ export async function json<T>(schema: z.ZodType<T>, response: APIResponse): Prom
 }
 const zJobRef = z.object({ jobId: z.string() });
 
-export const PASSWORD = "practice";
+export const PASSWORD = Practice.login;
 
 /**
  * FB-2: signed in with the session cookie straight from /api/login, then on the home screen. The
@@ -70,7 +71,7 @@ export async function phone(request: APIRequestContext, address: string): Promis
 }
 
 export async function telegram(request: APIRequestContext, body: unknown) {
-  return request.post("/webhooks/telegram", { data: body, headers: { "X-Telegram-Bot-Api-Secret-Token": "practice-telegram-secret" } });
+  return request.post("/webhooks/telegram", { data: body, headers: { "X-Telegram-Bot-Api-Secret-Token": Practice.settings.TELEGRAM_WEBHOOK_SECRET } });
 }
 
 export async function timer(request: APIRequestContext, timerKind: string, at: string): Promise<void> {

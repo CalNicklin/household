@@ -1,4 +1,4 @@
-import { Limits } from "@household/contracts";
+import { Limits, Practice } from "@household/contracts";
 import type { Hono } from "hono";
 import { afterAll, beforeAll, describe, expect, test } from "vitest";
 import type { TestHousehold } from "../../testing/household.ts";
@@ -13,7 +13,7 @@ beforeAll(async () => {
 });
 afterAll(async () => h.close());
 
-const post = (body: unknown, secret = "practice-email-secret") =>
+const post = (body: unknown, secret: string = Practice.settings.EMAIL_WEBHOOK_SECRET) =>
   app.request("/webhooks/email", { method: "POST", headers: { "content-type": "application/json", "x-webhook-secret": secret }, body: JSON.stringify(body) });
 
 const screwfix = {

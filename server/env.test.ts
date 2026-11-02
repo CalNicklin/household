@@ -1,3 +1,4 @@
+import { randomBytes } from "node:crypto";
 import { describe, expect, test } from "vitest";
 import { houseCalendars, loadEnv, unknownCalendarOwners } from "./env.ts";
 
@@ -12,7 +13,7 @@ const real = {
   HELPER_TOKEN: "g",
   MODEL_PROVIDER: "anthropic",
   MODEL_ID: "claude-opus-5-5",
-  ANTHROPIC_API_KEY: "placeholder-not-a-key",
+  ANTHROPIC_API_KEY: randomBytes(12).toString("base64url"),
 };
 
 describe("Settings", () => {
