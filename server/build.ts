@@ -21,17 +21,12 @@ function files(entry: string, out: string[]): void {
 
 const cached = new Map<string, string>();
 
-/**
- * HOU-154: one short id per build, the same on every process that runs the same code. A deploy changes
- * it, so the service worker (served with it inside) is new and the open page reloads, and a plan made
- * by an older build is redone once. Reading the files themselves needs nothing from the build pipeline.
- */
-export function buildId(webDist: string): string {
-  const known = cached.get(webDist);
+function hashOf(key: string, entries: string[]): string {
+  const known = cached.get(key);
   if (known !== undefined) return known;
   const hash = createHash("sha256");
   const all: string[] = [];
-  for (const source of [...SOURCES, webDist]) files(source, all);
+  for (const entry of entries) files(entry, all);
   for (const file of all) {
     try {
       const body = readFileSync(file);
@@ -41,6 +36,23 @@ export function buildId(webDist: string): string {
     }
   }
   const id = hash.digest("hex").slice(0, 16);
-  cached.set(webDist, id);
+  cached.set(key, id);
   return id;
+}
+
+/**
+ * HOU-154: one short id per build, the same on every process that runs the same code. A deploy changes
+ * it, so the service worker (served with it inside) is new and the open page reloads. Reading the files
+ * themselves needs nothing from the build pipeline.
+ */
+export function buildId(webDist: string): string {
+  return hashOf(`web:${webDist}`, [...SOURCES, webDist]);
+}
+
+/**
+ * HOU-154: the same, without the web app: what makes a plan. A plan made by another planner build is
+ * redone once; a deploy that only changes the screens (styling, wording on the page) leaves it be.
+ */
+export function plannerBuildId(): string {
+  return hashOf("planner", SOURCES);
 }

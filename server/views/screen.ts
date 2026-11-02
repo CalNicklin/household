@@ -1,5 +1,5 @@
 import { ActionKind, type Block, BlockType, type LocalDate, type ScreenView } from "@household/contracts";
-import { buildId } from "../build.ts";
+import { plannerBuildId } from "../build.ts";
 import type { Runtime } from "../runtime.ts";
 import { localDate } from "../time.ts";
 
@@ -22,7 +22,7 @@ export function applyResponses(blocks: readonly Block[], closed: ReadonlySet<str
 export async function screenView(rt: Runtime, _person: string, date: LocalDate, planToday?: (build: string | null) => Promise<unknown>): Promise<ScreenView> {
   const api = rt.system("views");
   const plan = await api.plans.latest({ date });
-  const build = buildId(rt.env.WEB_DIST);
+  const build = plannerBuildId();
   // HOU-149: no plan for today yet (a new house, a missed timer): start one through the normal job
   // path and show what there is. The plan publishes `plan` when it lands, so the screen refetches.
   // HOU-154: a plan made by an older build is redone the same way, once per build (`build` is passed

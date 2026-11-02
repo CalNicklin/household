@@ -5,7 +5,7 @@ import path from "node:path";
 import type { Hono } from "hono";
 import { afterAll, beforeAll, describe, expect, test } from "vitest";
 import type { HttpEnv } from "../adapters/registry.ts";
-import { buildId } from "../build.ts";
+import { buildId, plannerBuildId } from "../build.ts";
 import { createApp } from "../http/app.ts";
 import type { TestHousehold } from "../testing/household.ts";
 import { householdWithApp, loginCookie } from "../testing/http.ts";
@@ -20,7 +20,7 @@ beforeAll(async () => {
 afterAll(async () => h.close());
 
 const today = () => localDate(h.ports.clock.now(), h.rt.timeZone);
-const build = () => buildId(h.rt.env.WEB_DIST);
+const build = () => plannerBuildId();
 const catchUps = async () => (await h.rt.system("t").jobs.recentJobs()).filter((j) => j.intent === `timer:${TimerKind.catchUpPlan}`);
 
 async function until<T>(read: () => Promise<T | null>): Promise<T> {
@@ -75,7 +75,7 @@ describe("a deploy shows on the next reload (HOU-154)", () => {
     const served = createApp({ ...h.rt, env: { ...h.rt.env, WEB_DIST: dist } }, []);
     // The id is the served app's own: another web build is another id.
     const id = buildId(dist);
-    expect(id).not.toBe(build());
+    expect(id).not.toBe(buildId(h.rt.env.WEB_DIST));
     const sw = await served.request("/sw.js");
     expect(sw.status).toBe(200);
     expect(sw.headers.get("cache-control")).toBe("no-cache");
@@ -87,5 +87,19 @@ describe("a deploy shows on the next reload (HOU-154)", () => {
     expect(await page.text()).toContain(`<meta name="household-build" content="${id}">`);
     // An older build's chunk that is gone is not found, never the page under the chunk's name.
     expect((await served.request("/assets/gone-0123abcd.js", { headers: { cookie } })).status).toBe(404);
+  });
+
+  test("[HOME-6] (HOU-154) a deploy that only changes the web app gets a new worker but leaves today's plan be", async () => {
+    const dist = mkdtempSync(path.join(tmpdir(), "hou-154-web-only-"));
+    writeFileSync(path.join(dist, "sw.js"), 'const BUILD = "__BUILD__";');
+    writeFileSync(path.join(dist, "_shell.html"), "<html><head></head><body>restyled</body></html>");
+    expect(buildId(dist)).not.toBe(buildId(h.rt.env.WEB_DIST));
+    const plan = await until(() => h.rt.system("t").plans.latest({ date: today() }));
+    expect(plan.build).toBe(plannerBuildId());
+    const served = createApp({ ...h.rt, env: { ...h.rt.env, WEB_DIST: dist } }, []);
+    const before = (await catchUps()).length;
+    const cookie = await loginCookie(served);
+    expect((await served.request(`/api/trpc/screen?input=${encodeURIComponent("{}")}`, { headers: { cookie } })).status).toBe(200);
+    expect(await catchUps()).toHaveLength(before);
   });
 });
