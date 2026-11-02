@@ -69,6 +69,17 @@ describe("MCP server", () => {
     await c.close();
   });
 
+  test("[CH-9][MOM-8] set_mode with `when` sets it ahead, as saying it would", async () => {
+    const c = await client("practice-mcp-token");
+    await c.callTool({ name: "set_mode", arguments: { mode: "away", when: "this weekend" } });
+    expect(await h.rt.system("test").household.activeMode()).toBeNull();
+    const modes = await h.rt.system("test").household.modesBetween({ from: "2026-11-07T12:00:00Z", to: "2026-11-07T13:00:00Z" });
+    expect(modes).toMatchObject([{ mode: "away", setBy: "tom", startsAt: "2026-11-07T00:00:00.000Z", endsAt: "2026-11-09T00:00:00.000Z" }]);
+    await c.callTool({ name: "set_mode", arguments: { mode: "normal", when: "this weekend" } });
+    expect(await h.rt.system("test").household.modesBetween({ from: "2026-11-07T00:00:00Z", to: "2026-11-09T00:00:00Z" })).toEqual([]);
+    await c.close();
+  });
+
   test("[CH-9] dismiss records a no-guilt not-today on the ref", async () => {
     const c = await client("practice-mcp-token");
     await c.callTool({ name: "dismiss", arguments: { ref: "washing:2026-11-02" } });

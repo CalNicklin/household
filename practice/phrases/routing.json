@@ -1,5 +1,5 @@
 {
-  "about": "HOU-148: what a person says to the house, and the tool calls they would expect. QA-6 (HOU-86) grows this into the scored eval. `expect` lists every acceptable sequence of tool calls, in order.",
+  "about": "HOU-148: what a person says to the house, and the tool calls they would expect. QA-6 (HOU-86) grows this into the scored eval. `expect` lists every acceptable sequence of tool calls, in order. `ahead` (HOU-156): every set_mode call names a later day in `from` (true), or none does (false).",
   "phrases": [
     { "text": "get the canon printer working and connected to laptop so we can print loads of photos up to A3", "expect": [["capture"]], "note": "Cal's first real message; one job, never two shop items" },
     { "text": "what should I prioritise today?", "expect": [["what_now"]] },
@@ -21,9 +21,13 @@
     { "text": "we're running low on washing up liquid", "expect": [["shop"]] },
     { "text": "need eggs, cheese and tomatoes", "expect": [["shop"]] },
     { "text": "add wrapping paper to the presents list", "expect": [["add_to_list"]] },
-    { "text": "slow day today", "expect": [["set_mode"]] },
-    { "text": "we're away today", "expect": [["set_mode"]] },
-    { "text": "we're away this weekend", "expect": [["set_mode"], []], "note": "set_mode starts now, so saying it should be set on the day is as good as setting it" },
+    { "text": "slow day today", "expect": [["set_mode"]], "ahead": false },
+    { "text": "we're away today", "expect": [["set_mode"]], "ahead": false },
+    { "text": "we're away this weekend", "expect": [["set_mode"]], "ahead": true, "note": "HOU-156: set ahead for Saturday and Sunday, never 'say it again on the day'" },
+    { "text": "slow day on Friday", "expect": [["set_mode"]], "ahead": true },
+    { "text": "sick day tomorrow, Ivy has a fever", "expect": [["set_mode"]], "ahead": true },
+    { "text": "we're away from Saturday until Monday", "expect": [["set_mode"]], "ahead": true },
+    { "text": "we're not away on Saturday after all", "expect": [["set_mode"]], "ahead": true, "note": "a normal day set ahead clears Saturday only" },
     { "text": "Jess is doing Thursday", "expect": [["sitter_booked"]] },
     { "text": "what's on today?", "expect": [["today"]] }
   ]

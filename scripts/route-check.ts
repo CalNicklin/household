@@ -4,6 +4,7 @@ import { z } from "zod";
 import { practicePorts } from "../practice/fakes.ts";
 import { resetPractice } from "../practice/seed.ts";
 import { HouseAgent } from "../server/agent/agent.ts";
+import { setsModeAhead } from "../server/agent/practice-model.ts";
 import { jobScope } from "../server/agent/scope.ts";
 import { loadEnv } from "../server/env.ts";
 import { createRuntime } from "../server/runtime.ts";
@@ -21,7 +22,7 @@ import { ensurePostgres } from "../server/testing/postgres.ts";
  * MODEL_PROVIDER and MODEL_ID choose the model (default anthropic / claude-opus-5-5); MODEL_PROVIDER=practice
  * runs the same phrases through the practice model.
  */
-const zPhrases = z.object({ phrases: z.array(z.object({ text: z.string(), expect: z.array(z.array(z.string())), note: z.string().optional() })) });
+const zPhrases = z.object({ phrases: z.array(z.object({ text: z.string(), expect: z.array(z.array(z.string())), ahead: z.boolean().optional(), note: z.string().optional() })) });
 const { phrases } = zPhrases.parse(JSON.parse(readFileSync(new URL("../practice/phrases/routing.json", import.meta.url), "utf8")));
 
 const pg = await ensurePostgres();
@@ -45,9 +46,10 @@ try {
     }
     const tools = scope.toolCalls.map((c) => c.tool);
     const shown = scope.toolCalls.map((c) => `${c.tool}(${JSON.stringify(c.input)})`).join(" + ") || "none";
-    const ok = p.expect.some((e) => e.join("+") === tools.join("+"));
+    // HOU-156: a phrase marked `ahead` must (or must not) set its mode for a later day.
+    const ok = p.expect.some((e) => e.join("+") === tools.join("+")) && (p.ahead === undefined || p.ahead === setsModeAhead(scope.toolCalls));
     if (ok) passed++;
-    rows.push(`| ${i + 1} | ${cell(p.text)} | ${cell(shown)} | ${p.expect.map((e) => e.join("+")).join(" or ")} | ${ok ? "yes" : "**no**"} | ${cell(reply)} |`);
+    rows.push(`| ${i + 1} | ${cell(p.text)} | ${cell(shown)} | ${p.expect.map((e) => e.join("+")).join(" or ")}${p.ahead === undefined ? "" : p.ahead ? " (ahead)" : " (from now)"} | ${ok ? "yes" : "**no**"} | ${cell(reply)} |`);
     process.stdout.write(`${ok ? "ok  " : "MISS"} ${p.text} -> ${tools.join("+") || "none"}\n`);
   }
 } finally {
