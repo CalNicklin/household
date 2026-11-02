@@ -20,15 +20,19 @@ async function reachable(url: string): Promise<boolean> {
   }
 }
 
+const embeddedUrl = `postgres://postgres:postgres@localhost:${EMBEDDED_PORT}/postgres`;
+
+/** Where the tests look for Postgres, in order; the last is the embedded server ensurePostgres starts. */
+export function postgresCandidates(): string[] {
+  return [process.env["TEST_DATABASE_URL"], process.env["DATABASE_URL"], DEFAULT_URL, embeddedUrl].filter((u): u is string => u !== undefined);
+}
+
 /**
  * A Postgres server for tests and local dev: `DATABASE_URL` if it answers, else the local default,
  * else an embedded Postgres started from node_modules, so a clean checkout needs nothing installed.
  */
 export async function ensurePostgres(): Promise<{ url: string; stop: () => Promise<void> }> {
-  const candidates = [process.env["TEST_DATABASE_URL"], process.env["DATABASE_URL"], DEFAULT_URL].filter((u): u is string => u !== undefined);
-  for (const url of candidates) if (await reachable(url)) return { url, stop: async () => {} };
-  const embeddedUrl = `postgres://postgres:postgres@localhost:${EMBEDDED_PORT}/postgres`;
-  if (await reachable(embeddedUrl)) return { url: embeddedUrl, stop: async () => {} };
+  for (const url of postgresCandidates()) if (await reachable(url)) return { url, stop: async () => {} };
   const { default: EmbeddedPostgres } = await import("embedded-postgres");
   const databaseDir = path.join(ROOT, ".data", "pg-embedded");
   const pg = new EmbeddedPostgres({ databaseDir, port: EMBEDDED_PORT, user: "postgres", password: "postgres", persistent: true, onLog: () => {} });

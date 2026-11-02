@@ -6,6 +6,9 @@ export default defineConfig({
     globalSetup: ["server/testing/global-setup.ts"],
     reporters: ["./tools/reporters/vitest.ts", "default"],
     pool: "forks",
+    // FB-2 / HOU-164: two workers finish well inside the journeys' lane, and one live household fewer
+    // (about 15 Postgres connections), so a faster run doesn't raise pnpm check's peak (HOU-163).
+    maxWorkers: 2,
     // FB-2: the test files in a worker share one module graph instead of importing everything again
     // per file (that was over 40% of the run). Each test still gets its own household (QA-9).
     isolate: false,
