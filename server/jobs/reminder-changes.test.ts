@@ -1,5 +1,7 @@
-import { ActionKind, ActorKind, type Block, BlockType, ReminderStatus, TimerKind } from "@household/contracts";
+import { ActionKind, ActorKind, type Block, BlockType, Channel, ReminderStatus, TimerKind } from "@household/contracts";
 import { afterAll, beforeAll, describe, expect, test } from "vitest";
+import { findReminder } from "../agent/reminders.ts";
+import { jobScope } from "../agent/scope.ts";
 import { acceptTimer } from "../coordinator/accept.ts";
 import { testHousehold, type TestHousehold } from "../testing/household.ts";
 import { atLocal } from "../time.ts";
@@ -70,13 +72,15 @@ describe("HOU-174: a reminder is moved or cancelled when a person asks, never du
     expect(await tapped(block.ref, ActionKind.cancel)).toBe("That reminder was cancelled.");
   });
 
-  test("[PRV-1] the app cannot change or cancel a reminder on its own: not the system, and not a job acting on a different message", async () => {
+  test("[PRV-1] the app cannot change or cancel a reminder on its own: not the system, not a job acting on a different message, and not from an email", async () => {
     const [r] = await upcoming();
     if (r === undefined) throw new Error("no reminder");
     const job = h.rt.as({ kind: ActorKind.agent, job: "j", onBehalfOf: "tom", message: "some-other-message" });
     await expect(job.backlog.changeReminder({ id: r.id, date: WED, time: "06:00", sourceMessage: "this-message" })).rejects.toThrow(/PRV-1/);
     await expect(job.backlog.cancelReminder({ id: r.id, sourceMessage: "this-message" })).rejects.toThrow(/PRV-1/);
     await expect(h.rt.system("t").backlog.cancelReminder({ id: r.id, sourceMessage: "x" })).rejects.toThrow(/PRV-1|needs a person/);
+    // An email's words are someone else's (a forwarded order), never the person asking: nothing is found to change.
+    expect(await findReminder(jobScope(h.rt, "j", "email-message", "tom", Channel.email), "the BoyBoy reminder", `reminder:${r.id}`)).toEqual({ say: "" });
     expect((await upcoming()).map((x) => x.time)).toEqual(["07:30"]);
   });
 

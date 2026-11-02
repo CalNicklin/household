@@ -1,4 +1,4 @@
-import { type LocalDate, type Reminder, ReminderStatus } from "@household/contracts";
+import { Channel, type LocalDate, type Reminder, ReminderStatus } from "@household/contracts";
 import { matchReminders, type ReminderWhen } from "../rules/remind.ts";
 import { addLocalDays, localDate, localTime, longDate } from "../time.ts";
 import type { JobScope } from "./scope.ts";
@@ -15,6 +15,8 @@ const reminderLine = (r: Reminder, today: LocalDate) => `${r.time === null ? "" 
 
 /** The reminder a person means, or what to ask them instead. `ref` is the About ref when they said "this". */
 export async function findReminder(scope: JobScope, which: string, ref: string | null | undefined): Promise<{ reminder: Reminder } | { say: string }> {
+  // PRV-1: an email carries words someone else wrote (an order, a forward), never the person's own ask.
+  if (scope.channel === Channel.email) return { say: "" };
   const today = localDate(scope.rt.ports.clock.now(), scope.rt.timeZone);
   if (ref?.startsWith("reminder:") === true) {
     const reminder = await scope.api.backlog.getReminder({ id: ref.slice("reminder:".length) });
@@ -44,8 +46,8 @@ async function replanFor(scope: JobScope, dates: readonly LocalDate[]): Promise<
 export async function changeReminder(scope: JobScope, reminder: Reminder, when: ReminderWhen): Promise<{ changed: boolean; say: string }> {
   const now = scope.rt.ports.clock.now();
   const today = localDate(now, scope.rt.timeZone);
-  if (when.date < today || (when.date === today && when.time !== null && when.time <= localTime(now, scope.rt.timeZone)))
-    return { changed: false, say: `${when.time ?? "That"} has already gone ${when.date === today ? "today" : "by"}. Say a later time.` };
+  if (when.date < today) return { changed: false, say: `${longDate(when.date)} has already gone. Say a later day.` };
+  if (when.date === today && when.time !== null && when.time <= localTime(now, scope.rt.timeZone)) return { changed: false, say: `${when.time} has already gone today. Say a later time.` };
   if (when.date === reminder.date && when.time === reminder.time) return { changed: false, say: `It's already ${when.time === null ? "" : `at ${when.time} `}${dayWords(when.date, today)}: ${reminder.text}.` };
   const changed = await scope.api.backlog.changeReminder({ id: reminder.id, date: when.date, time: when.time, sourceMessage: scope.messageId });
   await replanFor(scope, [reminder.date, changed.date]);
