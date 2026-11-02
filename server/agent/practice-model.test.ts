@@ -32,6 +32,11 @@ describe("HOU-148: the practice model routes the household's phrases the way a p
     expect((await toolsFor("remind me to call Mum in an hour")).inputs[0]).toMatchObject({ text: "Call Mum", when: "in an hour" });
   });
 
+  test("[CAP-10] setting a new reminder never changes one already set (HOU-174)", async () => {
+    for (const text of ["make a reminder to call the plumber tomorrow", "set a new reminder for the bins"]) expect((await toolsFor(text)).tools, text).not.toContain("change_reminder");
+    expect((await toolsFor("make the BoyBoy reminder 7:30")).inputs[0]).toMatchObject({ which: "the BoyBoy reminder", when: "7:30" });
+  });
+
   test("[MOM-4] a span set ahead names its first and last day (HOU-156)", async () => {
     expect((await toolsFor("we're away from Saturday until Monday")).inputs[0]).toMatchObject({ mode: "away", from: "saturday", until: "monday" });
     expect((await toolsFor("keep the slow day going until tomorrow")).inputs[0]).toMatchObject({ mode: "slow", until: "tomorrow" });

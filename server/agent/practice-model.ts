@@ -97,6 +97,8 @@ const CHANGE_IT = /^(.*?\breminder)\b.*?\b(?:make it|change it to|move it to)\s+
 
 /** A person asking to change or cancel a reminder they already have, or null. */
 function reminderChangeCall(text: string, about: string | null): Call | null {
+  // "make a reminder to…", "set a new reminder": setting one, never changing one already set.
+  if (/\b(?:a|an|new|another)\s+reminder\b/i.test(text)) return null;
   const ref = about?.startsWith("reminder:") === true ? about : null;
   const cancel = CANCEL_REMINDER.exec(text.trim());
   if (cancel?.[1] !== undefined) return { tool: "cancel_reminder", input: { which: cancel[1], ref } };

@@ -21,11 +21,9 @@ const PART_OF_DAY: readonly { words: RegExp; time: string }[] = [
 /** A day named in a way `dayIn` could not settle ("Tuesday 4 November" when the 4th is a Wednesday). */
 const NAMES_A_DAY = /\b(mon|tues?|wed(?:nes)?|thur?s?|fri|satur|sun)(day)?\b|\b\d{1,2}(st|nd|rd|th)?\s+(of\s+)?(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)|\b20\d{2}-\d{2}-\d{2}\b/;
 
-/**
- * A clock time in the phrase: "8pm", "at 8", "8:30", "20:00". An hour with no am or pm is read as
- * people say it: "tonight at 8" and "at 3" are afternoon or evening, "morning at 8" is morning, and
- * otherwise the next 7 to 12 o'clock still to come today (in the morning on a later day).
- */
+/** A date written out, whose digits are never a clock time. */
+const WRITTEN_DATE = /\b(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\s+\d{4}\b|\b\d{4}-\d{2}-\d{2}\b|\b\d{1,2}\/\d{1,2}(?:\/\d{2,4})?\b/;
+
 /**
  * A clock time as written: "8pm", "at 8", "8:30", "9 o'clock", or run together as people type it on a
  * phone ("730", "1915"; HOU-174). The hour, the minute, and am or pm if it was said.
@@ -37,8 +35,8 @@ function clockWords(text: string): { hour: number; minute: number; meridiem: "am
     /\bat\s+(\d{1,2})(?:[:.](\d{2}))?\b/.exec(text) ??
     /\b(\d{1,2})[:.](\d{2})\b/.exec(text) ??
     /\b(\d{1,2})()\s*o'?clock\b/.exec(text) ??
-    // "make it 730": three or four digits standing alone, never a year after a month ("4 Nov 2026").
-    (/\b(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\s+\d{4}\b/.test(text) ? null : /(?<![\d:.])\b(\d{1,2})(\d{2})\b(?![:.]?\d)/.exec(text));
+    // "make it 730": three or four digits standing alone, never part of a date ("4 Nov 2026", "2026-11-04", "4/11/2026").
+    (WRITTEN_DATE.test(text) ? null : /(?<![\d:./-])\b(\d{1,2})(\d{2})\b(?![:./-]?\d)/.exec(text));
   if (bare === null) return null;
   const hour = Number(bare[1]);
   const minute = bare[2] === undefined || bare[2] === "" ? 0 : Number(bare[2]);
@@ -47,6 +45,11 @@ function clockWords(text: string): { hour: number; minute: number; meridiem: "am
   return { hour, minute, meridiem: said === "am" || said === "pm" ? said : undefined };
 }
 
+/**
+ * A clock time in the phrase: "8pm", "at 8", "8:30", "20:00". An hour with no am or pm is read as
+ * people say it: "tonight at 8" and "at 3" are afternoon or evening, "morning at 8" is morning, and
+ * otherwise the next 7 to 12 o'clock still to come today (in the morning on a later day).
+ */
 function clockIn(text: string, evening: boolean, morning: boolean, nowTime: string | null): string | null {
   const said = clockWords(text);
   if (said === null) return null;
@@ -161,9 +164,9 @@ export function retimeWhen(phrase: string, r: Pick<Reminder, "date" | "time">, n
   const when = reminderWhen(text, now, timeZone, r.date);
   if (when === null) return null;
   if (when.time !== null) return when;
-  // Nothing about the time: a day alone ("move it to Thursday") keeps its time; "later today" has none.
-  if (dayIn(text, localDate(now, timeZone)) !== null) return { date: when.date, time: r.time };
+  // Nothing about the time: "later today" has none; a day alone ("move it to Thursday") keeps its time.
   if (/\b(later|no time|any ?time|sometime)\b/.test(text)) return { date: when.date, time: null };
+  if (dayIn(text, localDate(now, timeZone)) !== null) return { date: when.date, time: r.time };
   return null;
 }
 

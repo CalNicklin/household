@@ -3,7 +3,7 @@ import { START_REF_PREFIX } from "../planner/first-day.ts";
 import { forecasts } from "../planner/gather.ts";
 import { parsePencil, pencilledLine } from "../planner/pencil.ts";
 import { addLocalDays, localDate, localHour, longDate, weekdayOf } from "../time.ts";
-import { cancelReminder, changeReminder } from "./reminders.ts";
+import { cancelReminder, changeReminder, closedSay } from "./reminders.ts";
 import type { JobScope } from "./scope.ts";
 
 export function dayPartOf(hour: number): DayPart {
@@ -54,7 +54,7 @@ async function weatherNow(scope: JobScope, now: Date): Promise<string> {
 async function respondToReminder(scope: JobScope, ref: string, action: ActionKind, date: LocalDate, value: string | null): Promise<string> {
   const reminder = await scope.api.backlog.getReminder({ id: ref.slice("reminder:".length) });
   if (reminder === null) return "I can't find that reminder.";
-  if (reminder.status !== ReminderStatus.open) return ALREADY[reminder.status];
+  if (reminder.status !== ReminderStatus.open) return closedSay(reminder.status);
   const replan = (d: LocalDate) => {
     if (!scope.effects.replan.includes(d)) scope.effects.replan.push(d);
   };
@@ -83,11 +83,6 @@ async function respondToReminder(scope: JobScope, ref: string, action: ActionKin
   return "Noted.";
 }
 
-const ALREADY: Record<Exclude<ReminderStatus, "open">, string> = {
-  [ReminderStatus.done]: "That's already done.",
-  [ReminderStatus.moved]: "That's on the Backlog now.",
-  [ReminderStatus.cancelled]: "That reminder was cancelled.",
-};
 
 /**
  * HOU-173: a backlog pick's buttons are kept against the day whose plan offered it (PRO-6: one plan,

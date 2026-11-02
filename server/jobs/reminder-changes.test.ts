@@ -79,6 +79,10 @@ describe("HOU-174: a reminder is moved or cancelled when a person asks, never du
     await expect(job.backlog.changeReminder({ id: r.id, date: WED, time: "06:00", sourceMessage: "this-message" })).rejects.toThrow(/PRV-1/);
     await expect(job.backlog.cancelReminder({ id: r.id, sourceMessage: "this-message" })).rejects.toThrow(/PRV-1/);
     await expect(h.rt.system("t").backlog.cancelReminder({ id: r.id, sourceMessage: "x" })).rejects.toThrow(/PRV-1|needs a person/);
+    // The reminder they are looking at (the About ref) is used only when it fits what they said (AR-4).
+    const app = jobScope(h.rt, "j", "app-message", "tom", Channel.app);
+    expect(await findReminder(app, "that one", `reminder:${r.id}`)).toEqual({ reminder: r });
+    expect(await findReminder(app, "the swimming reminder", `reminder:${r.id}`)).toMatchObject({ say: expect.stringContaining("I couldn't tell which reminder") });
     // An email's words are someone else's (a forwarded order), never the person asking: nothing is found to change.
     expect(await findReminder(jobScope(h.rt, "j", "email-message", "tom", Channel.email), "the BoyBoy reminder", `reminder:${r.id}`)).toEqual({ say: "" });
     expect((await upcoming()).map((x) => x.time)).toEqual(["07:30"]);

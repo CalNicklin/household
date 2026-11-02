@@ -109,6 +109,11 @@ describe("HOU-174: which reminder a person means, and its new time", () => {
     expect(retimeWhen("Thursday", boy, at(14), TZ)).toEqual({ date: "2026-11-05", time: "09:00" });
     expect(retimeWhen("tomorrow at 8", boy, at(14), TZ)).toEqual({ date: TUE, time: "08:00" });
     expect(retimeWhen("earlier", boy, at(14), TZ)).toBeNull();
+    // "later today" is later today with no time, not today at the reminder's old time (AR-5).
+    expect(retimeWhen("later today", boy, at(14), TZ)).toEqual({ date: MON, time: null });
+    // A date written in digits is a day, never a clock time (AR-6).
+    expect(reminderWhen("2026-11-04", at(14), TZ)).toEqual({ date: WED, time: null });
+    expect(reminderWhen("4/11/2026", at(14), TZ)?.time ?? null).toBeNull();
     expect(reminderWhen("on 4 Nov 2026", at(14), TZ)).toEqual({ date: WED, time: null });
   });
 });
