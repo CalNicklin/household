@@ -99,6 +99,8 @@ describe("HOU-175: other apps' sites on the house's Caddy", () => {
   const caddy = overlay.services["caddy"] ?? zService.parse({});
   const common = read("household-common.sh");
   const install = read("install.sh");
+  // The shell script the entrypoint runs (`sh -c <script> caddy-front`).
+  const entrypoint = z.array(z.string()).parse(caddy["entrypoint"])[2] ?? "";
 
   it("[PLT-8] the overlay touches only Caddy: no new service, no memory cap changed, no port, no network", () => {
     expect(Object.keys(overlay.services)).toEqual(["caddy"]);
@@ -112,7 +114,7 @@ describe("HOU-175: other apps' sites on the house's Caddy", () => {
     expect(Object.keys(caddy).sort()).toEqual(["command", "entrypoint", "extra_hosts", "labels", "volumes"]);
     // The entrypoint only works out the front address, then runs the command it is given (Caddy's own).
     expect(caddy["command"]).toEqual(["caddy", "run", "--config", "/etc/caddy/Caddyfile", "--adapter", "caddyfile"]);
-    expect(String((caddy["entrypoint"] as string[])[2])).toMatch(/exec "\$\$@"\n$/);
+    expect(entrypoint).toMatch(/exec "\$\$@"\n$/);
   });
 
   it("[PRV-6] the sites reach Caddy read-only, and Caddy gets only a name for the host", () => {
@@ -140,8 +142,8 @@ describe("HOU-175: other apps' sites on the house's Caddy", () => {
     expect(read("Caddyfile")).toMatch(/^\{\n\tadmin off\n(\t#.*\n)*\timport \/etc\/caddy\/front\/\*\.caddy\n/m);
     expect(read("Caddyfile.sites").replace(/^#.*\n/gm, "")).toBe("default_bind {$CADDY_FRONT_IP}\n");
     // The default route's source address: the house's network (the previews' is internal, with no gateway).
-    expect(String((caddy["entrypoint"] as string[])[2])).toContain("ip -4 route get 1.1.1.1");
-    expect(String((caddy["entrypoint"] as string[])[2])).toContain('export CADDY_FRONT_IP="$$front"');
+    expect(entrypoint).toContain("ip -4 route get 1.1.1.1");
+    expect(entrypoint).toContain('export CADDY_FRONT_IP="$$front"');
     // deploy/test-deploy.sh shows a container on household-previews refused by Caddy while the site works.
   });
 
