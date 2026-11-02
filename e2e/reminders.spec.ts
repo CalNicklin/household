@@ -20,7 +20,9 @@ test("[CAP-10] 'remind us to discuss Wise Owls tonight' shows on Today under Lat
   await evidence(page, "HOU-172-now-when-due");
 
   await now.getByRole("button", { name: "Done" }).click();
-  await expect(page.getByRole("status")).toContainText("Done: Discuss Wise Owls.");
+  await expect(page.getByText("Discuss Wise Owls", { exact: true })).toHaveCount(0);
+  await page.reload();
+  await expect(page.getByRole("heading", { name: "Monday 2 November" })).toBeVisible();
   await expect(page.getByText("Discuss Wise Owls", { exact: true })).toHaveCount(0);
   await evidence(page, "HOU-172-done");
 });

@@ -14,7 +14,7 @@ test("[CAP-1][CH-10] a thought typed on the iPad, sent on Telegram or forwarded 
   // limit: captureBudgetMs
   await expect(tom.getByText("Fix the shed roof")).toBeVisible({ timeout: Limits.captureBudgetMs.value });
   expect(Date.now() - t0).toBeLessThan(Limits.captureBudgetMs.value);
-  await telegram(request, { update_id: 7001, message: { chat: { id: 1002 }, from: { id: 1002 }, text: "remind me to oil the gate hinges" } });
+  await telegram(request, { update_id: 7001, message: { chat: { id: 1002 }, from: { id: 1002 }, text: "need to oil the gate hinges" } });
   // limit: liveUpdateBudgetMs
   await expect(tom.getByText("Oil the gate hinges")).toBeVisible({ timeout: Limits.liveUpdateBudgetMs.value });
   await evidence(tom, "CAP-1-backlog-for-both");

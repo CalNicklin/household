@@ -37,7 +37,7 @@ for (const size of ["ipad", "phone"] as const) {
     await evidence(page, `HOU-157-no-helper-shop-${size}`);
     // Something else replans today: still no shop card.
     await page.goto("/");
-    await say(page, "remind me to ring the dentist");
+    await say(page, "need to ring the dentist");
     await expect(page.getByRole("status")).toContainText("Added to the backlog");
     await page.reload();
     await expect(page.getByRole("heading", { name: "Monday 2 November" })).toBeVisible();

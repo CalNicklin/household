@@ -37,7 +37,7 @@ describe("CAP-10: reminders you ask for", () => {
     expect(h.ports.messenger.sent.length).toBe(before);
     await timer(TimerKind.hourlyRefresh, MON, 20, 0);
     const sent = h.ports.messenger.sent.slice(before).filter((m) => m.text.startsWith("Reminder"));
-    expect(sent.map((m) => [m.address, m.text]).sort()).toEqual([
+    expect(sent.map((m) => [m.address, m.text]).sort((a, b) => String(a[0]).localeCompare(String(b[0])))).toEqual([
       ["1001", "Reminder: Discuss Wise Owls"],
       ["1002", "Reminder from Priya: Discuss Wise Owls"],
     ]);
