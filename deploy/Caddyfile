@@ -24,3 +24,6 @@
 import /etc/caddy/previews/*.caddy
 # HOU-150: the mail receiver's host name (for its certificate), present only with --mail-domain.
 import /etc/caddy/mail/*.caddy
+# HOU-175: other apps' sites (the trader dashboards), root-owned files in /etc/household/sites, present only
+# when household-common.sh adds compose.caddy-sites.yml.
+import /etc/caddy/sites/*.caddy

@@ -14,6 +14,7 @@
 #   - creates the `household` user, whose SSH key can only run household-deploy, via one sudoers rule;
 #   - for previews: installs /srv/household-previews, and a second key that can only run household-preview;
 #   - for order emails: the mail receiver on port 25, taking mail for orders@<mail domain> only;
+#   - makes /etc/household/sites (root's, left empty) for other apps' sites on the house's Caddy (HOU-175);
 #   - switches on the nightly backup.
 set -euo pipefail
 umask 022
@@ -38,7 +39,11 @@ install -m 755 "$repo"/deploy/household-*.sh "$repo/scripts/backup.sh" "$repo/sc
 for c in deploy setup backup restore preview telegram google email status; do ln -sfn "$lib/household-$c.sh" "/usr/local/sbin/household-$c"; done
 # Credential files only the app (uid 10001 in its image) can read, mounted read-only into it.
 install -d -o 10001 -g root -m 700 "$dir/credentials"
-install -m 644 "$repo/deploy/compose.yml" "$repo/deploy/compose.hindsight.yml" "$repo/deploy/compose.caddy-previews.yml" "$repo/deploy/compose.mail.yml" "$repo/deploy/Caddyfile" "$repo/deploy/Caddyfile.previews" "$repo/deploy/Caddyfile.mail" "$dir/"
+install -m 644 "$repo/deploy/compose.yml" "$repo/deploy/compose.hindsight.yml" "$repo/deploy/compose.caddy-previews.yml" "$repo/deploy/compose.mail.yml" "$repo/deploy/compose.caddy-sites.yml" "$repo/deploy/Caddyfile" "$repo/deploy/Caddyfile.previews" "$repo/deploy/Caddyfile.mail" "$dir/"
+# HOU-175: other apps' sites for the house's Caddy (the trader dashboards). Root's alone, and empty here: the
+# trader side puts its *.caddy files in it as root, and household-common.sh uses it only while root alone
+# can write it. The `household` deploy user can't add a site.
+install -d -o root -g root -m 755 "$etc/sites"
 # FB-5: the PR previews' own directory: their compose file and which of them are running. Nothing of the
 # house's is in it.
 previews=/srv/household-previews

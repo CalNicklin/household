@@ -18,6 +18,9 @@ PREVIEW_BUDGET_MB="${PREVIEW_BUDGET_MB:-600}"
 # PR images live in their own package, so household-deploy (HOUSEHOLD_REPO) can never pull one.
 PREVIEW_REPO="${PREVIEW_REPO:-ghcr.io/calnicklin/household-preview}"
 export PREVIEWS_DIR
+# HOU-175: other apps' sites for the house's Caddy (root-owned *.caddy files; install.sh makes the directory).
+SITES_DIR="${SITES_DIR:-/etc/household/sites}"
+export SITES_DIR
 
 [ -f "$HOUSEHOLD_DIR/.env" ] || { echo "no $HOUSEHOLD_DIR/.env: run deploy/install.sh first" >&2; exit 1; }
 # Every `docker compose` below (and in backup.sh and restore.sh) means the production project, through
@@ -33,6 +36,34 @@ if grep -qE '^PREVIEW_DOMAIN=.+' "$HOUSEHOLD_DIR/.env"; then COMPOSE_FILE="$COMP
 
 # HOU-150: the mail receiver for forwarded order emails, when install.sh was given --mail-domain.
 if grep -qE '^MAIL_DOMAIN=.+' "$HOUSEHOLD_DIR/.env"; then COMPOSE_FILE="$COMPOSE_FILE:$HOUSEHOLD_DIR/compose.mail.yml"; fi
+
+# HOU-175: the house's Caddy also serves the sites in $SITES_DIR, but only when root alone can change what it
+# would load: the directory and every *.caddy in it owned by root, not writable by group or others, and no
+# symlinks. Otherwise the overlay is left out (saying why), and the house runs exactly as without it.
+sites_usable() {
+  local f found=""
+  [ -d "$SITES_DIR" ] || return 1
+  if [ -L "$SITES_DIR" ] || [ "$(stat -c %u "$SITES_DIR")" != 0 ] || (( 0$(stat -c %a "$SITES_DIR") & 022 )); then
+    echo "note: $SITES_DIR is not root's alone (root-owned, mode 755), so the house's Caddy serves no extra sites" >&2
+    return 1
+  fi
+  for f in "$SITES_DIR"/*.caddy; do
+    [ -e "$f" ] || [ -L "$f" ] || continue
+    if [ -L "$f" ] || [ ! -f "$f" ] || [ "$(stat -c %u "$f")" != 0 ] || (( 0$(stat -c %a "$f") & 022 )); then
+      echo "note: $f is not a root-owned file only root can write, so the house's Caddy serves no extra sites" >&2
+      return 1
+    fi
+    found=yes
+  done
+  [ -n "$found" ]
+}
+if [ -f "$HOUSEHOLD_DIR/compose.caddy-sites.yml" ] && sites_usable; then
+  COMPOSE_FILE="$COMPOSE_FILE:$HOUSEHOLD_DIR/compose.caddy-sites.yml"
+  # Compose can't see a mounted file change, so the files' hash is a label: a deploy recreates Caddy (which
+  # reads its config only at start) exactly when a site file changed.
+  SITES_HASH="$(cd "$SITES_DIR" && sha256sum -- *.caddy | sha256sum | cut -c1-16)"
+  export SITES_HASH
+fi
 
 household_compose() { docker compose "$@"; }
 

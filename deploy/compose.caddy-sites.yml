@@ -1,0 +1,15 @@
+# HOU-175: extra sites the house's Caddy serves for other apps on this server (the trader dashboards), from
+# root-owned *.caddy files in /etc/household/sites. Added to the real house's project by household-common.sh
+# only when that directory is root's alone and holds a *.caddy file; without one the house runs exactly as
+# before. It gives Caddy those files, read-only, and a name for the host, and nothing else: no port, no
+# network, no volume of the house's. household-deploy validates the combined config before Caddy uses it.
+services:
+  caddy:
+    volumes:
+      - ${SITES_DIR:?}:/etc/caddy/sites:ro
+    # The host as Docker's bridge gateway sees it. A site reaches only what listens there (docs/OPERATIONS.md:
+    # the trader services listen on the gateway address, never publicly on their own ports).
+    extra_hosts: ["host.docker.internal:host-gateway"]
+    # Set by household-common.sh from the files' contents, so a changed site recreates Caddy on the next deploy.
+    labels:
+      household.sites: ${SITES_HASH:?}

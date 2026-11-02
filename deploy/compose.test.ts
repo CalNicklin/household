@@ -93,3 +93,61 @@ describe("the production compose project", () => {
     expect(main.services["app"]?.["environment"]).toMatchObject({ PUBLIC_URL: expect.stringMatching(/^https:\/\/\$\{HOUSEHOLD_DOMAIN\}$/) });
   });
 });
+
+describe("HOU-175: other apps' sites on the house's Caddy", () => {
+  const overlay = zCompose.parse(parse(read("compose.caddy-sites.yml"), { merge: true }));
+  const caddy = overlay.services["caddy"] ?? zService.parse({});
+  const common = read("household-common.sh");
+  const install = read("install.sh");
+
+  it("[PLT-8] the overlay touches only Caddy: no new service, no memory cap changed, no port, no network", () => {
+    expect(Object.keys(overlay.services)).toEqual(["caddy"]);
+    expect(overlay["x-memory"]).toBeUndefined();
+    expect(caddy.mem_limit).toBeUndefined();
+    expect(caddy.memswap_limit).toBeUndefined();
+    expect(caddy.ports).toBeUndefined();
+    expect(caddy.network_mode).toBeUndefined();
+    expect(caddy["networks"]).toBeUndefined();
+    expect(caddy.privileged ?? false).toBe(false);
+    expect(Object.keys(caddy).sort()).toEqual(["extra_hosts", "labels", "volumes"]);
+  });
+
+  it("[PRV-6] the sites reach Caddy read-only, and Caddy gets only a name for the host", () => {
+    expect(caddy.volumes).toEqual(["${SITES_DIR:?}:/etc/caddy/sites:ro"]);
+    expect(caddy["extra_hosts"]).toEqual(["host.docker.internal:host-gateway"]);
+    expect(common).toMatch(/^SITES_DIR="\$\{SITES_DIR:-\/etc\/household\/sites\}"$/m);
+    expect(read("Caddyfile")).toMatch(/^import \/etc\/caddy\/sites\/\*\.caddy$/m);
+    // The base project never names the sites; only the overlay does.
+    expect(read("compose.yml")).not.toMatch(/sites|host-gateway/);
+  });
+
+  it("[PLT-8] is added only when root alone can write the directory and every *.caddy in it", () => {
+    expect(common).toMatch(/^if \[ -f "\$HOUSEHOLD_DIR\/compose\.caddy-sites\.yml" \] && sites_usable; then$/m);
+    const check = /sites_usable\(\) \{[\s\S]*?\n\}/.exec(common)?.[0] ?? "";
+    expect(check).toContain('[ -d "$SITES_DIR" ] || return 1');
+    // The directory: not a symlink, owned by root, writable by no group or other user.
+    expect(check).toContain('[ -L "$SITES_DIR" ] || [ "$(stat -c %u "$SITES_DIR")" != 0 ] || (( 0$(stat -c %a "$SITES_DIR") & 022 ))');
+    // Each file the same, and at least one of them.
+    expect(check).toContain('[ -L "$f" ] || [ ! -f "$f" ] || [ "$(stat -c %u "$f")" != 0 ] || (( 0$(stat -c %a "$f") & 022 ))');
+    expect(check).toMatch(/\[ -n "\$found" \]\n\}$/);
+  });
+
+  it("[PLT-8] install.sh makes the directory root's (0755) and puts nothing in it; the deploy user can't add a site", () => {
+    expect(install).toMatch(/^install -d -o root -g root -m 755 "\$etc\/sites"$/m);
+    expect(install.match(/\$etc\/sites/g)).toHaveLength(1);
+    expect(install).toContain('"$repo/deploy/compose.caddy-sites.yml"');
+    // The deploy user stays a non-root user outside the docker group whose keys run exactly two commands,
+    // so it can neither write /etc/household/sites nor start a Caddy with other files.
+    expect(install).toMatch(/^echo 'household ALL=\(root\) NOPASSWD: \/usr\/local\/sbin\/household-deploy, \/usr\/local\/sbin\/household-preview' > "\$rule"$/m);
+    expect(install).toMatch(/^gpasswd -d household docker /m);
+    expect(read("household-deploy.sh")).not.toMatch(/SITES_DIR=|sites\/\S*\.caddy\s*>/);
+  });
+
+  it("[PLT-8] household-deploy validates Caddy's whole config with the sites before switching anything", () => {
+    const deploy = read("household-deploy.sh");
+    const validate = deploy.indexOf("caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile");
+    expect(validate).toBeGreaterThan(0);
+    expect(validate).toBeLessThan(deploy.indexOf("household_compose up"));
+    expect(deploy).toMatch(/fix or remove that file, then redeploy/);
+  });
+});
