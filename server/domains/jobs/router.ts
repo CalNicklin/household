@@ -270,10 +270,10 @@ export function jobsRouter(db: JobsDb) {
         const r = m.replies[0];
         const job = m.jobs[0];
         // PRV-5: redaction empties the attachments, so a finished tap is also known by its `tap:` intent.
-        const tapped = m.attachments.find((a) => a.kind === AttachmentKind.ref && a.action !== undefined);
+        const tapped = m.attachments.flatMap((a) => (a.kind === AttachmentKind.ref && a.action !== undefined ? [a.action] : []))[0];
         const tap = tapped !== undefined || (job?.intent.startsWith("tap:") ?? false);
         const fromIntent = zActionKind.safeParse(job?.intent.slice("tap:".length));
-        const action = tapped?.kind === AttachmentKind.ref && tapped.action !== undefined ? tapped.action : tap && fromIntent.success ? fromIntent.data : null;
+        const action = tapped ?? (tap && fromIntent.success ? fromIntent.data : null);
         return {
           id: m.id,
           text: m.text,
