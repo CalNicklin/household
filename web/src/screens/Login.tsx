@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { dropOfflineViews } from "../data/sw.ts";
 import { Button, Card, Field, Form, Page, Text, TextInput } from "../design-system/index.ts";
 
 /** Only same-site paths are followed after login. */
@@ -13,8 +14,13 @@ export function LoginScreen({ next }: { next: string | undefined }) {
   const [failed, setFailed] = useState(false);
   const submit = async () => {
     const res = await fetch("/api/login", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ username, password }), credentials: "same-origin" });
-    if (res.ok) window.location.assign(safeNext(next));
-    else setFailed(true);
+    if (!res.ok) {
+      setFailed(true);
+      return;
+    }
+    // HOU-165: whoever signs in, no one else's offline views stay on this device.
+    await dropOfflineViews().catch(() => undefined);
+    window.location.assign(safeNext(next));
   };
   return (
     <Page label="Log in">

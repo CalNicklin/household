@@ -1,3 +1,5 @@
+import { VIEWS_CACHE_PREFIX } from "@household/contracts";
+
 /** A build comparison that could not finish (see registerServiceWorker); checkForUpdate retries it. */
 let pending: (() => Promise<void>) | null = null;
 
@@ -103,4 +105,15 @@ async function currentBuild(): Promise<string | undefined> {
 function typing(): boolean {
   const el = document.activeElement;
   return (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) && el.value !== "";
+}
+
+/**
+ * HOU-165: drop every person's offline views, from the page itself. The worker drops them when it sees a
+ * login, but a page it doesn't control (after a hard reload) logs in around it, so the login screen
+ * calls this too.
+ */
+export async function dropOfflineViews(): Promise<void> {
+  if (!("caches" in window)) return;
+  const keys = await caches.keys();
+  await Promise.all(keys.filter((k) => k.startsWith(VIEWS_CACHE_PREFIX)).map((k) => caches.delete(k)));
 }
