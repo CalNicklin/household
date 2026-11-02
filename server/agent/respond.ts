@@ -63,7 +63,7 @@ async function respondToReminder(scope: JobScope, ref: string, action: ActionKin
     await scope.api.backlog.reminderDone({ id: reminder.id, sourceMessage: scope.messageId });
     scope.effects.closeRefs.push({ ref, status: "done" });
     replan(date);
-    // HOU-177: and the day before it, whose plan shows it under Tomorrow.
+    // Its own day's plan, and the day before's, which shows it under Tomorrow (HOU-177).
     await replanFor(scope, [reminder.date]);
     return `Done: ${reminder.text}.`;
   }
@@ -74,7 +74,7 @@ async function respondToReminder(scope: JobScope, ref: string, action: ActionKin
     scope.effects.closeRefs.push({ ref, status: "dismissed" });
     replan(date);
     replan(addLocalDays(date, 1));
-    // HOU-177: and the days that showed it or will show it, from its old day to its new one.
+    // Every plan that showed it or will show it: its old day, its new day and the day before each (HOU-177).
     await replanFor(scope, [reminder.date, to]);
     return to === addLocalDays(date, 1) ? `Moved to tomorrow: ${reminder.text}.` : `Moved to ${longDate(to)}: ${reminder.text}.`;
   }
