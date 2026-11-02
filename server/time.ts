@@ -65,6 +65,13 @@ export function shortWeekday(date: LocalDate): string {
   return format(parseISO(date), "EEEE");
 }
 
+/** HOU-173: a part of a day said from the real today: "this morning", "tomorrow evening", "Wednesday afternoon". */
+export function dayPartWords(date: LocalDate, today: LocalDate, part: string): string {
+  if (date === today) return `this ${part}`;
+  if (date === addLocalDays(today, 1)) return `tomorrow ${part}`;
+  return `${shortWeekday(date)} ${part}`;
+}
+
 /** "13:00" style clock for an instant in the house time zone. */
 export function clock(at: Date | string, timeZone: string): string {
   return localTime(typeof at === "string" ? new Date(at) : at, timeZone);

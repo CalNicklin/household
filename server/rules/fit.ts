@@ -2,7 +2,7 @@
  * Gaps: windows in the week where a backlog item's tags all hold. This is constraint matching,
  * not judgement; the agent only chooses which fitting item to offer and words it.
  */
-import { type BacklogItem, BacklogTag, BacklogTagLabel, DurationMinutes, DurationTag as Durations, type DurationTag, type LocalDate } from "@household/contracts";
+import { type BacklogItem, BacklogTag, BacklogTagLabel, DayPart, DurationMinutes, DurationTag as Durations, type DurationTag, type LocalDate } from "@household/contracts";
 import { addLocalDays, atLocal, weekdayOf } from "../time.ts";
 import { adultsOf, DAY_END_HOUR, DAY_START_HOUR, type HouseFacts, isBusy, isDaylight, isDryHour, KIDS_BEDTIME_HOUR, kidsOf } from "./day.ts";
 import { kidsAtNursery } from "./nudges.ts";
@@ -97,6 +97,6 @@ export function waitingFor(item: Pick<BacklogItem, "tags">): string {
   return `Needs ${parts.length === 1 ? parts[0] : `${parts.slice(0, -1).join(", ")} and ${parts.at(-1)}`}`;
 }
 
-export function partOfDay(hour: number): string {
-  return hour < 12 ? "morning" : hour < 17 ? "afternoon" : "evening";
+export function partOfDay(hour: number): DayPart {
+  return hour < 12 ? DayPart.morning : hour < 17 ? DayPart.afternoon : DayPart.evening;
 }

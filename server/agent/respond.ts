@@ -1,6 +1,7 @@
 import { ActionKind, BlockType, DayPart, type LocalDate, LongTool, ModeKind, NotificationStatus, ReminderStatus, RhythmSource, ShoppingStatus } from "@household/contracts";
 import { START_REF_PREFIX } from "../planner/first-day.ts";
 import { forecasts } from "../planner/gather.ts";
+import { parsePencil, pencilledLine } from "../planner/pencil.ts";
 import { addLocalDays, localDate, localHour, longDate, weekdayOf } from "../time.ts";
 import type { JobScope } from "./scope.ts";
 
@@ -96,7 +97,12 @@ export async function respond(scope: JobScope, ref: string, action: ActionKind, 
   // CAP-10: Done, or Not now / Later (to tomorrow). A reminder someone asked for is theirs, not a
   // suggestion: nothing to learn from, nothing to remember.
   if (ref.startsWith("reminder:")) return respondToReminder(scope, ref, action, date);
-  await scope.api.plans.respond({ ref, action, channel: scope.channel, date, value });
+  // HOU-173: a backlog pick's buttons are kept against the day whose plan offered it (PRO-6: one
+  // plan, once), so the card closes there — on Week for a later day — as well as on Today.
+  const slot = ref.startsWith("backlog:") ? parsePencil(value) : null;
+  const pickTap = ref.startsWith("backlog:") && (action === ActionKind.accept || slot !== null);
+  const offeredOn = pickTap ? (await scope.api.plans.offers()).find((o) => `backlog:${o.itemId}` === ref)?.date : undefined;
+  await scope.api.plans.respond({ ref, action, channel: scope.channel, date: offeredOn ?? date, value });
   const subject = await subjectFor(scope, ref, date);
 
   // HOU-149: "Getting started" cards are about the app, not the house's life: nothing to learn or
@@ -140,7 +146,9 @@ export async function respond(scope: JobScope, ref: string, action: ActionKind, 
       await scope.api.backlog.markDone({ id });
       return `Nice. "${subject}" is off the list.`;
     }
-    if (action === ActionKind.accept) return `Pencilled in: ${subject}.`;
+    // HOU-173: kept as the response (PRV-1: nothing is written to the calendar); Today, Week and the
+    // Backlog read it back as "Pencilled in for Wednesday morning".
+    if (action === ActionKind.accept) return slot === null ? `Pencilled in: ${subject}.` : `${pencilledLine(slot, date)}: ${subject}.`;
   }
   if (ref.startsWith("question:") && action === ActionKind.answer && value !== null) {
     const q = await scope.api.learning.answer({ id: ref.slice("question:".length), answer: value });

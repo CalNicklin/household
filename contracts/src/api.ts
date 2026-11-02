@@ -2,7 +2,7 @@
 import { z } from "zod";
 import { zBlock } from "./blocks.ts";
 import { zArrival, zCalendarCopy, zCalendarWatch, zHourlyForecast, zJob, zLearningEvent, zListItem, zLocalTime, zNurseryEvent, zPersonSettings, zProductOption, zQuestion, zRhythm, zRuleSpec, zTelegramUserId } from "./domain.ts";
-import { LongTool, zActionKind, zBacklogTag, zChannel, zDeliveryChannel, zListWriteOutcome, zLongTool, zModeKind, zModelProvider, zNotificationStatus, zShoppingStatus, zTimerKind } from "./enums.ts";
+import { LongTool, zActionKind, zDayPart, zBacklogTag, zChannel, zDeliveryChannel, zListWriteOutcome, zLongTool, zModeKind, zModelProvider, zNotificationStatus, zShoppingStatus, zTimerKind } from "./enums.ts";
 import { zInboundMessage, zNotifyInput } from "./message.ts";
 
 export const zIdInput = z.object({ id: z.string() });
@@ -90,6 +90,8 @@ export const zExchange = z.object({
    * once they are redacted (PRV-5), from the job's `tap:` intent.
    */
   tap: z.boolean(),
+  /** HOU-173: for a tap, which button it was (read the same way as `tap`); null for something said. */
+  action: zActionKind.nullable(),
   reply: z.object({ id: z.string(), text: z.string(), createdAt: z.iso.datetime({ offset: true }) }).nullable(),
   /** The message's job, if it has started: how it stands, and what its tools returned. */
   job: zJob.pick({ status: true, toolCalls: true }).nullable(),
@@ -98,6 +100,12 @@ export const zTimerRunInput = z.object({ timer: zTimerKind, scheduledFor: z.iso.
 
 export const zDateInput = z.object({ date: z.iso.date() });
 export const zSavePlanInput = z.object({ date: z.iso.date(), blocks: z.array(zBlock), inputs: z.record(z.string(), z.unknown()), trigger: z.string(), jobId: z.string().nullable() });
+/**
+ * HOU-173: where "Pencil it in" puts a backlog pick — the day and part of day its slot was found in.
+ * It travels as the accept action's value and is kept as the response's, written "2026-11-04 morning".
+ */
+export const zPencilSlot = z.object({ date: z.iso.date(), dayPart: zDayPart });
+export type PencilSlot = z.infer<typeof zPencilSlot>;
 export const zRespondInput = z.object({ ref: z.string(), action: zActionKind, channel: zChannel, date: z.iso.date(), value: z.string().nullable() });
 export const zHandOverInput = z.object({ ref: z.string(), title: z.string(), to: z.string() });
 export const zSaveForecastInput = z.object({ date: z.iso.date(), hours: z.array(zHourlyForecast) });

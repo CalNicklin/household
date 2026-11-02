@@ -5,7 +5,8 @@ import { modeOn } from "../rules/day.ts";
 import { allRules } from "../rules/nudges.ts";
 import type { Runtime } from "../runtime.ts";
 import { addLocalDays, localDate, longDate } from "../time.ts";
-import { applyResponses } from "./screen.ts";
+import { pencilBlocks } from "../planner/pencil.ts";
+import { applyResponses, pencilledFrom, withPencils } from "./screen.ts";
 
 /** Week: each day's saved plan if there is one, else the rules' view of it (no agent, no picks). */
 export async function weekView(rt: Runtime, _person: string): Promise<WeekView> {
@@ -14,6 +15,7 @@ export async function weekView(rt: Runtime, _person: string): Promise<WeekView> 
   const facts = await gatherFacts(rt, today, 8);
   const api = rt.system("views");
   const reminders = await remindersFor(rt, today, addLocalDays(today, 6));
+  const pencilled = await pencilledFrom(rt, today);
   const days: WeekView["days"] = [];
   for (let i = 0; i < 7; i++) {
     const date = addLocalDays(today, i);
@@ -28,7 +30,7 @@ export async function weekView(rt: Runtime, _person: string): Promise<WeekView> 
       compose({ date, now, facts, rules: allRules(facts, date, now).items, closed, pick: null, oneThing: null, question: null, screenNotes: [], shopping: [], avoid: new Set(), otherAdult: otherAdultOf(facts), fill: null, reminders });
     // HOU-156: Week leaves out the context line that names the mode, so a later day's mode card says it.
     const named = date === today ? blocks : blocks.map((b) => (b.type === BlockType.mode ? { ...b, heading: ModeLabel[b.mode] } : b));
-    days.push({ date, label: longDate(date), today: date === today, blocks: applyResponses(named, closed).filter((b) => b.type !== "composer" && b.type !== "context" && b.section !== Section.start) });
+    days.push({ date, label: longDate(date), today: date === today, blocks: withPencils(applyResponses(named, closed), pencilBlocks(pencilled, date, today, facts.people)).filter((b) => b.type !== "composer" && b.type !== "context" && b.section !== Section.start) });
   }
   return { days };
 }
