@@ -56,6 +56,39 @@ export type Env = z.infer<typeof zEnv>;
 const MUST_BE_SET_FOR_REAL = ["SESSION_SECRET", "STORAGE_KEY", "TELEGRAM_WEBHOOK_SECRET", "EMAIL_WEBHOOK_SECRET", "CALENDAR_WEBHOOK_TOKEN", "MCP_TOKEN", "HELPER_TOKEN"] as const;
 
 /**
+ * HOU-160: the setting each provider's AI SDK client reads its key from (the SDK reads it itself; it is
+ * never copied into Env). The practice model needs none, and the real house may never use it.
+ */
+const PROVIDER_KEY: Record<ModelProvider, string | null> = {
+  [ModelProvider.practice]: null,
+  [ModelProvider.anthropic]: "ANTHROPIC_API_KEY",
+  [ModelProvider.openai]: "OPENAI_API_KEY",
+};
+
+/** HOU-160 / PRV-6: settings the real house will not start with; `loadEnvOrExit` turns it into one log line and exit 78. */
+class SettingsRefused extends Error {}
+
+/** Exit code for refused settings (sysexits' EX_CONFIG); household-deploy reads it to keep the running house. */
+const SETTINGS_REFUSED_EXIT = 78;
+
+/** Which model the house uses and whether its key is there (never the key), for logs and `household-status`. */
+export function modelStatus(env: Pick<Env, "MODEL_PROVIDER" | "MODEL_ID">, source: Record<string, string | undefined> = process.env): string {
+  const key = PROVIDER_KEY[env.MODEL_PROVIDER];
+  return `${env.MODEL_PROVIDER} ${env.MODEL_ID}${key === null ? " (the practice model: keyword patterns, no key)" : ` (${key} ${(source[key] ?? "") === "" ? "missing" : "set"})`}`;
+}
+
+/** `loadEnv()` for a process's entry point: refused settings are one JSON log line and exit 78, not a stack trace. */
+export function loadEnvOrExit(): Env {
+  try {
+    return loadEnv();
+  } catch (e) {
+    if (!(e instanceof SettingsRefused)) throw e;
+    console.error(JSON.stringify({ event: "settings-refused", reason: e.message }));
+    process.exit(SETTINGS_REFUSED_EXIT);
+  }
+}
+
+/**
  * HOME-1: the Google calendars the house reads, each with its owner: GOOGLE_CALENDARS, or else
  * GOOGLE_CALENDAR_ID as the shared calendar alone (the setup before personal calendars), or none.
  */
@@ -88,6 +121,14 @@ export function loadEnv(source: Record<string, string | undefined> = process.env
   if (env.PRACTICE) return env;
   const practice = zEnv.parse({});
   const unset = MUST_BE_SET_FOR_REAL.filter((name) => env[name] === practice[name]);
-  if (unset.length > 0) throw new Error(`PRV-6: the real house needs its own ${unset.join(", ")} (set them in .env; \`pnpm env:init\` generates them)`);
+  if (unset.length > 0) throw new SettingsRefused(`PRV-6: the real house needs its own ${unset.join(", ")} (set them in .env; \`pnpm env:init\` generates them)`);
+  // HOU-160: the practice model reads messages with keyword patterns; the real house never runs on it.
+  // The one exception is a Docker test harness (deploy/test-mail.sh), which has no model to call and says
+  // so by name in its own compose file; household-deploy refuses a .env carrying PRACTICE_MODEL_FOR_TESTS,
+  // so the real house never gets it, and a .env that merely lacks MODEL_PROVIDER is refused.
+  if (env.MODEL_PROVIDER === ModelProvider.practice && source["PRACTICE_MODEL_FOR_TESTS"] !== "yes")
+    throw new SettingsRefused("HOU-160: the real house will not run on the practice model: set MODEL_PROVIDER=anthropic and MODEL_ID=claude-opus-5-5 in .env (sudo deploy/install.sh adds them)");
+  const key = PROVIDER_KEY[env.MODEL_PROVIDER];
+  if (key !== null && (source[key] ?? "") === "") throw new SettingsRefused(`HOU-160: MODEL_PROVIDER=${env.MODEL_PROVIDER} needs ${key}: set it in .env`);
   return env;
 }

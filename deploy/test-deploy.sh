@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# PLT-8: run the real household-deploy (and household-setup, -backup, -restore) against local Docker,
+# PLT-8: run the real household-deploy (and household-setup, -status, -backup, -restore) against local Docker,
 # the way the VPS runs them, with a local registry standing in for GHCR. Needs Docker and ports 80, 443
 # and 5000 free, and no `household` compose project on this machine (it would be the same project: it
 # refuses rather than touch one); leaves nothing behind.
@@ -52,6 +52,8 @@ BACKUP_KEEP=1
 CONF
 docker run --rm --network none --memory 128m -v "$repo/scripts/env-init.ts:/env-init.ts:ro" -v "$work/srv:/work" -w /work node:22-bookworm-slim node /env-init.ts --real > /dev/null
 echo "HOUSEHOLD_DOMAIN=localhost" >> "$work/srv/.env"
+# HOU-160: the real house needs its model's key; no call is made with it here.
+echo "ANTHROPIC_API_KEY=placeholder-not-a-key" >> "$work/srv/.env"
 grep -q '^PRACTICE=false$' "$work/srv/.env" || fail "env-init --real did not write the real house"
 
 # The household-* commands, laid out as install.sh installs them (with backup.sh and restore.sh beside them).
@@ -91,8 +93,68 @@ grep -qi '^set-cookie: .*; Secure' <<< "$login" || fail "sam could not log in wi
 docker logs household-app-1 2>&1 | grep -q 'ports-missing-credentials.*shopping (no helper: nothing is added)' || fail "the app did not say it runs without a helper"
 echo "healthy behind Caddy; login works; no helper"
 
+step "HOU-160: a .env the new image refuses never takes the house down: the old container keeps running"
+# Built FROM the image above, so on the Docker daemon's own builder, which can see it (not BUILDX_BUILDER's).
+printf 'FROM %s\nLABEL household.test=next\n' "$local_image" | env -u BUILDX_BUILDER docker build -q -t localhost:5000/household:next - > /dev/null
+docker push -q localhost:5000/household:next > /dev/null
+next="$(docker image inspect --format '{{index .RepoDigests 0}}' localhost:5000/household:next | cut -d@ -f2)"
+docker image rm localhost:5000/household:next > /dev/null
+running="$(docker inspect -f '{{.Id}} {{.State.StartedAt}}' household-app-1)"
+cp "$work/srv/.env" "$work/env.good"
+n=0
+refused() { # <what> <expected line>: deploy $next with this .env; it must refuse and change nothing
+  n=$((n + 1)); log="$work/refused-$n.log"
+  set +e; "$lib/household-deploy.sh" "$next" < /dev/null > "$log" 2>&1; rc=$?; set -e
+  [ "$rc" -eq 1 ] || { cat "$log" >&2; fail "household-deploy took $1 (exit $rc)"; }
+  grep -q "\"event\":\"settings-refused\".*$2" "$log" || { cat "$log" >&2; fail "no settings-refused line for $1"; }
+  grep -q "refuses $work/srv/.env, so it was not started; the house keeps running localhost:5000/household@$digest" "$log" || fail "household-deploy did not say the house keeps running for $1"
+  [ "$(docker inspect -f '{{.Id}} {{.State.StartedAt}}' household-app-1)" = "$running" ] || fail "the running app was replaced or restarted for $1"
+  [ "$(docker inspect -f '{{.State.Health.Status}}' household-app-1)" = healthy ] || fail "the app is not healthy after $1"
+  [ "$(curl -sk --resolve localhost:443:127.0.0.1 https://localhost/healthz)" = ok ] || fail "healthz after $1"
+  [ "$(cat "$work/srv/image")" = "localhost:5000/household@$digest" ] || fail "$1 was recorded as deployed"
+  echo "refused $1; the house kept running"
+}
+# A .env as install.sh wrote it before HOU-148: no MODEL_PROVIDER or MODEL_ID, so the practice model.
+grep -vE '^MODEL_(PROVIDER|ID)=' "$work/env.good" > "$work/srv/.env"
+refused "an old .env (no MODEL_PROVIDER)" "will not run on the practice model: set MODEL_PROVIDER=anthropic"
+sed 's/^MODEL_PROVIDER=.*/MODEL_PROVIDER=practice/' "$work/env.good" > "$work/srv/.env"
+refused "MODEL_PROVIDER=practice" "will not run on the practice model"
+sed 's/^ANTHROPIC_API_KEY=.*/ANTHROPIC_API_KEY=/' "$work/env.good" > "$work/srv/.env"
+refused "no ANTHROPIC_API_KEY" "MODEL_PROVIDER=anthropic needs ANTHROPIC_API_KEY"
+
+step "HOU-160: the practice model's test-only opt-in never reaches the real house: household-deploy and -setup refuse it"
+cp "$work/env.good" "$work/srv/.env"
+echo "PRACTICE_MODEL_FOR_TESTS=yes" >> "$work/srv/.env"
+for cmd in "household-deploy.sh $next" household-setup.sh; do
+  set +e; "$lib/"$cmd < /dev/null > "$work/test-flag.log" 2>&1; rc=$?; set -e
+  [ "$rc" -eq 1 ] || { cat "$work/test-flag.log" >&2; fail "${cmd%% *} took a .env with PRACTICE_MODEL_FOR_TESTS (exit $rc)"; }
+  grep -q "sets PRACTICE_MODEL_FOR_TESTS, which is for Docker test harnesses only; delete that line" "$work/test-flag.log" || fail "${cmd%% *} did not say how to fix it"
+done
+[ "$(docker inspect -f '{{.Id}} {{.State.StartedAt}}' household-app-1)" = "$running" ] || fail "the running app was touched for PRACTICE_MODEL_FOR_TESTS"
+[ "$(cat "$work/srv/image")" = "localhost:5000/household@$digest" ] || fail "an image was recorded for PRACTICE_MODEL_FOR_TESTS"
+echo "refused PRACTICE_MODEL_FOR_TESTS in .env; the house kept running"
+
+step "HOU-160: install.sh's env-init fills in what an old .env lacks, changing nothing already there"
+grep -vE '^MODEL_(PROVIDER|ID)=' "$work/env.good" > "$work/srv/.env"
+cp "$work/srv/.env" "$work/env.old"
+added="$(docker run --rm --network none --memory 128m -v "$repo/scripts/env-init.ts:/env-init.ts:ro" -v "$work/srv:/work" -w /work node:22-bookworm-slim node /env-init.ts --real | sed -n 's/^added to .env: //p')"
+[ "$added" = "MODEL_PROVIDER, MODEL_ID" ] || fail "env-init added '$added' to an old .env"
+[ "$(head -c "$(wc -c < "$work/env.old")" "$work/srv/.env")" = "$(cat "$work/env.old")" ] || fail "env-init changed a line already in .env"
+[ "$(tail -n 2 "$work/srv/.env")" = "$(printf 'MODEL_PROVIDER=anthropic\nMODEL_ID=claude-opus-5-5')" ] || fail "env-init did not add the real model"
+"$lib/household-deploy.sh" "$next" < /dev/null | tee "$work/deploy-next.log"
+grep -q "^deployed localhost:5000/household@$next" "$work/deploy-next.log" || fail "the filled-in .env did not deploy"
+digest="$next"
+
+step "HOU-160: household-status says which model the running house uses"
+"$lib/household-status.sh" | tee "$work/status.log" || fail "household-status said the house is not healthy"
+grep -qx "image: localhost:5000/household@$digest" "$work/status.log" || fail "household-status image"
+grep -qx "app: running healthy" "$work/status.log" || fail "household-status app"
+grep -qx "model: anthropic claude-opus-5-5 (ANTHROPIC_API_KEY set)" "$work/status.log" || fail "household-status model"
+docker logs household-app-1 2>&1 | grep -q '"event":"listening".*"model":"anthropic claude-opus-5-5 (ANTHROPIC_API_KEY set)"' || fail "the app did not log its model at start"
+
 step "a broken image never replaces a working one: household-deploy rolls back"
-printf 'FROM %s\nCMD ["node", "-e", "process.exit(1)"]\n' "$local_image" | docker build -q -t localhost:5000/household:broken - > /dev/null
+# On the daemon's own builder, like the image above (it is built FROM the local image).
+printf 'FROM %s\nCMD ["node", "-e", "process.exit(1)"]\n' "$local_image" | env -u BUILDX_BUILDER docker build -q -t localhost:5000/household:broken - > /dev/null
 docker push -q localhost:5000/household:broken > /dev/null
 broken="$(docker image inspect --format '{{index .RepoDigests 0}}' localhost:5000/household:broken | cut -d@ -f2)"
 docker image rm localhost:5000/household:broken > /dev/null
@@ -119,4 +181,6 @@ for _ in $(seq 60); do [ "$(docker inspect -f '{{.State.Health.Status}}' househo
 [ "$(docker inspect -f '{{.State.Health.Status}}' household-app-1)" = healthy ] || fail "app not healthy after the restore"
 grep -q '^  sam ' "$work/logins" && [ -n "$(curl -sk -D - -o /dev/null -H 'content-type: application/json' -d "{\"username\":\"sam\",\"password\":\"$password\"}" https://localhost/api/login | grep -i '^set-cookie')" ] || fail "sam's login did not survive the restore"
 echo "backed up to $(basename "$backup") and restored; the house came back healthy"
-step "PASS: household-deploy, -setup, -backup and -restore against local Docker"
+# HOU-160: no deploy, refusal, rollback or status output ever carries the key.
+if grep -l 'placeholder-not-a-key' "$work"/*.log; then fail "the API key was printed"; fi
+step "PASS: household-deploy, -setup, -status, -backup and -restore against local Docker"

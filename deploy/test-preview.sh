@@ -79,6 +79,8 @@ PREVIEW_BUDGET_MB=600
 CONF
 docker run --rm --network none --memory 128m -v "$repo/scripts/env-init.ts:/env-init.ts:ro" -v "$work/srv:/work" -w /work node:22-bookworm-slim node /env-init.ts --real > /dev/null
 printf 'HOUSEHOLD_DOMAIN=localhost\nPREVIEW_DOMAIN=preview.localhost\n' >> "$work/srv/.env"
+# HOU-160: the real house needs its model's key; no call is made with it here.
+echo "ANTHROPIC_API_KEY=placeholder-not-a-key" >> "$work/srv/.env"
 docker network create --internal household-previews > /dev/null
 install -d "$lib"
 install -m 755 "$repo"/deploy/household-*.sh "$repo/scripts/backup.sh" "$repo/scripts/restore.sh" "$lib/"

@@ -1,4 +1,4 @@
-import type { Domain } from "@household/contracts";
+import { type Domain, Limits } from "@household/contracts";
 import { drizzle, type NodePgDatabase } from "drizzle-orm/node-postgres";
 import { migrate } from "drizzle-orm/node-postgres/migrator";
 import path from "node:path";
@@ -18,7 +18,13 @@ export function databaseUrl(baseUrl: string, name: string): string {
 
 /** One Postgres database per domain (CODE-4): a domain's db handle can only see its own tables. */
 export function connectDomain<S extends Record<string, unknown>>(baseUrl: string, prefix: string, domain: Domain, schema: S): DomainDb<S> {
-  const pool = new Pool({ connectionString: databaseUrl(baseUrl, databaseName(prefix, domain)) });
+  const pool = new Pool({
+    connectionString: databaseUrl(baseUrl, databaseName(prefix, domain)),
+    // limit: domainPoolMax
+    max: Limits.domainPoolMax.value,
+    // limit: poolIdleMs
+    idleTimeoutMillis: Limits.poolIdleMs.value,
+  });
   return drizzle(pool, { schema });
 }
 

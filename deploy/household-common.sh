@@ -36,5 +36,14 @@ if grep -qE '^MAIL_DOMAIN=.+' "$HOUSEHOLD_DIR/.env"; then COMPOSE_FILE="$COMPOSE
 
 household_compose() { docker compose "$@"; }
 
+# HOU-160: the practice model's test-only opt-in never reaches the real house's settings (test harnesses
+# set it in their own compose file instead). household-deploy and household-setup refuse such a .env.
+refuse_test_only_settings() {
+  if grep -qE '^PRACTICE_MODEL_FOR_TESTS=' "$HOUSEHOLD_DIR/.env"; then
+    echo "refused: $HOUSEHOLD_DIR/.env sets PRACTICE_MODEL_FOR_TESTS, which is for Docker test harnesses only; delete that line (sudo nano $HOUSEHOLD_DIR/.env) and run this again" >&2
+    exit 1
+  fi
+}
+
 # The image running now (written by household-deploy once an image is in place).
 deployed_image() { cat "$HOUSEHOLD_DIR/image" 2>/dev/null || true; }

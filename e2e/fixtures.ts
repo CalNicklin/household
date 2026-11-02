@@ -9,7 +9,18 @@ const zJobRef = z.object({ jobId: z.string() });
 
 export const PASSWORD = "practice";
 
+/**
+ * FB-2: signed in with the session cookie straight from /api/login, then on the home screen. The
+ * form on /login is the journey only where logging in is part of it (loginWithForm, first-day.spec.ts).
+ */
 export async function login(page: Page, username = "priya"): Promise<void> {
+  const r = await page.request.post("/api/login", { data: { username, password: PASSWORD } });
+  expect(r.ok()).toBe(true);
+  await page.goto("/");
+}
+
+/** Log in as a person does: the form on /login, then wherever it sends you. */
+export async function loginWithForm(page: Page, username = "priya"): Promise<void> {
   await page.goto("/login");
   await page.getByLabel("Name").fill(username);
   await page.getByLabel("Password").fill(PASSWORD);
@@ -41,7 +52,7 @@ export async function resetEmpty(request: APIRequestContext, at = "2026-11-02T07
 
 export async function waitForJob(request: APIRequestContext, jobId: string): Promise<void> {
   await expect
-    .poll(async () => (await json(z.object({ status: z.string() }).nullable(), await request.get(`/api/practice/job/${jobId}`)))?.status, { intervals: [100, 200, 500] })
+    .poll(async () => (await json(z.object({ status: z.string() }).nullable(), await request.get(`/api/practice/job/${jobId}`)))?.status, { intervals: [50] })
     .toMatch(/succeeded|failed/);
 }
 

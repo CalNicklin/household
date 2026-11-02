@@ -1,6 +1,5 @@
 import { readFile } from "node:fs/promises";
 import type { TranscriptionModel } from "ai";
-import { ModelProvider } from "@household/contracts";
 import { z } from "zod";
 import {
   InMemoryEpisodicMemory,
@@ -142,8 +141,6 @@ export function realPorts(env: Env, clock: Clock, options: RealPortsOptions): { 
   }
 
   const shopping = shoppingPort(env, options.shopping, missing);
-  // HOU-148: MODEL_PROVIDER defaults to practice, and the practice model reads messages with patterns.
-  if (env.MODEL_PROVIDER === ModelProvider.practice) missing.push("model (MODEL_PROVIDER is practice: messages are read by the practice model's patterns)");
 
   let transcriber: Ports["transcriber"];
   if (options.transcriptionModel === undefined) {
