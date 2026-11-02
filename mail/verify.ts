@@ -55,15 +55,58 @@ export function provenSenders(auth: AuthenticateResult, envelopeFrom: string, re
   return proven;
 }
 
-/** The sender of Gmail's forwarding confirmation, and its subject: "(#123456789) Gmail Forwarding Confirmation - …". */
-const GMAIL_CONFIRMATION_FROM = "forwarding-noreply@google.com";
-const GMAIL_CONFIRMATION_SUBJECT = /^\(#(\d{6,12})\) /;
+/**
+ * HOU-150 / HOU-169: Gmail's forwarding confirmation. Who sent it is proven strictly: the From address is
+ * @google.com and a passing google.com DKIM signature is aligned with it (author-dkim, above). Only what
+ * a proven Google message says is read tolerantly: any forwarding/noreply sender at google.com, the
+ * code anywhere in the (already RFC 2047-decoded) subject or else in the body, and the confirmation link.
+ */
+// One exact address, never a pattern: other google.com senders carry text anyone can choose (Drive
+// shares, comments) or a code anyone can have sent here (mail-noreply@'s "Send mail as" verification),
+// so they never count as the forwarding confirmation, however they are signed.
+const GMAIL_FORWARDING_SENDER = "forwarding-noreply@google.com";
+const SUBJECT_CODE = /#\s*(\d{6,12})(?!\d)/;
+const BODY_CODE = /\bcode\b[^\d\n]{0,20}?(\d{6,12})(?!\d)/i;
+// The one-time link: mail-settings.google.com/…, or mail.google.com/… with Gmail's vf- token. URL
+// characters only, so nothing printed from it can reach a terminal as a control sequence. confirmation.ts
+// checks what it saves against the same pattern.
+const URL_CHARS = "[A-Za-z0-9\\-._~:/?#@!$&()*+,;=%]";
+const LINK_SOURCE = `https://(?:mail-settings\\.google\\.com/${URL_CHARS}+|mail\\.google\\.com/${URL_CHARS}*vf-${URL_CHARS}*)`;
+const MAX_CONFIRMATION_LINK = 2000;
+const CONFIRMATION_LINK = new RegExp(LINK_SOURCE);
+export const isConfirmationLink = (link: string): boolean => link.length <= MAX_CONFIRMATION_LINK && new RegExp(`^${LINK_SOURCE}$`).test(link);
+
+export type ParsedMail = { subject: string; text: string; html: string };
+export type Confirmation = { code: string | null; link: string | null };
+/** The shape of a google.com-proven message that wasn't recognised: no content but digit-masked subject. */
+export type GoogleShape = { from: string; subjectMatched: boolean; bodyMatched: boolean; subject: string };
+
+const googleAuthor = (proven: ProvenSender[]): string | undefined => proven.find((p) => p.proof === SenderProof.authorDkim && p.address.endsWith("@google.com"))?.address;
+const htmlText = (html: string): string =>
+  html
+    .replace(/<(script|style)[^>]*>[\s\S]*?<\/\1>/gi, " ")
+    .replace(/<[^>]*>/g, " ")
+    .replace(/&nbsp;|&#160;/gi, " ")
+    .replace(/&amp;/gi, "&");
+const linkIn = (mail: ParsedMail): string | null => {
+  const link = CONFIRMATION_LINK.exec(mail.text)?.[0] ?? CONFIRMATION_LINK.exec(mail.html.replace(/&amp;/gi, "&"))?.[0] ?? null;
+  return link !== null && isConfirmationLink(link) ? link : null;
+};
 
 /**
- * HOU-150: the code in Gmail's forwarding confirmation, when the email really is Gmail's: From is
- * forwarding-noreply@google.com and a passing DKIM signature is google.com's. Anything else is null.
+ * Gmail's forwarding confirmation, when the email really is Google's: its code and link (either may be
+ * missing, not both). Otherwise `ignored` holds the shape of a google.com-proven message for the log,
+ * so the next unrecognised one can be diagnosed; it is null for anyone else's mail.
  */
-export function forwardingConfirmationCode(proven: ProvenSender[], subject: string): string | null {
-  if (!proven.some((p) => p.address === GMAIL_CONFIRMATION_FROM && p.proof === SenderProof.authorDkim)) return null;
-  return GMAIL_CONFIRMATION_SUBJECT.exec(subject)?.[1] ?? null;
+export function forwardingConfirmation(proven: ProvenSender[], mail: ParsedMail): { confirmation: Confirmation | null; ignored: GoogleShape | null } {
+  const from = googleAuthor(proven);
+  if (from === undefined) return { confirmation: null, ignored: null };
+  const subjectCode = SUBJECT_CODE.exec(mail.subject)?.[1] ?? null;
+  const bodyCode = BODY_CODE.exec(mail.text)?.[1] ?? BODY_CODE.exec(htmlText(mail.html))?.[1] ?? null;
+  const code = subjectCode ?? bodyCode;
+  const link = linkIn(mail);
+  if (from === GMAIL_FORWARDING_SENDER && (code !== null || link !== null)) return { confirmation: { code, link }, ignored: null };
+  // Control characters out and length bounded: the subject reaches the log, its digits never do.
+  const subject = mail.subject.replace(/\d/g, "#").replace(/[\p{Cc}\p{Cf}]/gu, " ").slice(0, 200);
+  return { confirmation: null, ignored: { from, subjectMatched: subjectCode !== null, bodyMatched: bodyCode !== null, subject } };
 }

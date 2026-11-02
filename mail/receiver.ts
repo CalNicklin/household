@@ -6,7 +6,7 @@ import { simpleParser } from "mailparser";
 import { SMTPServer, type SMTPServerDataStream, type SMTPServerSession } from "smtp-server";
 import { z } from "zod";
 import { saveConfirmation } from "./confirmation.ts";
-import { forwardingConfirmationCode, type ProvenSender, provenSenders } from "./verify.ts";
+import { forwardingConfirmation, type ParsedMail, type ProvenSender, provenSenders } from "./verify.ts";
 
 /**
  * HOU-150: the house's own mail receiver. It takes mail for exactly one address, orders@<domain>, and
@@ -217,15 +217,18 @@ async function receive(options: ReceiverOptions, raw: Buffer, session: SMTPServe
   // Only a proven email is parsed.
   const mail = await simpleParser(raw, { skipImageLinks: true });
   signal.throwIfAborted();
-  const subject = mail.subject ?? "";
-  const code = forwardingConfirmationCode(senders, subject);
-  if (code !== null) {
-    await saveConfirmation(options.stateDir, code, new Date());
-    log("mail-forwarding-confirmation");
+  const { confirmation, ignored } = forwardingConfirmation(senders, parsedOf(mail));
+  if (confirmation !== null) {
+    await saveConfirmation(options.stateDir, confirmation, new Date());
+    log("mail-forwarding-confirmation", { code: confirmation.code !== null, link: confirmation.link !== null });
     return;
   }
+  // HOU-169: a google.com-proven email that isn't recognised as the confirmation: its shape, no content.
+  if (ignored !== null) log("mail-google-not-confirmation", ignored);
   await handToApp(options, toEmail(mail, raw, senders, recipient, options.domain), senders, signal);
 }
+
+const parsedOf = (mail: Awaited<ReturnType<typeof simpleParser>>): ParsedMail => ({ subject: mail.subject ?? "", text: mail.text ?? "", html: typeof mail.html === "string" ? mail.html : "" });
 
 function toEmail(mail: Awaited<ReturnType<typeof simpleParser>>, raw: Buffer, senders: ProvenSender[], recipient: string, domain: string): InboundEmail {
   const text = mail.text ?? "";

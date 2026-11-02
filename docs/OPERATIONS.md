@@ -695,9 +695,23 @@ given `--mail-domain`, so until then a deploy runs exactly the four containers a
   - It is on a network of its own, shared only with the app. It can't reach Postgres, object storage or
     Caddy.
   - It gets only `EMAIL_WEBHOOK_SECRET`, not the house's `.env`, and posts to the app's `/webhooks/email`.
-- **Gmail's forwarding confirmation** is kept (the code and when it came, in memory only) and never
-  reaches the app. `sudo household-email last-confirmation` prints the code if it came within the hour,
-  and nothing else. The deploy user can't run it.
+- **Gmail's forwarding confirmation** is kept (the code, its confirmation link and when it came, in
+  memory only) and never reaches the app. `sudo household-email last-confirmation` prints the code, then
+  the link if there was one, if it came within the hour, and nothing else. Both are one-time and expire.
+  The deploy user can't run it.
+  - Its sender is proven strictly: an `@google.com` From with a passing, aligned google.com DKIM
+    signature (HOU-169). Only `forwarding-noreply@google.com` counts, never a pattern or another
+    google.com sender: Drive shares carry text anyone chooses, and anyone can have `mail-noreply@`'s
+    "Send mail as" verification sent here. From that sender, what it says is read tolerantly: the
+    code anywhere in the decoded subject (`#123456789`) or else in the text or HTML body
+    (`Confirmation code: 123456789`), and a `https://mail-settings.google.com/…` or
+    `https://mail.google.com/…vf-…` link.
+  - A google.com-proven email that isn't recognised is logged as `mail-google-not-confirmation` with its
+    shape only: the From address, whether the subject or body held a code, and the subject with every
+    digit as `#`.
+  - **If Gmail's confirmation came before HOU-169 was deployed** (it was dropped): in Gmail →
+    Settings → Forwarding and POP/IMAP, use **Re-send email** for the pending address, then run
+    `sudo household-email last-confirmation` within the hour and enter the code (or open the link).
 - **Who is who:** the Gmail address that forwards must be that adult's `email` in `house.json` (step 4
   of the real house), e.g. `"email": "cal@gmail.com"`. Gmail's envelope uses the address exactly as the
   account is named. Forwards from an address that isn't anyone's are dropped and logged as
