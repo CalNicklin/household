@@ -23,8 +23,9 @@ export async function householdWithApp(): Promise<{ h: TestHousehold; app: Hono<
 }
 
 /** Log in as a practice person (Priya unless named) with the practice login, and return the session cookie. */
-export async function loginCookie(app: Hono<HttpEnv>, person = "priya"): Promise<string> {
-  const res = await app.request("/api/login", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ username: person, password: Practice.login }) });
+export async function loginCookie(app: Hono<HttpEnv>, username = "priya"): Promise<string> {
+  const password = Practice.login;
+  const res = await app.request("/api/login", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ username, password }) });
   const cookie = res.headers.get("set-cookie");
   if (res.status !== 200 || cookie === null) throw new Error(`login failed: ${res.status}`);
   return cookie.split(";")[0] ?? "";
