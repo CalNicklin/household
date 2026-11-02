@@ -235,6 +235,8 @@ function toEmail(mail: Awaited<ReturnType<typeof simpleParser>>, raw: Buffer, se
     from: (byHand ? forwardedAuthor(text) : null) ?? authorOf(mail.from?.value[0]),
     to: recipient,
     subject: mail.subject ?? "",
+    // Only bounds what is posted. The app adds From and Subject in front and cuts the whole line to
+    // maxInboundTextChars itself (server/adapters/email/index.ts), so a text this long still fits.
     text: text.slice(0, Limits.maxInboundTextChars.value),
     messageId: mail.messageId ?? `<${createHash("sha256").update(raw).digest("hex")}@${domain}>`,
     provenSenders: senders.map((s) => s.address),
