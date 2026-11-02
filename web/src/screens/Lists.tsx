@@ -124,7 +124,7 @@ function ListPanel({ list }: { list: List }) {
         <AddItemField
           label={`Add an item to ${list.name}`}
           onAdd={async (text) => {
-            // A delete still in its Undo window is sent first, so "milk" re-added is a new item (AR-5).
+            // A delete still in its Undo window is sent first, so "milk" re-added is a new item.
             await flush();
             return saved(() => add.mutateAsync({ listId: list.id, text }), text);
           }}

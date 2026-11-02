@@ -21,7 +21,7 @@ type Undo = {
   undo: () => void;
   /**
    * Send the pending delete now, and resolve once it has landed (or failed). An add waits for this,
-   * so re-adding something just deleted makes a new item rather than finding the old one (AR-5).
+   * so re-adding something just deleted makes a new item rather than finding the old one.
    */
   flush: () => Promise<void>;
 };
