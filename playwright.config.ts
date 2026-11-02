@@ -6,8 +6,6 @@ import { READY_PORT, STACKS } from "./e2e/stacks.ts";
  * FB-3: journeys against the real app and the practice household, headless, in CI. FB-2: one worker
  * per stack, each against its own household (e2e/stacks.ts), so the journeys run side by side.
  */
-const webkitInstalled = existsSync(webkit.executablePath());
-
 export default defineConfig({
   testDir: "e2e",
   workers: STACKS,
@@ -16,12 +14,9 @@ export default defineConfig({
   // baseURL comes from each worker's own stack (e2e/fixtures.ts).
   use: { trace: "retain-on-failure", screenshot: "only-on-failure" },
   projects: [
-    { name: "ipad", testIgnore: "deploy.spec.ts", use: { ...devices["iPad (gen 7) landscape"], viewport: { width: 1180, height: 820 }, browserName: "chromium" } },
+    { name: "ipad", use: { ...devices["iPad (gen 7) landscape"], viewport: { width: 1180, height: 820 }, browserName: "chromium" } },
     // HOU-159: the composer journeys again in WebKit, Safari's engine, wherever it is installed (CI installs it).
-    ...(webkitInstalled ? [{ name: "webkit", testMatch: /conversation\.spec\.ts/, use: { browserName: "webkit" as const } }] : []),
-    // HOU-154: the deploy journey runs a server of its own; it waits for the others so that server never
-    // shares Postgres's connections with three busy stacks at once.
-    { name: "deploy", testMatch: "deploy.spec.ts", dependencies: ["ipad", ...(webkitInstalled ? ["webkit"] : [])], use: { ...devices["iPad (gen 7) landscape"], viewport: { width: 1180, height: 820 }, browserName: "chromium" } },
+    ...(existsSync(webkit.executablePath()) ? [{ name: "webkit", testMatch: /conversation\.spec\.ts/, use: { browserName: "webkit" as const } }] : []),
   ],
   webServer: { command: "node e2e/stack.ts", url: `http://localhost:${READY_PORT}/`, reuseExistingServer: !process.env["CI"] },
 });

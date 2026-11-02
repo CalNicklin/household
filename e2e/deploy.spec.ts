@@ -1,13 +1,15 @@
 import { type ChildProcess, spawn } from "node:child_process";
-import { cpSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, cpSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import path from "node:path";
-import { ensurePostgres } from "../server/testing/postgres.ts";
+import EmbeddedPostgres from "embedded-postgres";
 import { evidence, expect, login, ownStack, reset, test } from "./fixtures.ts";
 
 /**
  * HOU-154: a deploy shows on the next reload, and an open screen picks it up by itself. This journey
- * runs its own server on a spare port of this worker's stack, with its own databases, and replaces it
- * with a new build (the same app with a different build id) the way a deploy does.
+ * runs its own server on a spare port of this worker's stack, and replaces it with a new build (the same
+ * app with a different build id) the way a deploy does. Its server has a Postgres of its own, so it runs
+ * beside the other journeys without taking the shared Postgres's connections from their stacks.
  */
 const root = path.resolve(import.meta.dirname, "..");
 const built = path.join(root, "web", "dist", "client");
@@ -31,7 +33,14 @@ test("[HOME-6] (HOU-154) after a deploy one reload shows the new build, an open 
   const own = ownStack();
   const port = own.server + 5;
   const url = `http://localhost:${port}`;
-  const pg = await ensurePostgres();
+  const pgDir = mkdtempSync(path.join(tmpdir(), "household-deploy-pg-"));
+  // initdb creates the data directory itself (as an unprivileged user when the tests run as root).
+  chmodSync(pgDir, 0o777);
+  const pgPort = own.server + 7;
+  const pg = new EmbeddedPostgres({ databaseDir: path.join(pgDir, "data"), port: pgPort, user: "postgres", password: "postgres", persistent: false, onLog: () => {} });
+  await pg.initialise();
+  await pg.start();
+  const pgUrl = `postgres://postgres:postgres@localhost:${pgPort}/postgres`;
   const builds = path.join(own.dataDir, "builds");
   rmSync(builds, { recursive: true, force: true });
 
@@ -50,7 +59,7 @@ test("[HOME-6] (HOU-154) after a deploy one reload shows the new build, an open 
     writeFileSync(path.join(dist, "build.txt"), name);
     const child = spawn("node", ["server/main.ts"], {
       cwd: root,
-      env: { ...process.env, DATABASE_URL: pg.url, PRACTICE: "true", PORT: String(port), DB_PREFIX: `${own.dbPrefix}deploy`, PUBLIC_URL: url, WEB_DIST: dist },
+      env: { ...process.env, DATABASE_URL: pgUrl, PRACTICE: "true", PORT: String(port), DB_PREFIX: `${own.dbPrefix}deploy`, PUBLIC_URL: url, WEB_DIST: dist },
       stdio: ["ignore", "ignore", "inherit"],
     });
     state.running = { child };
@@ -125,6 +134,13 @@ test("[HOME-6] (HOU-154) after a deploy one reload shows the new build, an open 
     await evidence(page, "HOU-154-one-reload");
     await ctx.close();
   } finally {
-    state.running?.child.kill("SIGTERM");
+    const last = state.running?.child;
+    if (last !== undefined && last.exitCode === null) {
+      const exited = new Promise((resolve) => last.once("exit", resolve));
+      last.kill("SIGTERM");
+      await exited;
+    }
+    await pg.stop();
+    rmSync(pgDir, { recursive: true, force: true });
   }
 });
