@@ -7,6 +7,8 @@ refuse_test_only_settings
 image="$(deployed_image)"
 [ -n "$image" ] || { echo "nothing deployed yet: push to main (or re-run the deploy workflow) first" >&2; exit 1; }
 export HOUSEHOLD_IMAGE="$image"
+# HOU-175: never start a Caddy whose other apps' sites are invalid.
+sites_valid || { echo "fix or remove that file in $SITES_DIR, then run this again; nothing was started" >&2; exit 1; }
 household_compose up -d --wait --wait-timeout 180 postgres objects
 household_compose run --rm -T --no-deps app node scripts/house-setup.ts
 household_compose up -d --wait --wait-timeout 300

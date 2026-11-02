@@ -93,3 +93,57 @@ describe("the production compose project", () => {
     expect(main.services["app"]?.["environment"]).toMatchObject({ PUBLIC_URL: expect.stringMatching(/^https:\/\/\$\{HOUSEHOLD_DOMAIN\}$/) });
   });
 });
+
+describe("HOU-175: other apps' sites on the house's Caddy", () => {
+  const overlay = zCompose.parse(parse(read("compose.caddy-sites.yml"), { merge: true }));
+  const caddy = overlay.services["caddy"] ?? zService.parse({});
+  const common = read("household-common.sh");
+  const install = read("install.sh");
+  // The shell script the entrypoint runs (`sh -c <script> caddy-front`).
+  const entrypoint = z.array(z.string()).parse(caddy["entrypoint"])[2] ?? "";
+
+  it("[PLT-8] the overlay touches only Caddy: no new service, no memory cap changed, no port, no network", () => {
+    expect(Object.keys(overlay.services)).toEqual(["caddy"]);
+    expect(overlay["x-memory"]).toBeUndefined();
+    expect(caddy.mem_limit).toBeUndefined();
+    expect(caddy.memswap_limit).toBeUndefined();
+    expect(caddy.ports).toBeUndefined();
+    expect(caddy.network_mode).toBeUndefined();
+    expect(caddy["networks"]).toBeUndefined();
+    expect(caddy.privileged ?? false).toBe(false);
+    expect(Object.keys(caddy).sort()).toEqual(["command", "entrypoint", "extra_hosts", "labels", "volumes"]);
+    // The entrypoint only works out the front address, then runs the command it is given (Caddy's own).
+    expect(caddy["command"]).toEqual(["caddy", "run", "--config", "/etc/caddy/Caddyfile", "--adapter", "caddyfile"]);
+    expect(entrypoint).toMatch(/exec "\$\$@"\n$/);
+  });
+
+  it("[PRV-6] the sites reach Caddy read-only, and Caddy gets only a name for the host", () => {
+    expect(caddy.volumes).toEqual(["${SITES_DIR:?}:/etc/caddy/sites:ro", "./Caddyfile.sites:/etc/caddy/front/front.caddy:ro"]);
+    expect(caddy["extra_hosts"]).toEqual(["host.docker.internal:host-gateway"]);
+    expect(common).toMatch(/^SITES_DIR="\$\{SITES_DIR:-\/etc\/household\/sites\}"$/m);
+    expect(read("Caddyfile")).toMatch(/^import \/etc\/caddy\/sites\/\*\.caddy$/m);
+    // The base project never names the sites; only the overlay does.
+    expect(read("compose.yml")).not.toMatch(/sites|host-gateway/);
+  });
+
+  it("[FB-5] while sites are served, Caddy's global options bind every site to its front address (config)", () => {
+    // In the global options, so it binds the imported sites too; present only through the overlay's mount.
+    expect(read("Caddyfile")).toMatch(/^\{\n\tadmin off\n(\t#.*\n)*\timport \/etc\/caddy\/front\/\*\.caddy\n/m);
+    expect(read("Caddyfile.sites").replace(/^#.*\n/gm, "")).toBe("default_bind {$CADDY_FRONT_IP}\n");
+    // deploy/sites.test.ts runs the entrypoint that works out the front address, and the validation that
+    // refuses any other listener; deploy/test-deploy.sh shows a preview refused while the site works.
+  });
+
+  // The source lines that set this up; deploy/test-deploy.sh shows a non-root user can neither add nor change a site.
+  it("[PLT-8] install.sh's lines make the directory root's (0755) and put nothing in it, and keep the deploy user non-root", () => {
+    expect(install).toMatch(/^install -d -o root -g root -m 755 "\$etc\/sites"$/m);
+    expect(install.match(/\$etc\/sites/g)).toHaveLength(1);
+    expect(install).toContain('"$repo/deploy/compose.caddy-sites.yml"');
+    expect(install).toContain('"$repo/deploy/Caddyfile.sites"');
+    // The deploy user stays a non-root user outside the docker group whose keys run exactly two commands,
+    // so it can neither write /etc/household/sites nor start a Caddy with other files.
+    expect(install).toMatch(/^echo 'household ALL=\(root\) NOPASSWD: \/usr\/local\/sbin\/household-deploy, \/usr\/local\/sbin\/household-preview' > "\$rule"$/m);
+    expect(install).toMatch(/^gpasswd -d household docker /m);
+    expect(read("household-deploy.sh")).not.toMatch(/SITES_DIR=|sites\/\S*\.caddy\s*>/);
+  });
+});
