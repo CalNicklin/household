@@ -5,7 +5,8 @@ import { useLive } from "../data/live.ts";
 import { registerServiceWorker } from "../data/sw.ts";
 import { makeQueryClient, makeTrpcClient, TRPCProvider } from "../data/trpc.ts";
 import { UiStateProvider } from "../data/ui-state.tsx";
-import { fontsHref, stylesheetHref, themeColour } from "../design-system/index.ts";
+import { UndoProvider, useUndo } from "../data/undo.tsx";
+import { fontsHref, stylesheetHref, themeColour, UndoToast } from "../design-system/index.ts";
 
 export const Route = createRootRoute({
   head: () => ({
@@ -37,6 +38,12 @@ function Live() {
   return null;
 }
 
+/** HOU-158: what was just deleted, with Undo, pinned to the bottom of whichever screen is open. */
+function Deleted() {
+  const { pending, undo } = useUndo();
+  return pending === null ? null : <UndoToast message={pending.message} onUndo={pending.undoable ? undo : null} />;
+}
+
 function Root() {
   const [queryClient] = useState(makeQueryClient);
   const [trpcClient] = useState(makeTrpcClient);
@@ -49,8 +56,11 @@ function Root() {
       <QueryClientProvider client={queryClient}>
         <TRPCProvider trpcClient={trpcClient} queryClient={queryClient}>
           <UiStateProvider>
-            {path === "/login" ? null : <Live />}
-            <Outlet />
+            <UndoProvider>
+              {path === "/login" ? null : <Live />}
+              <Outlet />
+              <Deleted />
+            </UndoProvider>
           </UiStateProvider>
         </TRPCProvider>
       </QueryClientProvider>

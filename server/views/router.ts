@@ -112,6 +112,8 @@ export function viewsRouter(rt: Runtime, hooks: ViewHooks) {
     setListItemChecked: personProcedure.input(zListItemCheckInput).mutation(async ({ ctx, input }) => me(ctx.actor.person).lists.setChecked(input)),
     renameListItem: personProcedure.input(zListItemRenameInput).mutation(async ({ ctx, input }) => me(ctx.actor.person).lists.renameItem(input)),
     removeListItem: personProcedure.input(zIdInput).mutation(async ({ ctx, input }) => me(ctx.actor.person).lists.removeItem(input)),
+    // HOU-158: a person deletes a shopping request that went nowhere, as that person (PRV-1).
+    removeShopRequest: personProcedure.input(zIdInput).mutation(async ({ ctx, input }) => me(ctx.actor.person).shopping.remove(input)),
     addHealthEntry: personProcedure.input(zHealthEntryInput).mutation(async ({ ctx, input }) => me(ctx.actor.person).health.add(input)),
   });
 }

@@ -1,5 +1,6 @@
 import {
   ActorKind,
+  DeletedThing,
   type List,
   type ListItem,
   ListItemSource,
@@ -22,7 +23,7 @@ import { and, asc, eq, ne, type SQL, sql } from "drizzle-orm";
 import { z } from "zod";
 import type { DomainDb } from "../../db/index.ts";
 import { iso } from "../../db/map.ts";
-import { actingPerson, actorProcedure, forbid, personProcedure, readProcedure, router, systemProcedure } from "../../trpc.ts";
+import { actingPerson, actorProcedure, forbid, logDeleted, personProcedure, readProcedure, router, systemProcedure } from "../../trpc.ts";
 import * as schema from "./schema.ts";
 
 export type ListsDb = DomainDb<typeof schema>;
@@ -95,9 +96,11 @@ export function listsRouter(db: ListsDb) {
       ctx.publish("lists");
     }),
 
-    /** The list and everything on it, for everyone. */
+    /** The list and everything on it, for everyone. Only a person, logged with who did it (HOU-158). */
     removeList: personProcedure.input(zIdInput).mutation(async ({ ctx, input }) => {
-      await db.delete(schema.lists).where(eq(schema.lists.id, input.id));
+      const [row] = await db.delete(schema.lists).where(eq(schema.lists.id, input.id)).returning();
+      if (row === undefined) return;
+      logDeleted(DeletedThing.list, row.id, ctx.actor.person, null);
       ctx.publish("lists");
     }),
 
@@ -175,8 +178,11 @@ export function listsRouter(db: ListsDb) {
         }
       }),
 
+    /** Any adult's item, or one the house added for them; only a person, logged with who did it (HOU-158). */
     removeItem: personProcedure.input(zIdInput).mutation(async ({ ctx, input }) => {
-      await db.delete(schema.items).where(eq(schema.items.id, input.id));
+      const [row] = await db.delete(schema.items).where(eq(schema.items.id, input.id)).returning();
+      if (row === undefined) return;
+      logDeleted(DeletedThing.listItem, row.id, ctx.actor.person, row.createdBy);
       ctx.publish("lists");
     }),
 

@@ -9,6 +9,8 @@ const list = (page: Page, name: string) => page.getByRole("region", { name, exac
 const live = { timeout: Limits.liveUpdateBudgetMs.value };
 
 test("[CAP-6] shopping and simple lists live in the app: tick, add, rename, delete and list changes show on the other phone straight away", async ({ page, browser }) => {
+  // FB-2: Playwright's clock, so the Undo window (HOU-158) is skipped rather than waited out.
+  await page.clock.install();
   await login(page);
   await page.goto("/lists");
   const phoneCtx = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
@@ -44,9 +46,11 @@ test("[CAP-6] shopping and simple lists live in the app: tick, add, rename, dele
   await shopping.getByRole("textbox", { name: "Rename Batteries" }).press("Enter");
   await expect(tomShopping.getByRole("button", { name: "AA batteries", exact: true })).toBeVisible(live);
 
-  // Delete asks first.
+  // Delete: gone at once, with Undo for a few seconds (HOU-158); then the other phone sees it gone.
   await shopping.getByRole("button", { name: "Delete AA batteries" }).click();
-  await shopping.getByRole("alertdialog", { name: "Delete this item?" }).getByRole("button", { name: "Delete" }).click();
+  await expect(page.getByRole("status", { name: "Deleted" })).toContainText("AA batteries");
+  // limit: undoWindowMs
+  await page.clock.fastForward(Limits.undoWindowMs.value);
   await expect(tomShopping.getByRole("button", { name: "AA batteries", exact: true })).toHaveCount(0, live);
 
   // A new list, renamed with an emoji from its menu, then deleted.
@@ -64,6 +68,8 @@ test("[CAP-6] shopping and simple lists live in the app: tick, add, rename, dele
   await list(page, "Camping").getByRole("button", { name: "Actions for Camping" }).click();
   await page.getByRole("menuitem", { name: "Delete list" }).click();
   await page.getByRole("alertdialog").getByRole("button", { name: "Delete list" }).click();
+  // limit: undoWindowMs
+  await page.clock.fastForward(Limits.undoWindowMs.value);
   await expect(list(phone, "Camping")).toHaveCount(0, live);
   await phoneCtx.close();
 });
