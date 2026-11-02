@@ -346,6 +346,9 @@ a:hover {
   border-radius: 6px;
   padding-block: 11px;
   margin-block: -11px;
+  /* HOU-164: 44px whatever the line height, so a small title (or a fallback font) can't make it short. */
+  box-sizing: border-box;
+  min-height: var(--size-target-tap);
 }
 
 .ds-list-row .ds-selectable {

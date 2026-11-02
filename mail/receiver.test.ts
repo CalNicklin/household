@@ -196,7 +196,11 @@ describe("the mail receiver", () => {
     expect((await t.send("EHLO mail-sor-f41.google.com")).text).toMatch(/^250-STARTTLS\r$/m);
     expect((await t.send("STARTTLS")).code).toBe(220);
     const presented = await new Promise<string>((resolve, reject) => {
-      const secure = tlsConnect({ socket: t.socket, servername: DOMAIN, ca: cert }, () => resolve(secure.getPeerX509Certificate()?.subject ?? ""));
+      const secure = tlsConnect({ socket: t.socket, servername: DOMAIN, ca: cert }, () => {
+        resolve(secure.getPeerX509Certificate()?.subject ?? "");
+        // FB-2 (HOU-164): hang up, or the receiver's close() in afterAll waits 30 s for this session.
+        secure.destroy();
+      });
       secure.on("error", reject);
     });
     expect(presented).toBe(`CN=${DOMAIN}`);
