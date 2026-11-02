@@ -216,10 +216,15 @@ export function houseTools(scope: JobScope) {
 
   const respondTool = createTool({
     id: "respond",
-    description: "Done, not today, snooze or accept on something on the screen, by its ref.",
+    description: "Done, not today, snooze or accept on something on the screen, by its ref. Never on a reminder: use change_reminder or cancel_reminder when someone asks.",
     // HOU-174: a reminder's Change time and Delete are a person's tap, or change_reminder / cancel_reminder; never this.
     inputSchema: z.object({ ref: z.string(), action: zActionKind.exclude([ActionKind.retime, ActionKind.cancel]), value: z.string().nullable().optional() }),
-    execute: record("respond", async (input: { ref: string; action: ActionKind; value?: string | null | undefined }) => ({ say: await respond(scope, input.ref, input.action, input.value ?? null) })),
+    execute: record("respond", async (input: { ref: string; action: ActionKind; value?: string | null | undefined }) => {
+      // HOU-177 (PRV-1): Done and Not now on a reminder are a person's tap. The agent once marked Cal's 09:00
+      // reminder done while setting a 07:30 one; a reminder changes by message only through the two tools above.
+      if (input.ref.startsWith("reminder:")) return { say: "Nothing was changed: a reminder is done or put off by tapping it. Ask to change its time or cancel it instead." };
+      return { say: await respond(scope, input.ref, input.action, input.value ?? null) };
+    }),
   });
 
   const handOver = createTool({

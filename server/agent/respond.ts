@@ -60,7 +60,7 @@ async function respondToReminder(scope: JobScope, ref: string, action: ActionKin
   };
   if (action === ActionKind.done) {
     await scope.api.plans.respond({ ref, action, channel: scope.channel, date, value: null });
-    await scope.api.backlog.reminderDone({ id: reminder.id });
+    await scope.api.backlog.reminderDone({ id: reminder.id, sourceMessage: scope.messageId });
     scope.effects.closeRefs.push({ ref, status: "done" });
     replan(date);
     // HOU-177: and the day before it, whose plan shows it under Tomorrow.
@@ -70,7 +70,7 @@ async function respondToReminder(scope: JobScope, ref: string, action: ActionKin
   if (action === ActionKind.snooze || action === ActionKind.notToday) {
     const to = addLocalDays(reminder.date > date ? reminder.date : date, 1);
     await scope.api.plans.respond({ ref, action: ActionKind.snooze, channel: scope.channel, date, value: to });
-    await scope.api.backlog.moveReminder({ id: reminder.id, date: to });
+    await scope.api.backlog.moveReminder({ id: reminder.id, date: to, sourceMessage: scope.messageId });
     scope.effects.closeRefs.push({ ref, status: "dismissed" });
     replan(date);
     replan(addLocalDays(date, 1));

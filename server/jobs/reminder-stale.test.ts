@@ -1,5 +1,7 @@
-import { ActionKind, type Block, BlockType, TimerKind } from "@household/contracts";
+import { ActionKind, ActorKind, type Block, BlockType, Channel, ReminderStatus, TimerKind } from "@household/contracts";
 import { afterAll, beforeAll, describe, expect, test } from "vitest";
+import { jobScope } from "../agent/scope.ts";
+import { houseTools } from "../agent/tools.ts";
 import { acceptTimer } from "../coordinator/accept.ts";
 import { testHousehold, type TestHousehold } from "../testing/household.ts";
 import { atLocal } from "../time.ts";
@@ -15,7 +17,7 @@ const TZ = "Europe/London";
 const NINE = "check their opinion on BoyBoy still needing a lunchtime nap, and whether he should wait a bit longer before going to the same pre-school as Pip in January";
 const SEVEN = "At dropoff, ask for their opinion on whether BoyBoy still needs a lunchtime nap and whether he should wait a bit longer before starting at Pip's pre-school in January";
 const replyTo = async (a: { messageId: string }) => (await h.rt.system("t").jobs.replyFor({ id: a.messageId }))?.text ?? "";
-const said = async (text: string) => replyTo(await h.sayAndWait(text, { person: "tom" }));
+const said = async (text: string, ref?: string) => replyTo(await h.sayAndWait(text, { person: "tom", ...(ref === undefined ? {} : { ref }) }));
 const tapped = async (ref: string, action: ActionKind) => {
   const a = await h.tap(ref, action, { person: "tom" });
   await h.wait(a);
@@ -72,5 +74,47 @@ describe("HOU-177: the screen and the house agree on which reminders are open", 
     expect(reminderCards(openReminderBlocks(saved, [], TUE, now, TZ))).toEqual([]);
     expect(reminderCards(openReminderBlocks(saved, [{ ...seven, time: "07:15" }], TUE, now, TZ))).toEqual([]);
     expect(reminderCards(openReminderBlocks(saved, [{ ...seven, date: "2026-11-05" }], TUE, now, TZ))).toEqual([]);
+  });
+
+});
+
+describe("HOU-177 (PRV-1): only a person's tap marks a reminder done or puts it off", () => {
+  const WED = "2026-11-04";
+  const boyBoy = async () => (await h.rt.system("t").backlog.upcomingReminders({ from: MON })).filter((r) => r.date === WED && r.text.includes("lunchtime nap"));
+
+  test("[PRV-1][CAP-10] Cal's sequence: 'make it 730' while looking at the 09:00 reminder re-times it, never closes it or sets a second", async () => {
+    h.ports.clock.set(atLocal(MON, 20, 31, TZ), true);
+    for (const r of await boyBoy()) await h.rt.as({ kind: ActorKind.person, person: "tom" }).backlog.cancelReminder({ id: r.id, sourceMessage: "tidy" }).catch(() => undefined);
+    for (const words of ["BoyBoy reminder on Wednesday 4th should be earlier than 9 - make it 730", "BoyBoy reminder on Wesnday 4th should be earlier than 9 - mak eit 730"]) {
+      expect(await said(`remind me on Wednesday at 9 to ${NINE}`)).toMatch(/^I'll remind you at 09:00 Wednesday 4 November/);
+      const nine = (await boyBoy()).find((r) => r.time === "09:00");
+      if (nine === undefined) throw new Error("no 09:00 reminder");
+      const reply = await said(words, `reminder:${nine.id}`);
+      expect(reply).toBe(`Moved: ${nine.text}, now at 07:30 Wednesday 4 November.`);
+      const after = await h.rt.system("t").backlog.getReminder({ id: nine.id });
+      expect([after?.status, after?.time]).toEqual([ReminderStatus.open, "07:30"]);
+      expect((await boyBoy()).filter((r) => r.text === nine.text)).toHaveLength(1);
+      await h.rt.as({ kind: ActorKind.person, person: "tom" }).backlog.cancelReminder({ id: nine.id, sourceMessage: "tidy" });
+    }
+  });
+
+  test("[PRV-1] the agent's respond tool never marks a reminder done or puts it off; only the person's own tap does", async () => {
+    expect(await said(`remind me on Wednesday at 9 to ${NINE}`)).toMatch(/^I'll remind you at 09:00/);
+    const r = (await boyBoy()).find((x) => x.time === "09:00");
+    if (r === undefined) throw new Error("no 09:00 reminder");
+    const tools = houseTools(jobScope(h.rt, "j", "app-message", "tom", Channel.app));
+    for (const action of [ActionKind.done, ActionKind.snooze, ActionKind.notToday])
+      expect(await tools.respond.execute?.({ ref: `reminder:${r.id}`, action }, {})).toEqual({ say: "Nothing was changed: a reminder is done or put off by tapping it. Ask to change its time or cancel it instead." });
+    // The router: never the system, never a job handling a different message.
+    const job = h.rt.as({ kind: ActorKind.agent, job: "j", onBehalfOf: "tom", message: "some-other-message" });
+    await expect(job.backlog.reminderDone({ id: r.id, sourceMessage: "this-message" })).rejects.toThrow(/PRV-1/);
+    await expect(job.backlog.moveReminder({ id: r.id, date: "2026-11-05", sourceMessage: "this-message" })).rejects.toThrow(/PRV-1/);
+    await expect(h.rt.system("t").backlog.reminderDone({ id: r.id, sourceMessage: "x" })).rejects.toThrow(/PRV-1|needs a person/);
+    await expect(h.rt.system("t").backlog.moveReminder({ id: r.id, date: "2026-11-05", sourceMessage: "x" })).rejects.toThrow(/PRV-1|needs a person/);
+    const still = await h.rt.system("t").backlog.getReminder({ id: r.id });
+    expect([still?.status, still?.date, still?.time]).toEqual([ReminderStatus.open, WED, "09:00"]);
+    // Tom's own tap still works.
+    expect(await tapped(`reminder:${r.id}`, ActionKind.snooze)).toBe(`Moved to Thursday 5 November: ${r.text}.`);
+    expect(await tapped(`reminder:${r.id}`, ActionKind.done)).toBe(`Done: ${r.text}.`);
   });
 });
