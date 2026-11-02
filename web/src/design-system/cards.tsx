@@ -1,5 +1,5 @@
 import type { Provenance } from "@household/contracts";
-import type { ReactNode } from "react";
+import { type ReactNode, useState } from "react";
 import { Button, type ButtonVariant } from "./controls.tsx";
 import { AlertIcon, BellIcon, CalendarIcon, ParcelIcon, RuleIcon, SunIcon } from "./icons.tsx";
 
@@ -71,10 +71,11 @@ function NoTime({ provenance, size }: { provenance: Provenance; size: number }) 
  * narrow column or on a phone its actions sit under the text, as on the Phone canvas and the
  * "Could fit this week" card on the Main canvas.
  */
-function RowCard({ tone, selected, children }: { tone?: "suggestion" | "alert"; selected: boolean | undefined; children: ReactNode }) {
+function RowCard({ tone, selected, children, below }: { tone?: "suggestion" | "alert"; selected: boolean | undefined; children: ReactNode; below?: ReactNode }) {
   return (
     <div className={`ds-card ds-card--fluid${tone === undefined ? "" : ` ds-card--${tone}`}${selectedClass(selected)}`}>
       <div className="ds-card__row">{children}</div>
+      {below}
     </div>
   );
 }
@@ -96,18 +97,62 @@ export function EventCard({ time, title, detail, provenance = "calendar", onSele
 
 /**
  * CAP-10: a reminder one of us asked for. A fact like an event (grey, not a green suggestion): its
- * time, or a bell for "later today", what it is, who it is for, and Done / Not now.
+ * time, or a bell for "later today", what it is, who it is for, and Done / Not now. HOU-174: a "…"
+ * `menu` (Change time, Delete), and `below` it the time choice while it is open.
  */
-export function ReminderCard({ time, title, detail, actions, onSelect, selected }: { time: string | null; title: string; detail: string; actions: readonly CardAction[] } & Selectable) {
+export function ReminderCard({
+  time,
+  title,
+  detail,
+  actions,
+  menu,
+  below,
+  onSelect,
+  selected,
+}: { time: string | null; title: string; detail: string; actions: readonly CardAction[]; menu?: ReactNode; below?: ReactNode } & Selectable) {
   return (
-    <RowCard selected={selected}>
+    <RowCard selected={selected} below={below}>
       <div className="ds-card__lead">{time ?? <NoTime provenance="person" size={22} />}</div>
       <div className="ds-card__main">
-        <Title onSelect={onSelect}>{title}</Title>
+        {menu === undefined ? (
+          <Title onSelect={onSelect}>{title}</Title>
+        ) : (
+          <div className="ds-list-row__head">
+            <Title onSelect={onSelect}>{title}</Title>
+            {menu}
+          </div>
+        )}
         {detail === "" ? null : <p className="ds-card__detail">{detail}</p>}
       </div>
       <Actions actions={actions} variants={["secondary", "ghost"]} />
     </RowCard>
+  );
+}
+
+/** HOU-174: a small time choice, for a new time for something (a reminder's Change time). */
+export function TimeChoice({ label, initial, onSave, onCancel }: { label: string; initial: string | null; onSave: (time: string) => void; onCancel: () => void }) {
+  const [value, setValue] = useState(initial ?? "");
+  return (
+    <form
+      className="ds-time-choice"
+      onSubmit={(e) => {
+        e.preventDefault();
+        if (/^\d{2}:\d{2}$/.test(value)) onSave(value);
+      }}
+    >
+      <label className="ds-time-choice__label">
+        {label}
+        <input className="ds-time-choice__input" type="time" value={value} onChange={(e) => setValue(e.target.value)} required />
+      </label>
+      <div className="ds-confirm__actions">
+        <Button variant="secondary" type="submit">
+          Save
+        </Button>
+        <Button variant="ghost" onClick={onCancel}>
+          Cancel
+        </Button>
+      </div>
+    </form>
   );
 }
 

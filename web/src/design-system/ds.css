@@ -1167,6 +1167,37 @@ a:hover {
   position: relative;
 }
 
+/* HOU-174: a reminder's Change time, under its card. */
+.ds-time-choice {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--color-border);
+}
+
+.ds-time-choice__label {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: var(--size-label);
+  color: var(--color-muted);
+}
+
+.ds-time-choice__input {
+  min-height: var(--size-target-tap);
+  padding: 0 10px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-button);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-size: var(--size-body-small);
+  font-weight: var(--weight-semibold);
+}
+
 .ds-menu__list {
   position: absolute;
   right: -10px;

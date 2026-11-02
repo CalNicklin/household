@@ -17,7 +17,9 @@ async function boxes(card: Locator) {
     const actionsEl = el.querySelector(".ds-card__actions");
     const gap = actionsEl === null ? 0 : Number.parseFloat(getComputedStyle(actionsEl).columnGap) || 0;
     const buttonsWidth = buttons.reduce((a, b) => a + b, 0) + gap * Math.max(0, buttons.length - 1);
-    return { text: rect(".ds-card__main"), actions: rect(".ds-card__actions"), buttonsWidth };
+    const c = el.getBoundingClientRect();
+    // The card is measured in the same pass as what is in it, so a late web font can't land in between.
+    return { text: rect(".ds-card__main"), actions: rect(".ds-card__actions"), buttonsWidth, card: { x: c.x, y: c.y, width: c.width, height: c.height } };
   });
 }
 
@@ -62,19 +64,18 @@ test.describe("on a phone", () => {
   test("[HOME-10] every card's buttons sit below its text or beside text at least as wide; nothing is cut off and every button is tappable (HOU-153)", async ({ page }) => {
     await login(page);
     await expect(page.getByText("Hang the washing out")).toBeVisible();
+    // Manrope loads with display=swap: measure once it has, not across the swap.
+    await page.evaluate(async () => document.fonts.ready.then(() => undefined));
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
     const cards = page.locator(".ds-card--fluid");
     const count = await cards.count();
     expect(count).toBeGreaterThan(0);
     for (let i = 0; i < count; i++) {
       const card = cards.nth(i);
-      const { text, actions, buttonsWidth } = await boxes(card);
+      const { text, actions, buttonsWidth, card: c } = await boxes(card);
       expect(text, `card ${i} has no text box`).not.toBeNull();
       if (text === null) continue;
       // Nothing in the card spills out of it, on any side. (Every tap target on the page is checked by [HOME-10] in morning.spec.ts.)
-      const c = await card.boundingBox();
-      expect(c).not.toBeNull();
-      if (c === null) continue;
       for (const r of actions === null ? [text] : [text, actions]) {
         expect(r.left).toBeGreaterThanOrEqual(c.x - 1);
         expect(r.top).toBeGreaterThanOrEqual(c.y - 1);

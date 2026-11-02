@@ -80,6 +80,10 @@ export const ActionKind = {
   handOver: "hand-over",
   notHelpful: "not-helpful",
   answer: "answer",
+  /** HOU-174: a person's "Change time" on a reminder; `value` is the new time (HH:MM). */
+  retime: "retime",
+  /** HOU-174: a person's "Delete" on a reminder. */
+  cancel: "cancel",
 } as const;
 export type ActionKind = ValueOf<typeof ActionKind>;
 export const zActionKind = z.enum(ActionKind);
@@ -92,6 +96,8 @@ export const ActionLabel: Record<ActionKind, string> = {
   [ActionKind.handOver]: "Hand over",
   [ActionKind.notHelpful]: "Not helpful",
   [ActionKind.answer]: "Answer",
+  [ActionKind.retime]: "Change time",
+  [ActionKind.cancel]: "Delete",
 };
 
 export const BlockType = {
@@ -229,6 +235,8 @@ export const ReminderStatus = {
   open: "open",
   done: "done",
   moved: "moved",
+  /** HOU-174: cancelled because a person asked; never by the app on its own (PRV-1). */
+  cancelled: "cancelled",
 } as const;
 export type ReminderStatus = ValueOf<typeof ReminderStatus>;
 export const zReminderStatus = z.enum(ReminderStatus);
