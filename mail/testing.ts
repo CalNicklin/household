@@ -174,6 +174,8 @@ export async function smtpSession(port: number, host = "127.0.0.1", localAddress
   };
   return {
     greeting: { code: replyCode(greeting), text: greeting },
+    /** The connection itself, e.g. to upgrade it after STARTTLS. */
+    socket,
     send,
     /** DATA, then the message (dot-stuffed), then the end mark: the reply to the message itself. */
     async data(message: string) {

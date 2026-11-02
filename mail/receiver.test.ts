@@ -1,7 +1,9 @@
-import { mkdtempSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { mkdtempSync, readFileSync } from "node:fs";
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
+import { connect as tlsConnect } from "node:tls";
 import path from "node:path";
 import { Limits } from "@household/contracts";
 import type { DNSResolver } from "mailauth";
@@ -183,5 +185,20 @@ describe("the mail receiver", () => {
     const s = await smtpSession(port, "127.0.0.1", CLIENT);
     expect((await s.send("EHLO mail-sor-f41.google.com")).text).not.toMatch(/STARTTLS/);
     await s.close();
+    // Given the certificate (Caddy's, on the server), it is offered, and the handshake presents that one.
+    const dir = mkdtempSync(path.join(tmpdir(), "mail-tls-"));
+    execFileSync("openssl", ["req", "-x509", "-newkey", "rsa:2048", "-nodes", "-days", "1", "-subj", `/CN=${DOMAIN}`, "-keyout", path.join(dir, "key.pem"), "-out", path.join(dir, "cert.pem")], { stdio: "ignore" });
+    const cert = readFileSync(path.join(dir, "cert.pem"));
+    const withTls = createReceiver({ domain: DOMAIN, webhookUrl: "http://127.0.0.1:1/", webhookSecret: "a-secret-for-the-webhook", stateDir, tls: { key: readFileSync(path.join(dir, "key.pem")), cert } });
+    receivers.push(withTls);
+    await new Promise<void>((r) => withTls.listen(0, "127.0.0.1", r));
+    const t = await smtpSession(portOf(withTls.server.address()), "127.0.0.1", CLIENT);
+    expect((await t.send("EHLO mail-sor-f41.google.com")).text).toMatch(/^250-STARTTLS\r$/m);
+    expect((await t.send("STARTTLS")).code).toBe(220);
+    const presented = await new Promise<string>((resolve, reject) => {
+      const secure = tlsConnect({ socket: t.socket, servername: DOMAIN, ca: cert }, () => resolve(secure.getPeerX509Certificate()?.subject ?? ""));
+      secure.on("error", reject);
+    });
+    expect(presented).toBe(`CN=${DOMAIN}`);
   });
 });
