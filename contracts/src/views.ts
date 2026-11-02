@@ -143,3 +143,16 @@ export const LiveTopic = {
   settings: "settings",
 } as const;
 export type LiveTopic = (typeof LiveTopic)[keyof typeof LiveTopic];
+
+/**
+ * HOU-165: offline views are per person. Every view answer names whose it is in this header, so the
+ * service worker (web/public/sw.js) keeps one person's views apart from another's on a shared iPad.
+ */
+export const VIEW_PERSON_HEADER = "x-household-person";
+
+/**
+ * HOU-165: person-scoped views too private to keep on the device at all: today's conversation, the
+ * settings (wellbeing scores, PRV-2) and the agent's runs and traces (what was said). They are sent
+ * `Cache-Control: no-store`, which the service worker respects, so they never show offline.
+ */
+export const NO_STORE_VIEWS = ["conversation", "settings", "run", "trace"] as const;

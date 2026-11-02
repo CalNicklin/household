@@ -1,4 +1,4 @@
-import { ActorKind, TimerKind, zLoginInput } from "@household/contracts";
+import { ActorKind, NO_STORE_VIEWS, TimerKind, VIEW_PERSON_HEADER, zLoginInput } from "@household/contracts";
 import { fetchRequestHandler } from "@trpc/server/adapters/fetch";
 import { Hono } from "hono";
 import { streamSSE } from "hono/streaming";
@@ -61,14 +61,21 @@ export function createApp(rt: Runtime, adapters: Adapter[], extra?: (app: Hono<H
     return next();
   });
 
-  app.all("/api/trpc/*", (c) =>
-    fetchRequestHandler({
+  app.all("/api/trpc/*", async (c) => {
+    const person = c.get("person");
+    const res = await fetchRequestHandler({
       endpoint: "/api/trpc",
       req: c.req.raw,
       router: views,
-      createContext: () => ({ actor: { kind: ActorKind.person, person: c.get("person") }, now: rt.ports.clock.now(), publish: (t) => rt.bus.publish(t) }),
-    }),
-  );
+      createContext: () => ({ actor: { kind: ActorKind.person, person }, now: rt.ports.clock.now(), publish: (t) => rt.bus.publish(t) }),
+    });
+    // HOU-165: whose answer this is, so the service worker keeps it in that person's offline views only;
+    // the private ones are never kept on the device at all.
+    const headers = new Headers(res.headers);
+    headers.set(VIEW_PERSON_HEADER, person);
+    if (noStore(c.req.path)) headers.set("cache-control", "no-store");
+    return new Response(res.body, { status: res.status, statusText: res.statusText, headers });
+  });
 
   /** PLT-11 / MOM-3 / CH-10: the app listens for changes and refetches; it never polls the agent. */
   app.get("/api/live", (c) =>
@@ -139,6 +146,12 @@ export function createApp(rt: Runtime, adapters: Adapter[], extra?: (app: Hono<H
   });
 
   return app;
+}
+
+/** HOU-165: a view (or a batch of them) that includes one too private to keep offline. */
+export function noStore(requestPath: string): boolean {
+  const names = decodeURIComponent(requestPath.slice("/api/trpc/".length)).split(",");
+  return names.some((n) => (NO_STORE_VIEWS as readonly string[]).includes(n));
 }
 
 function contentType(file: string): string {
