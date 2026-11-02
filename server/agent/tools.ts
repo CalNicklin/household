@@ -77,7 +77,7 @@ export function houseTools(scope: JobScope) {
       const names = reminder.for.map((id) => (id === scope.person ? "you" : (people.find((p) => p.id === id)?.name ?? id)));
       const whom = names.length <= 1 ? (names[0] ?? "you") : `${names.slice(0, -1).join(", ")} and ${names.at(-1) ?? ""}`;
       const day = reminder.date === date ? "today" : reminder.date === addLocalDays(date, 1) ? "tomorrow" : longDate(reminder.date);
-      if (reminder.time === null) return { set: true, id: reminder.id, say: `I'll remind ${whom}: ${reminder.text}. It's on ${day === "today" ? "Today" : `the home screen ${day}`} for the rest of the day.` };
+      if (reminder.time === null) return { set: true, id: reminder.id, say: `I'll remind ${whom}: ${reminder.text}. ${day === "today" ? "It's on Today for the rest of the day." : `It'll be on the home screen ${day}.`}` };
       return { set: true, id: reminder.id, say: `I'll remind ${whom} at ${reminder.time} ${day}: ${reminder.text}.` };
     }),
   });

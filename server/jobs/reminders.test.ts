@@ -84,6 +84,11 @@ describe("CAP-10: reminders you ask for", () => {
     expect((await reminderBlocks(TUE)).map((b) => b.title)).toContain("Put the bins out");
   });
 
+  test("[CAP-10] a reminder with no time for a later day says which day it will be on", async () => {
+    h.ports.clock.set(atLocal(TUE, 8, 0, TZ), true);
+    expect(await replyTo(await h.sayAndWait("remind me tomorrow to renew the parking permit"))).toBe("I'll remind you: Renew the parking permit. It'll be on the home screen tomorrow.");
+  });
+
   test("[CAP-10][PRO-6] reminders are not backlog offers, and a name that is not one of us is asked about, not guessed", async () => {
     // Monday's reminders were never made backlog offers: every offer that day is an existing backlog
     // item, none of them one of the reminders, and Monday's plan offered at most one (PRO-6).
