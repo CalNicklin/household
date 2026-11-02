@@ -2,27 +2,40 @@
  * Everything outside the house. Each port has a real adapter and a practice-household fake (QA-9);
  * nothing else in the server talks to the outside world.
  */
-import type { CalendarEvent, LocalDate, ProductOption } from "@household/contracts";
+import type { CalendarCopy, HouseCalendar, LocalDate, ProductOption } from "@household/contracts";
 
 export interface Clock {
   now(): Date;
 }
 
-export type ExternalEvent = Omit<CalendarEvent, "id">;
+export type ExternalEvent = CalendarCopy;
 
-/** Read-only by construction: there is no method that writes to the calendar (PRV-1). */
+export type CalendarChanges = {
+  upserts: ExternalEvent[];
+  deletedExternalIds: string[];
+  nextSyncTokens: Record<string, string>;
+  /** The shared calendar(s) were read this time, or the house reads none. */
+  sharedRead: boolean;
+};
+
+/**
+ * HOME-1: every calendar the house reads (Cal's, Chloe's, the shared one), each with its owner.
+ * Read-only by construction: there is no method that writes to a calendar (PRV-1).
+ */
 export interface CalendarSource {
-  changes(syncToken: string | null): Promise<{ upserts: ExternalEvent[]; deletedExternalIds: string[]; nextSyncToken: string | null }>;
+  readonly calendars: readonly HouseCalendar[];
+  /** What changed on each calendar since its sync token; a calendar with no token is read in full. */
+  changes(syncTokens: Readonly<Record<string, string>>): Promise<CalendarChanges>;
 }
 
 /**
- * CH-6: Google's push notifications for the calendar. A channel is a subscription, not an event:
- * opening or closing one changes nothing in the calendar (PRV-1).
+ * CH-6: Google's push notifications, one channel per calendar. A channel is a subscription, not an
+ * event: opening or closing one changes nothing in the calendar (PRV-1).
  */
 export interface CalendarPush {
-  /** The calendar this pushes for. */
-  readonly calendarId: string;
-  open(channel: { id: string; address: string; token: string }): Promise<{ resourceId: string; expiresAt: string }>;
+  /** The calendars this pushes for. */
+  readonly calendarIds: readonly string[];
+  open(calendarId: string, channel: { id: string; address: string; token: string }): Promise<{ resourceId: string; expiresAt: string }>;
   close(channel: { id: string; resourceId: string }): Promise<void>;
 }
 

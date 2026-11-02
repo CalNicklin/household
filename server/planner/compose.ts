@@ -6,6 +6,8 @@ import {
   ActionKind,
   type Block,
   BlockType,
+  type CalendarEvent,
+  CalendarOwnerKind,
   type LocalDate,
   type Mode,
   ModeLabel,
@@ -75,6 +77,17 @@ function ruleBlock(r: RuleItem): Block {
   }
 }
 
+const andList = (xs: string[]): string => (xs.length <= 1 ? (xs[0] ?? "") : `${xs.slice(0, -1).join(", ")} and ${xs.at(-1) ?? ""}`);
+
+/** HOME-1: whose calendars an event came from, e.g. "Priya's calendar", "Priya's and Tom's calendars". */
+function calendarsOf(e: CalendarEvent, people: HouseFacts["people"]): string {
+  const persons = e.calendars.filter((c) => c !== CalendarOwnerKind.shared).map((c) => `${nameOf(people, c)}'s`);
+  const shared = e.calendars.includes(CalendarOwnerKind.shared);
+  if (persons.length === 0) return shared ? "the shared calendar" : "the calendar";
+  if (shared) return `the shared calendar and ${andList(persons)}`;
+  return `${andList(persons)} calendar${persons.length === 1 ? "" : "s"}`;
+}
+
 function calendarBlocks(input: ComposeInput): Block[] {
   const { facts, date, now } = input;
   const today = localDate(now, facts.timeZone) === date;
@@ -93,7 +106,7 @@ function calendarBlocks(input: ComposeInput): Block[] {
         type: BlockType.event,
         section,
         placement: Placement.main,
-        reason: "From the shared calendar",
+        reason: `From ${calendarsOf(e, facts.people)}`,
         provenance: Provenance.calendar,
         time: e.allDay ? null : clock(e.start, facts.timeZone),
         title: e.title,
@@ -113,7 +126,7 @@ function tomorrowEvents(input: ComposeInput): Block[] {
       type: BlockType.event,
       section: Section.tomorrow,
       placement: Placement.main,
-      reason: "First thing tomorrow, from the shared calendar",
+      reason: `First thing tomorrow, from ${calendarsOf(first, input.facts.people)}`,
       provenance: Provenance.calendar,
       time: clock(first.start, input.facts.timeZone),
       title: first.title,
@@ -217,7 +230,7 @@ export function compose(input: ComposeInput): Block[] {
     type: BlockType.context,
     section: Section.header,
     placement: Placement.header,
-    reason: "Forecast, sunset and the shared calendar",
+    reason: "Forecast, sunset and our calendars",
     provenance: Provenance.rule,
     title: longDate(date),
     line: contextLine(facts, date, now),

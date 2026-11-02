@@ -139,7 +139,7 @@ function oldestSmall(items: readonly BacklogItem[]): BacklogItem | undefined {
 export async function houseFill(rt: Runtime): Promise<HouseFill> {
   const api = rt.system("planner");
   const backlogItems = (await api.backlog.list()).filter((i) => i.status === BacklogStatus.active).length;
-  return { calendarConnected: (await api.calendar.syncToken()) !== null, backlogItems };
+  return { calendarConnected: Object.keys(await api.calendar.syncTokens()).length > 0, backlogItems };
 }
 
 /** Notifications waiting for the morning screen (PRO-7) or routed to it (CH-7). */
