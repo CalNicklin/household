@@ -41,13 +41,15 @@ async function eventually(what: string, read: () => Promise<boolean>, child?: Ch
 
 const answers = async (url: string) => (await fetch(`${url}/healthz`)).ok;
 
-/** Stop a deploy server, and wait until it has gone; one that ignores SIGTERM is killed. */
+/** Stop a deploy server, and wait until it has gone; one still running after deployWaitMs is killed. */
 async function stop(child: ChildProcess): Promise<void> {
   if (exited(child)) return;
   const gone = new Promise((resolve) => child.once("exit", resolve));
   child.kill("SIGTERM");
-  await Promise.race([gone, eventually("the old server stopping", async () => exited(child)).catch(() => child.kill("SIGKILL"))]);
+  // limit: deployWaitMs
+  const timer = setTimeout(() => child.kill("SIGKILL"), Limits.deployWaitMs.value);
   await gone;
+  clearTimeout(timer);
 }
 
 /**
