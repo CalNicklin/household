@@ -1,0 +1,5 @@
+# HOU-150: the mail receiver's host name, present only when install.sh was given --mail-domain. Caddy
+# gets and renews its certificate (the receiver uses it for STARTTLS on port 25); the site serves nothing.
+{$MAIL_DOMAIN} {
+	respond 404
+}
