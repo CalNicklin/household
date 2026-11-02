@@ -10,7 +10,6 @@ import {
   CalendarOwnerKind,
   type LocalDate,
   type Mode,
-  ModeKind,
   ModeLabel,
   type Notification,
   type NotifyAction,
@@ -21,8 +20,8 @@ import {
   type ShoppingRequest,
   ShoppingStatus,
 } from "@household/contracts";
-import { addLocalDays, atLocal, clock, localDate, longDate } from "../time.ts";
-import { contextLine, eventsOn, type HouseFacts, nameOf } from "../rules/day.ts";
+import { addLocalDays, atLocal, clock, localDate, longDate, shortWeekday, startOfLocalDay } from "../time.ts";
+import { contextLine, eventsOn, type HouseFacts, modeOn, nameOf } from "../rules/day.ts";
 import type { RuleItem } from "../rules/nudges.ts";
 import { firstDayBlocks, type HouseFill } from "./first-day.ts";
 
@@ -141,8 +140,23 @@ const sortKey = (b: Block): string => (b.type === BlockType.event ? (b.time ?? "
 const sectionOrder: readonly string[] = [Section.start, Section.now, Section.later, Section.tomorrow, Section.arriving, Section.fits];
 const typeRank = (b: Block): number => (b.type === BlockType.alert ? 0 : b.type === BlockType.suggestion ? 1 : 2);
 
-function modeHeading(mode: Mode, facts: HouseFacts): string {
-  return `${ModeLabel[mode.mode]} · ${nameOf(facts.people, mode.setBy)} said so at ${clock(mode.setAt, facts.timeZone)}`;
+/** HOU-156: a mode set ahead says which day it was set on, since the time alone would read as today's. */
+function modeHeading(mode: Mode, facts: HouseFacts, date: LocalDate): string {
+  const setOn = localDate(new Date(mode.setAt), facts.timeZone);
+  const when = setOn === date ? `at ${clock(mode.setAt, facts.timeZone)}` : `on ${shortWeekday(setOn)}`;
+  return `${ModeLabel[mode.mode]} · ${nameOf(facts.people, mode.setBy)} said so ${when}`;
+}
+
+/**
+ * Until when, said from this date: today, the clock as it always was; a later day, "midnight". A mode
+ * that runs past this date's midnight names the last day it covers.
+ */
+function modeUntil(mode: Mode, date: LocalDate, now: Date, timeZone: string): string {
+  const ends = new Date(mode.endsAt);
+  const midnight = startOfLocalDay(addLocalDays(date, 1), timeZone);
+  if (ends < midnight || (ends.getTime() === midnight.getTime() && date === localDate(now, timeZone))) return clock(ends, timeZone);
+  if (ends.getTime() === midnight.getTime()) return "midnight";
+  return `the end of ${shortWeekday(localDate(new Date(ends.getTime() - 1), timeZone))}`;
 }
 
 /** MOM-1 / MOM-5: one suggested thing, and the fixed things still happening anyway. */
@@ -156,14 +170,14 @@ function composeMode(input: ComposeInput, mode: Mode, header: Block): Block[] {
     type: BlockType.mode,
     section: Section.focus,
     placement: Placement.focus,
-    reason: `${ModeLabel[mode.mode]} until ${clock(mode.endsAt, input.facts.timeZone)}; the app's own suggestions are hidden`,
+    reason: `${ModeLabel[mode.mode]} until ${modeUntil(mode, input.date, input.now, input.facts.timeZone)}; the app's own suggestions are hidden`,
     provenance: Provenance.planner,
     mode: mode.mode,
     heading: "If you do one thing",
     pick,
     stillHappening: still,
   };
-  const context = header.type === BlockType.context ? { ...header, line: modeHeading(mode, input.facts) } : header;
+  const context = header.type === BlockType.context ? { ...header, line: modeHeading(mode, input.facts, input.date) } : header;
   return [context, block, composer()];
 }
 
@@ -221,10 +235,8 @@ export function compose(input: ComposeInput): Block[] {
     title: longDate(date),
     line: contextLine(facts, date, now),
   };
-  const mode = facts.mode;
-  if (mode !== null && mode.mode !== ModeKind.normal && localDate(new Date(mode.setAt), facts.timeZone) <= date && new Date(mode.endsAt) > atLocal(date, 12, 0, facts.timeZone)) {
-    return composeMode(input, mode, header);
-  }
+  const mode = modeOn(facts, date, now);
+  if (mode !== null) return composeMode(input, mode, header);
 
   const body: Block[] = [...(input.fill === null ? [] : firstDayBlocks(input.fill)), ...input.rules.map(ruleBlock), ...calendarBlocks(input), ...tomorrowEvents(input)];
   for (const n of input.screenNotes) {

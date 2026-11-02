@@ -14,7 +14,12 @@ export const zPersonExport = z.record(z.string(), z.unknown());
 
 export const zResolveIdentityInput = z.object({ channel: zChannel, address: z.string() });
 export const zLoginInput = z.object({ username: z.string(), password: z.string() });
-export const zSetModeRequest = z.object({ mode: zModeKind, endsAt: z.iso.datetime({ offset: true }) });
+/**
+ * HOU-156: a mode starts now unless `startsAt` names a later time ("we're away this weekend"). For
+ * `normal`, the span from start to `endsAt` is cleared of other modes, and the row recorded for it
+ * lasts no time (it ends where it starts), so it never shows as a day's mode.
+ */
+export const zSetModeRequest = z.object({ mode: zModeKind, startsAt: z.iso.datetime({ offset: true }).optional(), endsAt: z.iso.datetime({ offset: true }) });
 export const zPersonSettingsPatch = zPersonSettings.omit({ person: true }).partial();
 export const zHouseholdSettingsPatch = z.object({ retainMessages: z.boolean() }).partial();
 export const zRuleCreateInput = z.object({ spec: zRuleSpec });
@@ -114,7 +119,8 @@ export const zMuteInput = z.object({ person: z.string(), until: z.iso.datetime({
 export const zHealthEntryInput = z.object({ date: z.iso.date(), heavy: z.boolean() });
 export const zShoppingRequestInput = z.object({ item: z.string().min(1), sourceMessage: z.string() });
 export const zShoppingRequestUpdate = z.object({ id: z.string(), status: zShoppingStatus, chosen: zProductOption.nullable(), options: z.array(zProductOption) });
-export const zShoppingRunInput = z.object({ requestId: z.string(), log: z.array(z.object({ at: z.iso.datetime({ offset: true }), line: z.string() })), screenshots: z.array(z.string()) });
+/** `person` is whose request it ran for, kept on the run for PRV-7 once the request is deleted (HOU-158). */
+export const zShoppingRunInput = z.object({ requestId: z.string(), person: z.string(), log: z.array(z.object({ at: z.iso.datetime({ offset: true }), line: z.string() })), screenshots: z.array(z.string()) });
 export const zBasketAddInput = z.object({ requestId: z.string(), sku: z.string(), name: z.string() });
 export const zSummaryInput = z.object({ person: z.string(), deliveryDate: z.iso.date() });
 

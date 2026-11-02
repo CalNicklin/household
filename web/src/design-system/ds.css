@@ -414,6 +414,13 @@ a:hover {
   font-weight: var(--weight-semibold);
 }
 
+.ds-list-row__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-tight);
+}
+
 .ds-list-row__meta {
   font-size: var(--size-label);
   color: var(--color-muted);
@@ -754,6 +761,39 @@ a:hover {
   font-size: var(--size-item);
   font-weight: var(--weight-medium);
   line-height: 1.4;
+}
+
+/* HOU-158: "Deleted …" with Undo for a few seconds, pinned to the bottom wherever the page is scrolled. */
+.ds-undo {
+  position: fixed;
+  z-index: 30;
+  left: 50%;
+  bottom: max(var(--space-phone-bottom), env(safe-area-inset-bottom));
+  transform: translateX(-50%);
+  width: min(560px, calc(100% - 2 * var(--space-phone-side)));
+  box-shadow: 0 8px 24px var(--color-border-strong);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-stack);
+  background: var(--color-ink);
+  color: var(--color-on-ink);
+  border-radius: var(--radius-card);
+  padding: 8px 8px 8px var(--space-card-x);
+}
+
+.ds-undo .ds-button {
+  flex-shrink: 0;
+  background: var(--color-surface);
+  color: var(--color-text);
+}
+
+.ds-undo__text {
+  margin: 0;
+  font-size: var(--size-body-small);
+  font-weight: var(--weight-medium);
+  line-height: 1.4;
+  overflow-wrap: anywhere;
 }
 
 /* ── Forms (settings) ───────────────────────────────────────────────────── */

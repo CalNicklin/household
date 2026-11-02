@@ -1,13 +1,13 @@
 import { createTool } from "@mastra/core/tools";
-import { ActionKind, type BacklogTag, Limits, ListWriteOutcome, LongTool, type ModeKind as Mode, ModeKind, Urgency, zActionKind, zBacklogTag } from "@household/contracts";
+import { ActionKind, type BacklogTag, Limits, ListWriteOutcome, LongTool, type ModeKind as Mode, ModeKind, ModeLabel, Urgency, zActionKind, zBacklogTag } from "@household/contracts";
 import { z } from "zod";
 import { gatherFacts, oneThingCandidates } from "../planner/gather.ts";
 import { inQuietHours } from "../rules/budget.ts";
 import { adultsOf, contextLine, eventsOn } from "../rules/day.ts";
 import { parseOrder } from "../rules/orders.ts";
 import { guessTags } from "../rules/tags.ts";
-import { dayIn } from "../rules/when.ts";
-import { addLocalDays, clock, localDate, longDate, nextLocalMidnight } from "../time.ts";
+import { dayIn, daysIn } from "../rules/when.ts";
+import { addLocalDays, atLocal, clock, localDate, longDate, startOfLocalDay } from "../time.ts";
 import { respond, subjectFor } from "./respond.ts";
 import type { JobScope } from "./scope.ts";
 
@@ -88,17 +88,39 @@ export function houseTools(scope: JobScope) {
 
   const setMode = createTool({
     id: "set_mode",
-    description: "Set the house's day: slow, sick, away or normal. Applies to the whole house until midnight unless extended.",
-    inputSchema: z.object({ mode: z.enum(ModeKind), extend: z.string().nullable().optional() }),
-    execute: record("set_mode", async (input: { mode: Mode; extend?: string | null | undefined }) => {
+    description:
+      "Set the house's day: slow, sick, away or normal. Applies to the whole house. With no `from` it starts now and lasts until midnight. For a later day or days ('we're away this weekend', 'slow day on Friday', 'not away on Saturday after all'), give `from` (the first day: 'Friday', 'this weekend', '7 November') and, for more than one day, `until` (the last day). `until` alone extends from now ('until tomorrow').",
+    inputSchema: z.object({ mode: z.enum(ModeKind), from: z.string().nullable().optional(), until: z.string().nullable().optional() }),
+    execute: record("set_mode", async (input: { mode: Mode; from?: string | null | undefined; until?: string | null | undefined }) => {
       const now = rt.ports.clock.now();
-      const midnight = nextLocalMidnight(now, tz);
-      const endsAt = input.mode === ModeKind.normal ? now : input.extend === "tomorrow" ? new Date(midnight.getTime() + 86_400_000) : midnight;
-      await api.household.setMode({ mode: input.mode, endsAt: endsAt.toISOString() });
-      replanToday();
-      if (input.extend === "tomorrow") scope.effects.replan.push(addLocalDays(today(), 1));
-      const until = input.extend === "tomorrow" ? "the end of tomorrow" : "midnight";
-      return { say: input.mode === ModeKind.normal ? "Back to a normal day." : `${input.mode === ModeKind.sick ? "Sick" : input.mode === ModeKind.away ? "Away" : "Slow"} day until ${until}. I've made today smaller.` };
+      const date = today();
+      const untilPhrase = input.until ?? null;
+      // HOU-156: the days it covers, read with the same rules as any other day (server/rules/when.ts).
+      const span = input.from === null || input.from === undefined ? { from: date, to: date } : daysIn(input.from, date);
+      // "from Saturday until Monday": the last day is the next one on or after the first.
+      const last = span === null ? null : untilPhrase === null ? span.to : (daysIn(untilPhrase, span.from)?.to ?? null);
+      if (span === null || last === null || last < span.from) return { say: "Which day do you mean? Say a day, like Saturday or 7 November." };
+      const ahead = span.from > date;
+      const startsAt = ahead ? startOfLocalDay(span.from, tz) : now;
+      // Every mode, normal included, clears to the midnight after its last day; a mode set ahead that
+      // runs past it carries on from there (the household router keeps its later days).
+      const endsAt = startOfLocalDay(addLocalDays(last, 1), tz);
+      await api.household.setMode({ mode: input.mode, ...(ahead ? { startsAt: startsAt.toISOString() } : {}), endsAt: endsAt.toISOString() });
+      // Today and tomorrow have saved plans the home screen shows; later days are planned the morning before.
+      for (const d of [date, addLocalDays(date, 1)]) if (d >= span.from && d <= last && !scope.effects.replan.includes(d)) scope.effects.replan.push(d);
+      if (!ahead) {
+        // HOU-156: a mode set ahead that carries on afterwards is said, so nobody thinks it went.
+        const next = addLocalDays(last, 1);
+        const noon = atLocal(next, 12, 0, tz).toISOString();
+        const later = (await api.household.modesBetween({ from: noon, to: noon })).find((m) => m.mode !== ModeKind.normal && m.startsAt <= noon);
+        const still = later === undefined ? "" : ` ${last === date ? "Tomorrow" : longDate(next)} is still ${ModeLabel[later.mode].toLowerCase()}.`;
+        if (input.mode === ModeKind.normal) return { say: `Back to a normal day.${still}` };
+        const until = last === date ? "midnight" : last === addLocalDays(date, 1) ? "the end of tomorrow" : `the end of ${longDate(last)}`;
+        return { say: `${ModeLabel[input.mode]} until ${until}. I've made today smaller.${still}` };
+      }
+      const days = span.from === last ? longDate(span.from) : `${longDate(span.from)} to ${longDate(last)}`;
+      if (input.mode === ModeKind.normal) return { say: `${days}: back to normal days.` };
+      return { say: `${ModeLabel[input.mode]}: ${days}. I'll make ${span.from === last ? "that day" : "those days"} smaller.` };
     }),
   });
 

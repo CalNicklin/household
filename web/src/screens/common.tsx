@@ -5,6 +5,7 @@ import type { BlockHandlers } from "../blocks/BlockRenderer.tsx";
 import { say } from "../data/send.ts";
 import { useTRPC } from "../data/trpc.ts";
 import { useUiState } from "../data/ui-state.tsx";
+import { useUndo } from "../data/undo.tsx";
 import { Composer, Conversation, type ExchangeLine, Footer, type NavLink } from "../design-system/index.ts";
 
 const ALL: readonly NavLink[] = [
@@ -34,13 +35,17 @@ function useNewestExchange(): () => string | null | undefined {
 /** Everything a person says or taps goes in as one message (CH-1, CH-8). */
 function useSay() {
   const { about, setAbout, markSaid } = useUiState();
+  const { flush } = useUndo();
   const queryClient = useQueryClient();
   const newestExchange = useNewestExchange();
   return (text: string, spoken: boolean) => {
     markSaid(newestExchange(), text);
     const ref = about?.ref;
     setAbout(null);
-    void say({ text, ...(ref === undefined ? {} : { ref }), ...(spoken ? { spoken } : {}) }).then(() => queryClient.invalidateQueries());
+    // HOU-158: a delete still in its Undo window is sent first, so "add milk" after deleting milk adds it.
+    void flush()
+      .then(() => say({ text, ...(ref === undefined ? {} : { ref }), ...(spoken ? { spoken } : {}) }))
+      .then(() => queryClient.invalidateQueries());
   };
 }
 
