@@ -13,6 +13,7 @@ if [[ ! "$digest" =~ ^sha256:[0-9a-f]{64}$ ]]; then
   exit 2
 fi
 image="$HOUSEHOLD_REPO@$digest"
+refuse_test_only_settings
 
 exec 9>"$HOUSEHOLD_DIR/.deploy.lock"
 flock -w 600 9
@@ -53,6 +54,11 @@ if [ "$setup" -eq 3 ]; then
   echo "$image" > "$HOUSEHOLD_DIR/image"
   echo "The house is not set up yet, so the app is not started. On the server: sudo household-setup < house.json"
   exit 0
+elif [ "$setup" -eq 78 ]; then
+  # HOU-160 / PRV-6: the new image would refuse these settings at startup (the settings-refused line above
+  # says what to set), so nothing is switched and the running house carries on.
+  echo "$image refuses $HOUSEHOLD_DIR/.env, so it was not started; ${previous:+the house keeps running $previous; }fix .env and redeploy: sudo household-deploy $digest" >&2
+  exit 1
 elif [ "$setup" -ne 0 ]; then
   echo "could not check the house with $image (exit $setup)" >&2
   exit 1

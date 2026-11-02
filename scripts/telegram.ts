@@ -1,5 +1,5 @@
 import { Channel } from "@household/contracts";
-import { loadEnv } from "../server/env.ts";
+import { loadEnvOrExit } from "../server/env.ts";
 import { TelegramTransport } from "../server/integrations/telegram.ts";
 import type { Runtime } from "../server/runtime.ts";
 import { connect, NO_TOKEN, parseTelegramCommand, redact, showSenders, showStatus } from "./telegram/admin.ts";
@@ -19,7 +19,7 @@ if ("error" in command) {
   console.error(command.error);
   process.exit(2);
 }
-const env = loadEnv();
+const env = loadEnvOrExit();
 const secrets = [env.TELEGRAM_BOT_TOKEN, env.TELEGRAM_WEBHOOK_SECRET];
 const print = (line: string) => process.stdout.write(`${redact(line, secrets)}\n`);
 const settings = { token: env.TELEGRAM_BOT_TOKEN, secret: env.TELEGRAM_WEBHOOK_SECRET, publicUrl: env.PUBLIC_URL };

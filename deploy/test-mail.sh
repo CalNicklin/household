@@ -57,8 +57,12 @@ HOUSEHOLD_REPO=localhost:5000/household
 CONF
 docker run --rm --network none --memory 128m -v "$repo/scripts/env-init.ts:/env-init.ts:ro" -v "$work/srv:/work" -w /work node:22-bookworm-slim node /env-init.ts --real > /dev/null
 printf 'HOUSEHOLD_DOMAIN=localhost\nMAIL_DOMAIN=orders.localhost\n' >> "$work/srv/.env"
-# No model key here: the practice model reads the order (record_arrival), as the house's model would.
+# No model key here: the practice model reads the order (record_arrival), as the house's model would. The
+# real house refuses the practice model (HOU-160) unless a test harness says so by name, as this one does,
+# in its own copy of compose.yml: household-deploy refuses a .env that carries it.
 sed -i 's/^MODEL_PROVIDER=.*/MODEL_PROVIDER=practice/; s/^MODEL_ID=.*/MODEL_ID=practice-1/' "$work/srv/.env"
+sed -i 's|^      PRACTICE: "false"$|      PRACTICE: "false"\n      PRACTICE_MODEL_FOR_TESTS: "yes"|' "$work/srv/compose.yml"
+grep -q 'PRACTICE_MODEL_FOR_TESTS: "yes"' "$work/srv/compose.yml" || fail "could not give the test house the practice model"
 lib="$work/lib"
 install -d "$lib"
 install -m 755 "$repo"/deploy/household-*.sh "$repo/scripts/backup.sh" "$repo/scripts/restore.sh" "$lib/"
