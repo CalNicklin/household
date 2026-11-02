@@ -863,6 +863,101 @@ reads the orders, because there is no model key. Everything else goes over real 
   messages, two connections at a time. Every message was answered `250`, with no restart and no OOM
   kill.
 
+## Other apps' sites on the house's Caddy (HOU-175)
+
+The house's Caddy is the only thing on 80 and 443, so other apps on the VPS (the trader-v2 dashboards,
+`trader` and `monitor`) get HTTPS through it: their sites are `*.caddy` files in `/etc/household/sites`,
+which Caddy imports next to the house's own. They are outside the house: the house writes none of them,
+and the trader side owns them, the services behind them, and their logins.
+
+- **Optional, and inert without sites:** `household-common.sh` adds `deploy/compose.caddy-sites.yml` only
+  when `/etc/household/sites` is a real directory owned by root and writable by no group or other user,
+  and holds at least one `*.caddy` file, each of them a regular file (no symlinks) owned by root and
+  writable only by it. Otherwise it leaves the overlay out (saying why, when something there isn't
+  root's alone) and the house runs exactly as without it. `install.sh` makes the directory (root:root,
+  0755) and never puts anything in it. The `household` deploy user is not root and not in the docker
+  group, and its keys run only `household-deploy` and `household-preview`, so it can't add or change a site.
+- **What the overlay gives Caddy:** the directory, read-only at `/etc/caddy/sites`, and the name
+  `host.docker.internal` for the host (`extra_hosts: host-gateway`). No port, network, volume or memory
+  of the house's changes; only 80 and 443 stay public.
+- **Validated before it is used:** before switching anything, `household-deploy` runs Caddy's whole
+  config, sites included, through `caddy validate` in a throwaway Caddy. If a file is invalid, the deploy
+  stops, naming the file and line (`Error: … /etc/household/sites/monitor.caddy:2: unrecognized directive: …`),
+  and the running Caddy, the house and the sites already served carry on. Fix or remove the file and
+  redeploy.
+- **Caddy reads the files only when it starts.** A deploy recreates Caddy exactly when a site file
+  changed (their hash is a label on the container), so an edit takes effect, validated, on the next
+  deploy. **Never leave an edited file without redeploying:** the files are mounted live, so if one is
+  left invalid, the next time Caddy restarts (a reboot, say) it would fail to start and take the house
+  down with it.
+- **A site file is as powerful as the house's Caddyfile** (it could answer for any host name Caddy
+  serves), which is why only root may write one. It must not name the house's domain, a preview or the
+  mail domain; validation refuses a site defined twice.
+
+### Security: where the trader services listen, and their logins
+
+- **Listen where Caddy can reach them, and nowhere public.** `host.docker.internal` is Docker's bridge
+  gateway, the `docker0` address (`ip -4 addr show docker0`, usually `172.17.0.1`). Caddy's requests to it
+  arrive at the host from the house's own Docker network. The trader services (3847 and 3848) must listen
+  on that address, e.g. `172.17.0.1:3847`, not on the server's public address, and must **never** become
+  reachable directly from the internet on 3847 or 3848.
+  - A service run straight on the host binds `172.17.0.1` (it has to start after Docker, which makes the
+    address: `After=docker.service` in its unit). If it must bind `0.0.0.0`, the firewall has to block
+    3847 and 3848 from outside.
+  - A service in a Docker container publishes on that address only: `ports: ["172.17.0.1:3847:3847"]`.
+    Never a bare `3847:3847`: Docker's published ports go around ufw, so the firewall would not block it.
+  - With ufw on (deny incoming), a service on the host also needs Caddy's network let in:
+    `sudo ufw allow from "$(sudo docker network inspect household_default -f '{{(index .IPAM.Config 0).Subnet}}')" to 172.17.0.1 port 3847,3848 proto tcp`.
+  - Today's IB gateway (`docker-ib-gateway-1`) publishes on 127.0.0.1 only; a container can't reach that,
+    and no site should point at it.
+- **Put a login in front of both sites.** PRV-6 (nothing reachable without a login) belongs to the trader
+  side here, but `trader.caddy` should still authenticate before proxying: Caddy `basic_auth` with a
+  bcrypt hash (make it with `sudo docker run --rm -it caddy:2.10.2-alpine caddy hash-password`; the hash
+  goes in the file, the password in the password manager), or `forward_auth` to the trader's own login.
+  For example:
+
+  ```caddyfile
+  trader.example.com {
+  	basic_auth {
+  		cal <bcrypt hash from caddy hash-password>
+  	}
+  	reverse_proxy host.docker.internal:3847
+  }
+
+  monitor.example.com {
+  	basic_auth {
+  		cal <bcrypt hash from caddy hash-password>
+  	}
+  	reverse_proxy host.docker.internal:3848
+  }
+  ```
+
+### Cal's steps for the trader sites
+
+**1. DNS.** A records for `trader.example.com` and `monitor.example.com` pointing at the VPS (and AAAA if
+it has IPv6). Wait until `dig +short trader.example.com` answers with the server's address.
+
+**2. Re-run `install.sh`.** On the server, from the repo checkout (`git pull` first): `sudo deploy/install.sh`
+(no options needed). It installs the overlay and makes the empty `/etc/household/sites`.
+
+**3. The trader side.** Make the two services listen on the bridge gateway address (above), check
+`sudo ss -ltn 'sport = :3847 or sport = :3848'` shows `172.17.0.1:…` (not `0.0.0.0`, `*` or the public
+address), then put the site file in place as root:
+`sudo install -o root -g root -m 644 trader.caddy /etc/household/sites/trader.caddy`.
+
+**4. Redeploy the house** so its Caddy takes the sites:
+`sudo household-deploy "$(sudo cut -d@ -f2 /srv/household/image)"`. It says
+`caddy config with /etc/household/sites is valid`, then `deployed …`. If it names an invalid file
+instead, nothing changed; fix that file and run it again. Do the same after every edit to a site file.
+
+**5. Check.** `curl -sI https://trader.example.com/` answers 401 and `curl -su cal https://trader.example.com/`
+the dashboard (the same for `monitor`); from the laptop, `curl -m 5 http://<server address>:3847/` and
+`:3848` fail; the house still answers `https://house.example.com/healthz`; `hindsight`,
+`docker-ib-gateway-1` and the house's containers are unchanged (`sudo household-status`).
+
+To stop serving the sites: remove the files from `/etc/household/sites` and redeploy (step 4); Caddy
+goes back to exactly the house's own config.
+
 ## Agent review (HOU-151)
 
 Every push to a PR from this repository (never a fork's) is reviewed by `.github/workflows/agent-review.yml`

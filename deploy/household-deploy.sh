@@ -45,21 +45,12 @@ done
 export HOUSEHOLD_IMAGE="$image"
 previous="$(deployed_image)"
 
-# HOU-175: other apps' sites are files the house doesn't write, so Caddy's whole config, with them, is
-# validated in a throwaway Caddy before anything is switched. If it is invalid the deploy stops here, naming
-# the file and line, and the running Caddy (and house) carry on untouched.
-if [[ ":$COMPOSE_FILE:" == *":$HOUSEHOLD_DIR/compose.caddy-sites.yml:"* ]]; then
-  set +e
-  validation="$(household_compose run --rm --no-deps -T caddy caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile < /dev/null 2>&1)"
-  valid=$?
-  set -e
-  if [ "$valid" -ne 0 ]; then
-    echo "the house's Caddy config with $SITES_DIR is invalid, so nothing was switched; ${previous:+the house keeps running $previous and }the running Caddy carries on:" >&2
-    grep -E '^Error:' <<< "$validation" | sed "s|/etc/caddy/sites/|$SITES_DIR/|g" >&2 || tail -n 5 <<< "$validation" >&2
-    echo "fix or remove that file, then redeploy: sudo household-deploy $digest" >&2
-    exit 1
-  fi
-  echo "caddy config with $SITES_DIR is valid"
+# HOU-175: other apps' sites are validated with Caddy's whole config before anything is switched. If they
+# are invalid the deploy stops here and the running Caddy (and house) carry on untouched.
+if ! sites_valid; then
+  echo "the house's Caddy config with $SITES_DIR is invalid (above), so nothing was switched; ${previous:+the house keeps running $previous and }the running Caddy carries on" >&2
+  echo "fix or remove that file, then redeploy: sudo household-deploy $digest" >&2
+  exit 1
 fi
 household_compose up -d --wait --wait-timeout 180 postgres objects
 

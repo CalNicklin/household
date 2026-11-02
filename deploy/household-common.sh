@@ -67,6 +67,20 @@ fi
 
 household_compose() { docker compose "$@"; }
 
+# HOU-175: the sites are files the house doesn't write, so before any `up` that could recreate Caddy, its
+# whole config, sites included, goes through `caddy validate` in a throwaway Caddy (no ports published).
+# Invalid: says which file and line, and fails. Needs HOUSEHOLD_IMAGE set, like every compose command.
+sites_valid() {
+  local out
+  [[ ":$COMPOSE_FILE:" == *":$HOUSEHOLD_DIR/compose.caddy-sites.yml:"* ]] || return 0
+  if out="$(household_compose run --rm --no-deps -T caddy caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile < /dev/null 2>&1)"; then
+    echo "caddy config with $SITES_DIR is valid"
+    return 0
+  fi
+  { grep -E '^Error:' <<< "$out" || tail -n 5 <<< "$out"; } | sed "s|/etc/caddy/sites/|$SITES_DIR/|g" >&2
+  return 1
+}
+
 # HOU-160: the practice model's test-only opt-in never reaches the real house's settings (test harnesses
 # set it in their own compose file instead). household-deploy and household-setup refuse such a .env.
 refuse_test_only_settings() {

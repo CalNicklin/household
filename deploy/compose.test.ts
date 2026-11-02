@@ -143,11 +143,14 @@ describe("HOU-175: other apps' sites on the house's Caddy", () => {
     expect(read("household-deploy.sh")).not.toMatch(/SITES_DIR=|sites\/\S*\.caddy\s*>/);
   });
 
-  it("[PLT-8] household-deploy validates Caddy's whole config with the sites before switching anything", () => {
-    const deploy = read("household-deploy.sh");
-    const validate = deploy.indexOf("caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile");
-    expect(validate).toBeGreaterThan(0);
-    expect(validate).toBeLessThan(deploy.indexOf("household_compose up"));
-    expect(deploy).toMatch(/fix or remove that file, then redeploy/);
+  it("[PLT-8] every command that starts the house validates Caddy's whole config with the sites first", () => {
+    expect(common).toContain("household_compose run --rm --no-deps -T caddy caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile");
+    for (const [file, before] of [["household-deploy.sh", "household_compose up"], ["household-setup.sh", "household_compose up"], ["household-restore.sh", "\"$HOUSEHOLD_LIB/restore.sh\""]] as const) {
+      const text = read(file);
+      const validate = text.search(/^(if ! )?sites_valid\b/m);
+      expect(validate, `${file} never validates the sites`).toBeGreaterThan(0);
+      expect(validate, `${file} starts something before validating`).toBeLessThan(text.indexOf(before));
+      expect(text.slice(validate)).toMatch(/^.*exit 1/m);
+    }
   });
 });
