@@ -16,6 +16,7 @@ import {
   Placement,
   Provenance,
   type Question,
+  type Reminder,
   Section,
   type ShoppingRequest,
   ShoppingStatus,
@@ -23,6 +24,7 @@ import {
 import { addLocalDays, atLocal, clock, localDate, longDate, shortWeekday, startOfLocalDay } from "../time.ts";
 import { contextLine, eventsOn, type HouseFacts, modeOn, nameOf } from "../rules/day.ts";
 import type { RuleItem } from "../rules/nudges.ts";
+import { reminderPeople, reminderSection } from "../rules/remind.ts";
 import { firstDayBlocks, type HouseFill } from "./first-day.ts";
 
 export type BacklogPick = { itemId: string; title: string; why: string; person: string | null };
@@ -45,6 +47,8 @@ export type ComposeInput = {
   /** Day parts in which a subject's suggestions are not offered (LRN-5). */
   avoid: ReadonlySet<string>;
   otherAdult: (person: string) => string | null;
+  /** CAP-10: open reminders someone asked for, on this day and the next. */
+  reminders: Reminder[];
   /** HOU-149: how much the house has in it, for the first-day blocks; null for Week's unsaved days (Week hides them anyway). */
   fill: HouseFill | null;
 };
@@ -136,7 +140,41 @@ function tomorrowEvents(input: ComposeInput): Block[] {
   ];
 }
 
-const sortKey = (b: Block): string => (b.type === BlockType.event ? (b.time ?? "00:00") : "");
+/**
+ * CAP-10: a reminder someone asked for is a fact (grey), not a suggestion: Later today until its time,
+ * then Now; tomorrow's under Tomorrow. Done closes it; Not now moves it to tomorrow. Never an offer
+ * (PRO-6).
+ */
+function reminderBlocks(input: ComposeInput): Block[] {
+  const { facts, date, now } = input;
+  return input.reminders.flatMap((r): Block[] => {
+    const section = reminderSection(r, date, now, facts.timeZone);
+    if (section === null) return [];
+    const ref = `reminder:${r.id}`;
+    const asked = r.for.length === 1 && r.for[0] === r.askedBy ? `${nameOf(facts.people, r.askedBy)} asked to be reminded` : `${nameOf(facts.people, r.askedBy)} asked for this reminder`;
+    return [
+      {
+        id: ref,
+        type: BlockType.reminder,
+        section,
+        placement: Placement.main,
+        reason: r.time === null ? `${asked}, with no time: it stays here today` : `${asked} at ${r.time}`,
+        provenance: Provenance.person,
+        time: r.time,
+        title: r.text,
+        detail: `For ${reminderPeople(r, facts.people)}`,
+        ref,
+        actions: [
+          { kind: ActionKind.done, label: "Done", ref },
+          { kind: ActionKind.snooze, label: "Not now", ref },
+        ],
+      },
+    ];
+  });
+}
+
+/** Events and reminders by time; a reminder with no time after the timed ones. */
+const sortKey = (b: Block): string => (b.type === BlockType.event ? (b.time ?? "00:00") : b.type === BlockType.reminder ? (b.time ?? "24:00") : "");
 const sectionOrder: readonly string[] = [Section.start, Section.now, Section.later, Section.tomorrow, Section.arriving, Section.fits];
 const typeRank = (b: Block): number => (b.type === BlockType.alert ? 0 : b.type === BlockType.suggestion ? 1 : 2);
 
@@ -161,7 +199,7 @@ function modeUntil(mode: Mode, date: LocalDate, now: Date, timeZone: string): st
 
 /** MOM-1 / MOM-5: one suggested thing, and the fixed things still happening anyway. */
 function composeMode(input: ComposeInput, mode: Mode, header: Block): Block[] {
-  const fixed = [...calendarBlocks(input), ...input.rules.filter((r) => r.fixed).map(ruleBlock)].filter((b) => !input.closed.has(b.id));
+  const fixed = [...calendarBlocks(input), ...reminderBlocks(input).filter((b) => b.section !== Section.tomorrow), ...input.rules.filter((r) => r.fixed).map(ruleBlock)].filter((b) => !input.closed.has(b.id));
   const pickRef = input.oneThing?.ref;
   const still = fixed.filter((b) => !("ref" in b) || b.ref !== pickRef).map((b) => ({ id: b.id, provenance: b.provenance, text: stillText(b) }));
   const pick = input.oneThing === null ? null : { ref: input.oneThing.ref, title: input.oneThing.title, why: input.oneThing.why, actions: input.oneThing.actions };
@@ -184,6 +222,7 @@ function composeMode(input: ComposeInput, mode: Mode, header: Block): Block[] {
 function stillText(b: Block): string {
   switch (b.type) {
     case BlockType.event:
+    case BlockType.reminder:
       return [b.time, b.title, b.detail].filter((x) => x !== null && x !== "").join(" · ");
     case BlockType.alert:
       return b.title;
@@ -238,8 +277,9 @@ export function compose(input: ComposeInput): Block[] {
   const mode = modeOn(facts, date, now);
   if (mode !== null) return composeMode(input, mode, header);
 
-  const body: Block[] = [...(input.fill === null ? [] : firstDayBlocks(input.fill)), ...input.rules.map(ruleBlock), ...calendarBlocks(input), ...tomorrowEvents(input)];
-  for (const n of input.screenNotes) {
+  const body: Block[] = [...(input.fill === null ? [] : firstDayBlocks(input.fill)), ...input.rules.map(ruleBlock), ...calendarBlocks(input), ...reminderBlocks(input), ...tomorrowEvents(input)];
+  // CAP-10: a reminder's message held for the screen is already there as the reminder itself.
+  for (const n of input.screenNotes.filter((x) => !x.key.startsWith("reminder:"))) {
     body.push({
       id: `note:${n.id}`,
       type: BlockType.alert,

@@ -18,6 +18,7 @@ import {
   zNurseryEventKind,
   zPersonRole,
   zQuestionTopic,
+  zReminderStatus,
   zRhythmSource,
   zRuleKind,
   zShoppingStatus,
@@ -206,6 +207,27 @@ export const zBacklogItem = z.object({
   createdAt: zIsoDateTime,
 });
 export type BacklogItem = z.infer<typeof zBacklogItem>;
+
+/** "20:00": a local time of day. */
+export const zLocalTime = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/);
+
+/**
+ * CAP-10: a reminder one of us asked for ("remind us to discuss Wise Owls tonight"). It is for the
+ * people named, on a local date, at an optional local time; with no time it is for "later today".
+ */
+export const zReminder = z.object({
+  id: z.string(),
+  text: z.string(),
+  /** Person ids it is for: the asker for "me", every adult for "us". */
+  for: z.array(z.string()).min(1),
+  date: zLocalDate,
+  time: zLocalTime.nullable(),
+  askedBy: z.string(),
+  createdVia: zChannel,
+  status: zReminderStatus,
+  createdAt: zIsoDateTime,
+});
+export type Reminder = z.infer<typeof zReminder>;
 
 export const zBacklogView = z.object({
   soon: z.array(z.object({ item: zBacklogItem, slot: z.string() })),

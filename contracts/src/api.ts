@@ -1,7 +1,7 @@
 /** Router inputs (CODE-5). Outputs are the records in domain.ts and blocks.ts. */
 import { z } from "zod";
 import { zBlock } from "./blocks.ts";
-import { zArrival, zCalendarCopy, zCalendarWatch, zHourlyForecast, zJob, zLearningEvent, zListItem, zNurseryEvent, zPersonSettings, zProductOption, zQuestion, zRhythm, zRuleSpec, zTelegramUserId } from "./domain.ts";
+import { zArrival, zCalendarCopy, zCalendarWatch, zHourlyForecast, zJob, zLearningEvent, zListItem, zLocalTime, zNurseryEvent, zPersonSettings, zProductOption, zQuestion, zRhythm, zRuleSpec, zTelegramUserId } from "./domain.ts";
 import { LongTool, zActionKind, zBacklogTag, zChannel, zDeliveryChannel, zListWriteOutcome, zLongTool, zModeKind, zModelProvider, zNotificationStatus, zShoppingStatus, zTimerKind } from "./enums.ts";
 import { zInboundMessage, zNotifyInput } from "./message.ts";
 
@@ -9,6 +9,21 @@ export const zIdInput = z.object({ id: z.string() });
 export const zPersonInput = z.object({ person: z.string() });
 /** `index`: which capture of its message this is (0 = the first), so a retried job finds each item again (HOU-148). */
 export const zBacklogCreateInput = z.object({ text: z.string().min(1), tags: z.array(zBacklogTag), createdVia: zChannel, sourceMessage: z.string(), index: z.number().int().min(0).optional() });
+/** CAP-10: a reminder from the message being handled; `index` as for a capture (HOU-148). */
+export const zRemindInput = z.object({
+  text: z.string().min(1),
+  for: z.array(z.string()).min(1),
+  date: z.iso.date(),
+  time: zLocalTime.nullable(),
+  createdVia: zChannel,
+  sourceMessage: z.string(),
+  index: z.number().int().min(0).optional(),
+});
+export const zLocalDateRangeInput = z.object({ from: z.iso.date(), to: z.iso.date() });
+/** CAP-10: "Not now" or "Later" moves a reminder to another day, keeping its time. */
+export const zReminderMoveInput = z.object({ id: z.string(), date: z.iso.date() });
+/** CAP-10: open reminders with no time from before `today` become backlog items. */
+export const zRemindersToBacklogInput = z.object({ today: z.iso.date() });
 export const zBacklogSetTagsInput = z.object({ id: z.string(), tags: z.array(zBacklogTag) });
 export const zPersonExport = z.record(z.string(), z.unknown());
 

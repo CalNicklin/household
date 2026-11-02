@@ -1,7 +1,7 @@
 import type { Provenance } from "@household/contracts";
 import type { ReactNode } from "react";
 import { Button, type ButtonVariant } from "./controls.tsx";
-import { AlertIcon, CalendarIcon, ParcelIcon, RuleIcon, SunIcon } from "./icons.tsx";
+import { AlertIcon, BellIcon, CalendarIcon, ParcelIcon, RuleIcon, SunIcon } from "./icons.tsx";
 
 /** A button on a card. Variants are fixed per card type, from the canvas. */
 export type CardAction = { key: string; label: string; onPress: () => void };
@@ -44,6 +44,7 @@ function ProvenanceIcon({ provenance, size }: { provenance: Provenance; size: nu
     email: <ParcelIcon size={size} />,
     rule: <RuleIcon size={size} />,
     planner: <SunIcon size={size} />,
+    person: <BellIcon size={size} />,
   };
   return icons[provenance];
 }
@@ -53,6 +54,7 @@ const NO_TIME_LABEL: Record<Provenance, string> = {
   email: "No set time, from an email",
   rule: "No set time, from the house's rules",
   planner: "No set time, suggested by the house",
+  person: "No set time, one of us asked for it",
 };
 
 /** HOU-153: stands in for a time, so it says what it means to a screen reader too. */
@@ -88,6 +90,23 @@ export function EventCard({ time, title, detail, provenance = "calendar", onSele
         <Title onSelect={onSelect}>{title}</Title>
         {detail === "" ? null : <p className="ds-card__detail">{detail}</p>}
       </div>
+    </RowCard>
+  );
+}
+
+/**
+ * CAP-10: a reminder one of us asked for. A fact like an event (grey, not a green suggestion): its
+ * time, or a bell for "later today", what it is, who it is for, and Done / Not now.
+ */
+export function ReminderCard({ time, title, detail, actions, onSelect, selected }: { time: string | null; title: string; detail: string; actions: readonly CardAction[] } & Selectable) {
+  return (
+    <RowCard selected={selected}>
+      <div className="ds-card__lead">{time ?? <NoTime provenance="person" size={22} />}</div>
+      <div className="ds-card__main">
+        <Title onSelect={onSelect}>{title}</Title>
+        {detail === "" ? null : <p className="ds-card__detail">{detail}</p>}
+      </div>
+      <Actions actions={actions} variants={["secondary", "ghost"]} />
     </RowCard>
   );
 }

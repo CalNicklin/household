@@ -201,6 +201,11 @@ export async function houseFill(rt: Runtime): Promise<HouseFill> {
   return { calendarConnected: Object.keys(await api.calendar.syncTokens()).length > 0, backlogItems };
 }
 
+/** CAP-10: open reminders someone asked for, from `from` to the day after `to` (each day's screen shows tomorrow's too). */
+export async function remindersFor(rt: Runtime, from: LocalDate, to: LocalDate = from) {
+  return rt.system("planner").backlog.reminders({ from, to: addLocalDays(to, 1) });
+}
+
 /** Notifications waiting for the morning screen (PRO-7) or routed to it (CH-7). */
 export async function screenNotes(rt: Runtime) {
   return rt.system("planner").jobs.notifications({ statuses: [NotificationStatus.deferred, NotificationStatus.onScreen] });

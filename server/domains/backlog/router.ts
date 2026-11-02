@@ -1,5 +1,23 @@
-import { ActorKind, type BacklogItem, BacklogStatus, DeletedThing, Limits, zBacklogCreateInput, zBacklogItem, zBacklogSetTagsInput, zIdInput, zPersonInput } from "@household/contracts";
-import { and, desc, eq, inArray } from "drizzle-orm";
+import {
+  ActorKind,
+  type BacklogItem,
+  BacklogStatus,
+  DeletedThing,
+  Limits,
+  type Reminder,
+  ReminderStatus,
+  zBacklogCreateInput,
+  zBacklogItem,
+  zBacklogSetTagsInput,
+  zIdInput,
+  zLocalDateRangeInput,
+  zPersonInput,
+  zReminder,
+  zReminderMoveInput,
+  zRemindersToBacklogInput,
+  zRemindInput,
+} from "@household/contracts";
+import { and, asc, desc, eq, gte, inArray, isNull, lt, lte } from "drizzle-orm";
 import { z } from "zod";
 import type { DomainDb } from "../../db/index.ts";
 import { iso } from "../../db/map.ts";
@@ -20,7 +38,24 @@ const toItem = (r: typeof schema.items.$inferSelect): BacklogItem => ({
   createdAt: iso(r.createdAt),
 });
 
+const toReminder = (r: typeof schema.reminders.$inferSelect): Reminder => ({
+  id: r.id,
+  text: r.text,
+  for: r.for,
+  date: r.date,
+  time: r.time,
+  askedBy: r.askedBy,
+  createdVia: r.createdVia,
+  status: r.status,
+  createdAt: iso(r.createdAt),
+});
+
 export function backlogRouter(db: BacklogDb) {
+  const reminderRow = async (id: string) => {
+    const row = await db.query.reminders.findFirst({ where: eq(schema.reminders.id, id) });
+    if (row === undefined) forbid(`no reminder ${id}`);
+    return row;
+  };
   const get = async (id: string) => {
     const row = await db.query.items.findFirst({ where: eq(schema.items.id, id) });
     if (row === undefined) forbid(`no backlog item ${id}`);
@@ -113,13 +148,106 @@ export function backlogRouter(db: BacklogDb) {
       ctx.publish("backlog");
     }),
 
+    /**
+     * CAP-10: a reminder someone asked for. As with a capture (PRV-1), a job may write one only from the
+     * person's own message, as that person; a retried job finds it again by its position.
+     */
+    remind: actorProcedure
+      .input(zRemindInput)
+      .output(zReminder)
+      .mutation(async ({ ctx, input }) => {
+        const author = actingPerson(ctx.actor);
+        if (author === null) forbid("PRV-1: a reminder must be asked for by a person");
+        if (ctx.actor.kind === ActorKind.agent && ctx.actor.message !== input.sourceMessage) forbid("PRV-1: a job can only set a reminder from the message it is handling");
+        const index = input.index ?? 0;
+        const key = index === 0 ? input.sourceMessage : `${input.sourceMessage}#${index}`;
+        const existing = await db.query.reminders.findFirst({ where: eq(schema.reminders.sourceMessage, key) });
+        if (existing !== undefined) return toReminder(existing);
+        const [row] = await db
+          .insert(schema.reminders)
+          .values({ text: input.text, for: [...new Set(input.for)], date: input.date, time: input.time, askedBy: author, createdVia: input.createdVia, sourceMessage: key, createdAt: ctx.now })
+          .returning();
+        if (row === undefined) throw new Error("insert failed");
+        ctx.publish("backlog");
+        return toReminder(row);
+      }),
+
+    /** CAP-10: open reminders on the days from `from` to `to`, by day and time. */
+    reminders: readProcedure
+      .input(zLocalDateRangeInput)
+      .output(z.array(zReminder))
+      .query(async ({ input }) =>
+        (
+          await db
+            .select()
+            .from(schema.reminders)
+            .where(and(eq(schema.reminders.status, ReminderStatus.open), gte(schema.reminders.date, input.from), lte(schema.reminders.date, input.to)))
+            .orderBy(asc(schema.reminders.date), asc(schema.reminders.time), asc(schema.reminders.createdAt))
+        ).map(toReminder),
+      ),
+
+    getReminder: readProcedure.input(zIdInput).output(zReminder.nullable()).query(async ({ input }) => {
+      const row = await db.query.reminders.findFirst({ where: eq(schema.reminders.id, input.id) });
+      return row === undefined ? null : toReminder(row);
+    }),
+
+    /** CAP-10: Done, by a person or a job acting for one. */
+    reminderDone: actorProcedure.input(zIdInput).output(zReminder).mutation(async ({ ctx, input }) => {
+      await reminderRow(input.id);
+      const [row] = await db.update(schema.reminders).set({ status: ReminderStatus.done, doneAt: ctx.now }).where(eq(schema.reminders.id, input.id)).returning();
+      if (row === undefined) throw new Error("update failed");
+      ctx.publish("backlog");
+      return toReminder(row);
+    }),
+
+    /** CAP-10: "Not now" (or "Later" on a message) moves an open reminder to another day; its time stays. */
+    moveReminder: actorProcedure.input(zReminderMoveInput).output(zReminder).mutation(async ({ ctx, input }) => {
+      const reminder = await reminderRow(input.id);
+      if (reminder.status !== ReminderStatus.open) return toReminder(reminder);
+      const [row] = await db.update(schema.reminders).set({ date: input.date }).where(eq(schema.reminders.id, input.id)).returning();
+      if (row === undefined) throw new Error("update failed");
+      ctx.publish("backlog");
+      return toReminder(row);
+    }),
+
+    /**
+     * CAP-10: a reminder with no time stays on Today for the rest of its day; one still open after that
+     * becomes a backlog item (CAP-1/CAP-2) with the same text, written by whoever asked for it.
+     */
+    remindersToBacklog: systemProcedure
+      .input(zRemindersToBacklogInput)
+      .output(z.array(zBacklogItem))
+      .mutation(async ({ ctx, input }) => {
+        const due = await db
+          .select()
+          .from(schema.reminders)
+          .where(and(eq(schema.reminders.status, ReminderStatus.open), isNull(schema.reminders.time), lt(schema.reminders.date, input.today)));
+        const moved: BacklogItem[] = [];
+        for (const r of due) {
+          const item = await db.transaction(async (tx) => {
+            const [row] = await tx
+              .insert(schema.items)
+              .values({ text: r.text, tags: [], createdBy: r.askedBy, createdVia: r.createdVia, sourceMessage: `reminder:${r.id}`, createdAt: ctx.now })
+              .returning();
+            if (row === undefined) throw new Error("insert failed");
+            await tx.update(schema.reminders).set({ status: ReminderStatus.moved, itemId: row.id }).where(eq(schema.reminders.id, r.id));
+            return row;
+          });
+          moved.push(toItem(item));
+        }
+        if (due.length > 0) ctx.publish("backlog");
+        return moved;
+      }),
+
     /** PRV-7. */
     exportPerson: systemProcedure.input(zPersonInput).query(async ({ input }) => ({
       items: (await db.select().from(schema.items).where(eq(schema.items.createdBy, input.person))).map(toItem),
       notNows: await db.select().from(schema.notNows).where(eq(schema.notNows.person, input.person)),
+      reminders: (await db.select().from(schema.reminders).where(eq(schema.reminders.askedBy, input.person))).map(toReminder),
     })),
     deletePerson: systemProcedure.input(zPersonInput).mutation(async ({ input }) => {
       await db.delete(schema.notNows).where(eq(schema.notNows.person, input.person));
+      await db.delete(schema.reminders).where(eq(schema.reminders.askedBy, input.person));
       const mine = await db.select({ id: schema.items.id }).from(schema.items).where(eq(schema.items.createdBy, input.person));
       if (mine.length > 0) await db.delete(schema.items).where(and(inArray(schema.items.id, mine.map((m) => m.id))));
     }),

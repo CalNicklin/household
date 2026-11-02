@@ -127,7 +127,7 @@ describe("Code rules that a tool enforces", () => {
   test("[FB-3] every line in Morning glance, Capture, In the moment, Proactive nudges and Automations has a Playwright journey", () => {
     const journeys = files(path.join(ROOT, "e2e"), /\.spec\.ts$/).map((f) => readFileSync(f, "utf8")).join("\n");
     const userFacing = [...loadVerifications().keys()].filter((id) => /^(HOME|CAP|MOM|PRO|AUT)-/.test(id));
-    expect(userFacing.length).toBe(46);
+    expect(userFacing.length).toBe(47);
     for (const id of userFacing) expect(journeys, `${id} has no journey`).toContain(`[${id}]`);
   });
 
