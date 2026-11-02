@@ -12,9 +12,10 @@ function pickOf(toolCalls: readonly { tool: string; output: unknown }[]): Answer
 
 /**
  * HOU-159: today's conversation between this person and the house, oldest first: each thing they
- * said in the app (taps are not things said, but an accept's answer is shown) and the house's reply. Only today's, in the house's
+ * said in the app (taps are not things said) and the house's reply. Only today's, in the house's
  * time zone, so yesterday's is gone. HOU-149: an answer from `what_now` also carries the one thing
- * it named, so the screen shows the thing and its reason rather than prose.
+ * it named, so the screen shows the thing and its reason rather than prose. HOU-173: an accept tap
+ * is the exception, so its answer ("Pencilled in for Wednesday morning") shows as the confirmation.
  */
 export async function conversationView(rt: Runtime, person: string): Promise<ConversationView> {
   const api = rt.system("views");
