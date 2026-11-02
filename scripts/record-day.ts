@@ -14,6 +14,7 @@ if (date === undefined || !/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new Error("us
 
 const zFacts = z.object({
   events: z.array(z.object({ title: z.string(), start: z.string(), end: z.string() })).default([]),
+  // Plans saved before HOU-156 kept the mode on now here; later ones keep `modes`, read via the plan's mode block.
   mode: z.object({ mode: z.string() }).nullable().default(null),
 });
 
@@ -24,12 +25,14 @@ try {
   const facts = zFacts.parse(latest?.inputs["facts"] ?? {});
   const blocks = (latest?.blocks ?? []).map((b) => ({ id: b.id, type: b.type, title: "title" in b ? b.title : b.type === BlockType.arrival ? b.shop : b.type, reason: b.reason }));
   const events = (await api.learning.events()).filter((e) => e.date === date);
+  const modeBlock = latest?.blocks.find((b) => b.type === BlockType.mode);
   const day: RecordedDay = zRecordedDay.parse({
     date,
     inputs: {
       calendar: facts.events.map((e) => ({ title: e.title, start: e.start, end: e.end })),
       weather: events[0]?.weather ?? "unknown",
-      mode: facts.mode?.mode ?? ModeKind.normal,
+      // HOU-156: the day's mode is the one its plan showed: its mode block, if it had one.
+      mode: modeBlock?.type === BlockType.mode ? modeBlock.mode : (facts.mode?.mode ?? ModeKind.normal),
     },
     blocks,
     responses: events.map((e) => ({ ref: e.ref, subject: e.subject, action: e.kind, person: e.person, at: e.at, dayPart: e.dayPart, weekday: e.weekday })),

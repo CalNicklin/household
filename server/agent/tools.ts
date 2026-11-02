@@ -1,5 +1,5 @@
 import { createTool } from "@mastra/core/tools";
-import { ActionKind, type BacklogTag, Limits, ListWriteOutcome, LongTool, type ModeKind as Mode, ModeKind, Urgency, zActionKind, zBacklogTag } from "@household/contracts";
+import { ActionKind, type BacklogTag, Limits, ListWriteOutcome, LongTool, type ModeKind as Mode, ModeKind, ModeLabel, Urgency, zActionKind, zBacklogTag } from "@household/contracts";
 import { z } from "zod";
 import { gatherFacts, oneThingCandidates } from "../planner/gather.ts";
 import { inQuietHours } from "../rules/budget.ts";
@@ -86,7 +86,6 @@ export function houseTools(scope: JobScope) {
     }),
   });
 
-  const MODE_NAME: Record<Mode, string> = { [ModeKind.slow]: "Slow day", [ModeKind.sick]: "Sick day", [ModeKind.away]: "Away", [ModeKind.normal]: "Normal day" };
   const setMode = createTool({
     id: "set_mode",
     description:
@@ -114,14 +113,14 @@ export function houseTools(scope: JobScope) {
         const next = addLocalDays(last, 1);
         const noon = atLocal(next, 12, 0, tz).toISOString();
         const later = (await api.household.modesBetween({ from: noon, to: noon })).find((m) => m.mode !== ModeKind.normal && m.startsAt <= noon);
-        const still = later === undefined ? "" : ` ${last === date ? "Tomorrow" : longDate(next)} is still ${MODE_NAME[later.mode].toLowerCase()}.`;
+        const still = later === undefined ? "" : ` ${last === date ? "Tomorrow" : longDate(next)} is still ${ModeLabel[later.mode].toLowerCase()}.`;
         if (input.mode === ModeKind.normal) return { say: `Back to a normal day.${still}` };
         const until = last === date ? "midnight" : last === addLocalDays(date, 1) ? "the end of tomorrow" : `the end of ${longDate(last)}`;
-        return { say: `${MODE_NAME[input.mode]} until ${until}. I've made today smaller.${still}` };
+        return { say: `${ModeLabel[input.mode]} until ${until}. I've made today smaller.${still}` };
       }
       const days = span.from === last ? longDate(span.from) : `${longDate(span.from)} to ${longDate(last)}`;
       if (input.mode === ModeKind.normal) return { say: `${days}: back to normal days.` };
-      return { say: `${MODE_NAME[input.mode]}: ${days}. I'll make ${span.from === last ? "that day" : "those days"} smaller.` };
+      return { say: `${ModeLabel[input.mode]}: ${days}. I'll make ${span.from === last ? "that day" : "those days"} smaller.` };
     }),
   });
 
