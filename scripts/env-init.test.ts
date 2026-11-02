@@ -71,8 +71,10 @@ describe("env-init", () => {
     expect(emptied.out).toContain("added to .env: MODEL_ID, MCP_TOKEN");
     expect(emptied.env).toMatch(/^MCP_TOKEN=.{8,}$/m);
     expect(emptied.env.match(/^MCP_TOKEN=/gm)).toHaveLength(1);
-    // A value already there is never replaced, even the practice model on a house that chose it.
+    // A value already there is never replaced: another provider, or even the practice model (which the
+    // real house then refuses at startup, naming the fix, rather than env-init changing it silently).
     expect(envInit("PRACTICE=false\nMODEL_PROVIDER=openai\n", "--real").env).toMatch(/^PRACTICE=false\nMODEL_PROVIDER=openai\n/);
+    expect(envInit("PRACTICE=false\nMODEL_PROVIDER=practice\n", "--real").env).toMatch(/^PRACTICE=false\nMODEL_PROVIDER=practice\n/);
   });
 
   test("[HOU-160] install.sh runs it on every run, not only when .env is new", () => {
