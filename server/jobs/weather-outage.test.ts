@@ -117,10 +117,10 @@ describe("HOU-170: a weather outage never stops planning", () => {
       expect(job.toolCalls).toContainEqual({ tool: "replan", input: { date: "2026-11-03" }, output: { failed: "planner broke", retrying: true } });
       expect(await poll(async () => (await h.rt.system("test").parcels.all()).find((a) => a.shop === "Screwfix" && a.expectedDate === "2026-11-03"))).toBeTruthy();
       // The retry is a durable workflow, waiting out its delay before it tries again.
-      const pending = await DBOS.getWorkflowStatus(`${job.id}:replan:2026-11-03`);
+      const pending = await DBOS.getWorkflowStatus(`${job.id}:replan:2026-11-03:job:${job.id}`);
       expect(pending?.status).toBe("PENDING");
-      await DBOS.cancelWorkflow(`${job.id}:replan:2026-11-03`);
-      await DBOS.cancelWorkflow(`${job.id}:replan:2026-11-02`);
+      await DBOS.cancelWorkflow(`${job.id}:replan:2026-11-03:job:${job.id}`);
+      await DBOS.cancelWorkflow(`${job.id}:replan:2026-11-02:job:${job.id}`);
 
       // Once the planner is back, the retry re-plans the day and the arrival is on it.
       h.rt.ports.shopping = shopping;

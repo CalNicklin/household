@@ -48,4 +48,15 @@ describe("timers adapter", () => {
     expect(run?.firedAt).not.toBeNull();
     expect(await runMissedMorningPlan(h.rt, atLocal("2026-11-03", 9, 20, "Europe/London"))).toBeNull();
   });
+
+  test("[CH-5] HOU-170: a restart just after 05:30, before that fire is logged as missed, still runs the morning plan", async () => {
+    const day = "2026-11-04";
+    expect(await runMissedMorningPlan(h.rt, atLocal(day, 5, 20, "Europe/London"))).toBeNull();
+    const jobId = await runMissedMorningPlan(h.rt, atLocal(day, 5, 31, "Europe/London"));
+    expect(jobId).not.toBeNull();
+    await waitForJob(jobId ?? "");
+    const at = atLocal(day, 5, 30, "Europe/London").toISOString();
+    expect((await h.rt.system("test").jobs.timerRuns()).find((r) => r.timer === TimerKind.morningPlan && r.scheduledFor === at)?.firedAt).not.toBeNull();
+    expect(await runMissedMorningPlan(h.rt, atLocal(day, 5, 40, "Europe/London"))).toBeNull();
+  });
 });

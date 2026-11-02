@@ -113,6 +113,7 @@ export class PracticeWeather implements WeatherSource {
   /** HOU-170: the practice weather service answering 503, as Open-Meteo did on 2 November. */
   down = false;
   async hourly(date: LocalDate): Promise<HourlyForecast[]> {
+    // The shape of `IntegrationError` (name, message, status): practice may not import the integrations (fallow boundaries).
     if (this.down) throw Object.assign(new Error("Open-Meteo forecast failed with HTTP 503"), { name: "IntegrationError", status: 503 });
     const override = this.overrides.get(date);
     if (override !== undefined) return override;

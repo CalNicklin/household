@@ -41,8 +41,9 @@ export async function applyEffects(jobId: string, effects: Effects, person: stri
       totals.costMicros += r.costMicros;
     } catch (e) {
       totals.replanFailures.push({ date, error: e instanceof Error ? e.message : String(e) });
+      // Keyed by trigger too: a long step's re-plan of the same date later gets its own retry.
       // limit: replanRetryDelayMs
-      await DBOS.startWorkflow(retryReplan, { workflowID: `${jobId}:replan:${date}` })(date, trigger, jobId, Limits.replanRetryDelayMs.value);
+      await DBOS.startWorkflow(retryReplan, { workflowID: `${jobId}:replan:${date}:${trigger}` })(date, trigger, jobId, Limits.replanRetryDelayMs.value);
     }
   }
   // PLT-10: long tool calls are child workflows. They report back to this job; the coordinator never waits.
@@ -63,6 +64,8 @@ async function longToolCallImpl(step: LongStep, parentJob: string, person: strin
     return { effects: r.effects, report: zLongStepReport.parse(r.report) };
   }, { name: checked.tool });
   const usage = await applyEffects(parentJob, effects, person, `${checked.tool}:${report.key}`);
+  // HOU-170: the parent job has usually finished by now, so a failed re-plan is logged here (it is being retried).
+  for (const f of usage.replanFailures) console.warn(JSON.stringify({ event: "replan-failed", job: parentJob, tool: checked.tool, date: f.date, error: f.error, retrying: true }));
   await DBOS.send(parentJob, report, checked.tool);
   if (usage.inputTokens === 0 && usage.outputTokens === 0 && usage.costMicros === 0) return;
   // QA-8 / QA-10: the parent writes its own totals when it finishes, so add ours after that. A job that
@@ -99,7 +102,7 @@ async function retryReplanImpl(date: LocalDate, trigger: string, parentJob: stri
     } catch {
       // The parent's error is on its own job row.
     }
-    const source = DBOS.workflowID ?? `${parentJob}:replan:${date}`;
+    const source = DBOS.workflowID ?? `${parentJob}:replan:${date}:${trigger}`;
     const { inputTokens, outputTokens, costMicros } = usage;
     if (inputTokens + outputTokens + costMicros > 0) await DBOS.runStep(async () => rt.system("QA-8").jobs.addJobUsage({ id: parentJob, source, inputTokens, outputTokens, costMicros }), { name: "usage" });
     return true;

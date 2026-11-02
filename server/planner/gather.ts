@@ -30,33 +30,37 @@ export async function gatherFacts(rt: Runtime, from: LocalDate, days: number): P
   };
 }
 
+/** When each weather source last failed its retries (in-process; a restart simply tries afresh). */
+const downAt = new WeakMap<object, number>();
+
 /**
  * HOU-170: weather is an input, not a requirement. Each date's forecast is fetched and kept (PLT-3);
  * a transient failure gets a short bounded retry, then the last good forecast for that date stands
  * in, or none, which the rules read as "not known": nothing that needs dry weather fires and the
  * context line says the forecast isn't available. One warning per outage, never a failed plan.
  */
-/** When each weather source last failed its retries (in-process; a restart simply tries afresh). */
-const downAt = new WeakMap<object, number>();
-
 export async function forecasts(rt: Runtime, dates: readonly LocalDate[], latitude: number, longitude: number): Promise<Record<LocalDate, HourlyForecast[]>> {
   const api = rt.system("weather");
   const out: Record<LocalDate, HourlyForecast[]> = {};
   let down: { status: number | null; error: string } | null = null;
   for (const date of dates) {
     if (down === null) {
+      let hours: HourlyForecast[] | null = null;
       try {
         // limit: weatherDownForMs
         const recentlyDown = Date.now() - (downAt.get(rt.ports.weather) ?? -Infinity) < Limits.weatherDownForMs.value;
-        const hours = await withRetry(() => rt.ports.weather.hourly(date, latitude, longitude, rt.timeZone), recentlyDown ? 1 : undefined);
+        hours = await withRetry(() => rt.ports.weather.hourly(date, latitude, longitude, rt.timeZone), recentlyDown ? 1 : undefined);
         downAt.delete(rt.ports.weather);
-        await api.plans.saveForecast({ date, hours });
-        out[date] = hours;
-        continue;
       } catch (e) {
         downAt.set(rt.ports.weather, Date.now());
         down = { status: statusOf(e), error: e instanceof Error ? e.name : "unknown" };
         console.warn(JSON.stringify({ event: "weather-unavailable", status: down.status, error: down.error, date }));
+      }
+      // Outside the try: a database fault is not a weather outage, and fails the plan as it should.
+      if (hours !== null) {
+        await api.plans.saveForecast({ date, hours });
+        out[date] = hours;
+        continue;
       }
     }
     out[date] = (await api.plans.forecast({ date }))?.hours ?? [];
