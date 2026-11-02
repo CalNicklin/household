@@ -41,8 +41,21 @@ test("[HOME-6] (HOU-165) on a shared iPad one person's offline views never show 
   await evidence(page, "HOU-165-priya-offline-plan");
   await ctx.setOffline(false);
 
-  // Tom signs in on the same iPad: Priya's views go, and offline he sees his plan and none of hers.
+  // Tom signs in on the same iPad, on a page the worker doesn't control (as after a hard reload), so the
+  // worker never sees his login: Priya's views still go, and offline he sees his plan and none of hers.
+  await page.evaluate(() => navigator.serviceWorker.getRegistration().then((r) => r?.unregister()));
+  // (Routing /sw.js would also take the worker's own fetches past setOffline, so registering is held off instead.)
+  await page.addInitScript(() => {
+    if (sessionStorage.getItem("no-worker") === "1") ServiceWorkerContainer.prototype.register = () => new Promise(() => {});
+  });
+  await page.evaluate(() => sessionStorage.setItem("no-worker", "1"));
   await loginWithForm(page, "tom");
+  expect(await page.evaluate(() => navigator.serviceWorker.controller === null)).toBe(true);
+  expect(await kept(page)).not.toContain("household-views:priya");
+  await page.evaluate(() => sessionStorage.removeItem("no-worker"));
+  await page.reload();
+  await expect.poll(() => page.evaluate(() => navigator.serviceWorker.controller !== null)).toBe(true);
+  await page.reload();
   await expect(page.getByText("Hang the washing out")).toBeVisible();
   await expect.poll(() => kept(page)).toEqual(["household-views:tom"]);
   await ctx.setOffline(true);

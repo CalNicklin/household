@@ -150,6 +150,9 @@ export type LiveTopic = (typeof LiveTopic)[keyof typeof LiveTopic];
  */
 export const VIEW_PERSON_HEADER = "x-household-person";
 
+/** HOU-165: the service worker's offline views live in caches named this, then the person's id. */
+export const VIEWS_CACHE_PREFIX = "household-views:";
+
 /**
  * HOU-165: person-scoped views too private to keep on the device at all: today's conversation, the
  * settings (wellbeing scores, PRV-2) and the agent's runs, run log and traces (what was said). They are sent

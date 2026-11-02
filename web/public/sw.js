@@ -11,7 +11,7 @@
 // (NO_STORE_VIEWS) are never kept, so on a shared iPad no one sees another's views, online or not.
 const BUILD = "__BUILD__";
 const SHELL = `household-shell-${BUILD}`;
-const VIEWS = "household-views:";
+const VIEWS = "household-views:"; // VIEWS_CACHE_PREFIX in contracts/src/views.ts
 const PERSON_HEADER = "x-household-person";
 
 self.addEventListener("install", (event) => {
