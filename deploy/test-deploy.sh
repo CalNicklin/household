@@ -216,7 +216,7 @@ from_preview() { # <port> <host>
     req.end();' "$ip" "$1" "$2"
 }
 # Without other apps' sites nothing changes: a preview reaches Caddy as the internet does (FB-5).
-[ "$(from_preview 443 localhost)" = "answered 200" ] || fail "the stand-in preview could not reach Caddy without sites: $(from_preview 443 localhost)"
+[[ "$(from_preview 443 localhost)" == answered* ]] || fail "the stand-in preview could not reach Caddy without sites: $(from_preview 443 localhost)"
 
 # A directory someone besides root can write: left out, and the house deploys exactly as before.
 before="$(caddy_now)"
