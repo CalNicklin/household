@@ -34,9 +34,6 @@ export function createApp(rt: Runtime, adapters: Adapter[], extra?: (app: Hono<H
   });
 
   app.get("/healthz", (c) => c.text("ok"));
-  // HOU-166: a navigation the page makes to get a waiting service worker to take over (nudge in
-  // web/src/data/sw.ts). It does nothing and has nothing to show; the navigation is the point.
-  app.get("/api/takeover", (c) => c.body(null, 204));
 
   app.post("/api/login", async (c) => {
     const input = zLoginInput.parse(await c.req.json());
@@ -63,6 +60,10 @@ export function createApp(rt: Runtime, adapters: Adapter[], extra?: (app: Hono<H
     c.set("person", person);
     return next();
   });
+
+  // HOU-166: a navigation a logged-in screen makes to get a waiting service worker to take over (nudge
+  // in web/src/data/sw.ts). It does nothing and has nothing to show; the navigation is the point.
+  app.get("/api/takeover", (c) => c.body(null, 204));
 
   app.all("/api/trpc/*", (c) =>
     fetchRequestHandler({
