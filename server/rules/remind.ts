@@ -183,8 +183,12 @@ const NOT_ABOUT = new Set(
 export function matchReminders<R extends Pick<Reminder, "text" | "date" | "time">>(open: readonly R[], which: string, today: LocalDate): R[] {
   const text = which.toLowerCase();
   let found = [...open];
-  const day = NAMES_A_DAY.test(text) || /\b(today|tonight|tomorrow)\b/.test(text) ? dayIn(text, today) : null;
-  if (day !== null) found = found.filter((r) => r.date === day);
+  if (NAMES_A_DAY.test(text) || /\b(today|tonight|tomorrow)\b/.test(text)) {
+    // A day said but not settled ("Tuesday 4 November" when the 4th is a Wednesday) matches nothing: ask.
+    const day = dayIn(text, today);
+    if (day === null) return [];
+    found = found.filter((r) => r.date === day);
+  }
   const clock = clockWords(text);
   if (clock !== null) {
     const hours = clock.meridiem === undefined ? [clock.hour % 24, (clock.hour + 12) % 24] : [(clock.hour % 12) + (clock.meridiem === "pm" ? 12 : 0)];

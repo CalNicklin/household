@@ -1,4 +1,4 @@
-import { ActionKind, BlockType, DayPart, type LocalDate, LongTool, ModeKind, NotificationStatus, ReminderStatus, RhythmSource, ShoppingStatus, zLocalTime } from "@household/contracts";
+import { ActionKind, BlockType, Channel, DayPart, type LocalDate, LongTool, ModeKind, NotificationStatus, ReminderStatus, RhythmSource, ShoppingStatus, zLocalTime } from "@household/contracts";
 import { START_REF_PREFIX } from "../planner/first-day.ts";
 import { forecasts } from "../planner/gather.ts";
 import { parsePencil, pencilledLine } from "../planner/pencil.ts";
@@ -74,7 +74,9 @@ async function respondToReminder(scope: JobScope, ref: string, action: ActionKin
     replan(addLocalDays(date, 1));
     return to === addLocalDays(date, 1) ? `Moved to tomorrow: ${reminder.text}.` : `Moved to ${longDate(to)}: ${reminder.text}.`;
   }
-  // HOU-174: a person's Change time or Delete on the reminder (PRV-1: they asked).
+  // HOU-174: a person's Change time or Delete on the reminder (PRV-1: they asked). Never from an email,
+  // whose words are someone else's.
+  if ((action === ActionKind.retime || action === ActionKind.cancel) && scope.channel === Channel.email) return "";
   if (action === ActionKind.retime) {
     if (value === null || !zLocalTime.safeParse(value).success) return "What time should it be?";
     return (await changeReminder(scope, reminder, { date: reminder.date, time: value })).say;

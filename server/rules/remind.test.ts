@@ -99,6 +99,9 @@ describe("HOU-174: which reminder a person means, and its new time", () => {
     expect(matchReminders(open, "the dentist reminder", MON).map((r) => r.text)).toEqual(["Ring the dentist"]);
     expect(matchReminders(open, "the swimming reminder", MON)).toEqual([]);
     expect(matchReminders(open, "my reminder", MON)).toHaveLength(3);
+    // Cal's words name the day; a day that can't be settled matches nothing, so the house asks (AR-14).
+    expect(matchReminders(open, "BoyBoy reminder on Wednesday 4th", MON)).toHaveLength(2);
+    expect(matchReminders(open, "the BoyBoy reminder on Tuesday 4 November", MON)).toEqual([]);
   });
 
   test("[CAP-10] a time alone keeps the reminder's day, typed as people type it; a day alone keeps its time", () => {

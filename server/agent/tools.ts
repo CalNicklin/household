@@ -217,7 +217,8 @@ export function houseTools(scope: JobScope) {
   const respondTool = createTool({
     id: "respond",
     description: "Done, not today, snooze or accept on something on the screen, by its ref.",
-    inputSchema: z.object({ ref: z.string(), action: zActionKind, value: z.string().nullable().optional() }),
+    // HOU-174: a reminder's Change time and Delete are a person's tap, or change_reminder / cancel_reminder; never this.
+    inputSchema: z.object({ ref: z.string(), action: zActionKind.exclude([ActionKind.retime, ActionKind.cancel]), value: z.string().nullable().optional() }),
     execute: record("respond", async (input: { ref: string; action: ActionKind; value?: string | null | undefined }) => ({ say: await respond(scope, input.ref, input.action, input.value ?? null) })),
   });
 

@@ -2,6 +2,7 @@ import { ActionKind, ActorKind, type Block, BlockType, Channel, ReminderStatus, 
 import { afterAll, beforeAll, describe, expect, test } from "vitest";
 import { findReminder } from "../agent/reminders.ts";
 import { jobScope } from "../agent/scope.ts";
+import { respond } from "../agent/respond.ts";
 import { houseTools } from "../agent/tools.ts";
 import { acceptTimer } from "../coordinator/accept.ts";
 import { testHousehold, type TestHousehold } from "../testing/household.ts";
@@ -88,6 +89,9 @@ describe("HOU-174: a reminder is moved or cancelled when a person asks, never du
     const email = houseTools(jobScope(h.rt, "j", "email-message", "tom", Channel.email));
     expect(await email.cancel_reminder.execute?.({ which: "the BoyBoy reminder", ref: `reminder:${r.id}` }, {})).toEqual({ cancelled: false, say: "" });
     expect(await email.change_reminder.execute?.({ which: "the BoyBoy reminder", ref: `reminder:${r.id}`, when: "06:00" }, {})).toEqual({ changed: false, say: "" });
+    // Nor through respond, the agent's general tap tool: Change time and Delete aren't actions it takes (AR-13).
+    expect(await email.respond.inputSchema?.["~standard"].validate({ ref: `reminder:${r.id}`, action: ActionKind.cancel })).toHaveProperty("issues");
+    expect(await respond(jobScope(h.rt, "j", "email-message", "tom", Channel.email), `reminder:${r.id}`, ActionKind.cancel, null)).toBe("");
     expect((await upcoming()).map((x) => x.time)).toEqual(["07:30"]);
   });
 
