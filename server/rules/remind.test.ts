@@ -1,7 +1,7 @@
 import { type Person, PersonRole, Section } from "@household/contracts";
 import { describe, expect, test } from "vitest";
 import { atLocal } from "../time.ts";
-import { isDue, reminderFor, reminderPeople, reminderSection, reminderWhen } from "./remind.ts";
+import { isDue, matchReminders, reminderFor, reminderPeople, reminderSection, reminderWhen, retimeWhen } from "./remind.ts";
 
 const TZ = "Europe/London";
 const MON = "2026-11-02";
@@ -81,5 +81,34 @@ describe("CAP-10: where a reminder sits", () => {
     expect(isDue({ date: MON, time: null }, at(23, 59), TZ)).toBe(false);
     expect(reminderSection({ date: TUE, time: "09:00" }, MON, at(14), TZ)).toBe(Section.tomorrow);
     expect(reminderSection({ date: "2026-11-06", time: null }, MON, at(14), TZ)).toBeNull();
+  });
+});
+
+describe("HOU-174: which reminder a person means, and its new time", () => {
+  const WED = "2026-11-04";
+  const open = [
+    { text: "Check BoyBoy's lunchtime nap", date: WED, time: "07:30" },
+    { text: "Check BoyBoy's lunchtime nap", date: WED, time: "09:00" },
+    { text: "Ring the dentist", date: TUE, time: null },
+  ];
+  test("[CAP-10] a time, a day or the words narrow it; several that fit are all returned, so the caller asks", () => {
+    expect(matchReminders(open, "the BoyBoy reminder", MON)).toHaveLength(2);
+    expect(matchReminders(open, "the 9 o'clock BoyBoy reminder", MON).map((r) => r.time)).toEqual(["09:00"]);
+    expect(matchReminders(open, "the 7:30 one", MON).map((r) => r.time)).toEqual(["07:30"]);
+    expect(matchReminders(open, "tomorrow's reminder", MON).map((r) => r.text)).toEqual(["Ring the dentist"]);
+    expect(matchReminders(open, "the dentist reminder", MON).map((r) => r.text)).toEqual(["Ring the dentist"]);
+    expect(matchReminders(open, "the swimming reminder", MON)).toEqual([]);
+    expect(matchReminders(open, "my reminder", MON)).toHaveLength(3);
+  });
+
+  test("[CAP-10] a time alone keeps the reminder's day, typed as people type it; a day alone keeps its time", () => {
+    const boy = { date: WED, time: "09:00" };
+    expect(retimeWhen("7:30", boy, at(14), TZ)).toEqual({ date: WED, time: "07:30" });
+    expect(retimeWhen("730", boy, at(14), TZ)).toEqual({ date: WED, time: "07:30" });
+    expect(retimeWhen("8am", boy, at(14), TZ)).toEqual({ date: WED, time: "08:00" });
+    expect(retimeWhen("Thursday", boy, at(14), TZ)).toEqual({ date: "2026-11-05", time: "09:00" });
+    expect(retimeWhen("tomorrow at 8", boy, at(14), TZ)).toEqual({ date: TUE, time: "08:00" });
+    expect(retimeWhen("earlier", boy, at(14), TZ)).toBeNull();
+    expect(reminderWhen("on 4 Nov 2026", at(14), TZ)).toEqual({ date: WED, time: null });
   });
 });

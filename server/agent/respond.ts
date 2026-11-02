@@ -1,7 +1,8 @@
-import { ActionKind, BlockType, DayPart, type LocalDate, LongTool, ModeKind, NotificationStatus, ReminderStatus, RhythmSource, ShoppingStatus } from "@household/contracts";
+import { ActionKind, BlockType, DayPart, type LocalDate, LongTool, ModeKind, NotificationStatus, ReminderStatus, RhythmSource, ShoppingStatus, zLocalTime } from "@household/contracts";
 import { START_REF_PREFIX } from "../planner/first-day.ts";
 import { forecasts } from "../planner/gather.ts";
 import { addLocalDays, localDate, localHour, longDate, weekdayOf } from "../time.ts";
+import { cancelReminder, changeReminder } from "./reminders.ts";
 import type { JobScope } from "./scope.ts";
 
 export function dayPartOf(hour: number): DayPart {
@@ -49,10 +50,10 @@ async function weatherNow(scope: JobScope, now: Date): Promise<string> {
   return `${h.precipitationProbability < 40 ? "dry" : "wet"} ${Math.round(h.temperatureC)}°`;
 }
 
-async function respondToReminder(scope: JobScope, ref: string, action: ActionKind, date: LocalDate): Promise<string> {
+async function respondToReminder(scope: JobScope, ref: string, action: ActionKind, date: LocalDate, value: string | null): Promise<string> {
   const reminder = await scope.api.backlog.getReminder({ id: ref.slice("reminder:".length) });
   if (reminder === null) return "I can't find that reminder.";
-  if (reminder.status !== ReminderStatus.open) return reminder.status === ReminderStatus.done ? "That's already done." : "That's on the Backlog now.";
+  if (reminder.status !== ReminderStatus.open) return ALREADY[reminder.status];
   const replan = (d: LocalDate) => {
     if (!scope.effects.replan.includes(d)) scope.effects.replan.push(d);
   };
@@ -72,8 +73,20 @@ async function respondToReminder(scope: JobScope, ref: string, action: ActionKin
     replan(addLocalDays(date, 1));
     return to === addLocalDays(date, 1) ? `Moved to tomorrow: ${reminder.text}.` : `Moved to ${longDate(to)}: ${reminder.text}.`;
   }
+  // HOU-174: a person's Change time or Delete on the reminder (PRV-1: they asked).
+  if (action === ActionKind.retime) {
+    if (value === null || !zLocalTime.safeParse(value).success) return "What time should it be?";
+    return (await changeReminder(scope, reminder, { date: reminder.date, time: value })).say;
+  }
+  if (action === ActionKind.cancel) return (await cancelReminder(scope, reminder)).say;
   return "Noted.";
 }
+
+const ALREADY: Record<Exclude<ReminderStatus, "open">, string> = {
+  [ReminderStatus.done]: "That's already done.",
+  [ReminderStatus.moved]: "That's on the Backlog now.",
+  [ReminderStatus.cancelled]: "That reminder was cancelled.",
+};
 
 /**
  * Done, Not today, Snooze, hand-over, accept or answer — however it arrived (HOME-4/5, CH-8).
@@ -95,7 +108,7 @@ export async function respond(scope: JobScope, ref: string, action: ActionKind, 
   }
   // CAP-10: Done, or Not now / Later (to tomorrow). A reminder someone asked for is theirs, not a
   // suggestion: nothing to learn from, nothing to remember.
-  if (ref.startsWith("reminder:")) return respondToReminder(scope, ref, action, date);
+  if (ref.startsWith("reminder:")) return respondToReminder(scope, ref, action, date, value);
   await scope.api.plans.respond({ ref, action, channel: scope.channel, date, value });
   const subject = await subjectFor(scope, ref, date);
 

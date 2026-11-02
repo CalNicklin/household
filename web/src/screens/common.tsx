@@ -1,4 +1,4 @@
-import { type Block, type ConversationView, ExchangeState, type NotifyAction } from "@household/contracts";
+import { ActionKind, ActionLabel, type Block, type ConversationView, ExchangeState, type NotifyAction } from "@household/contracts";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect } from "react";
 import type { BlockHandlers } from "../blocks/BlockRenderer.tsx";
@@ -52,13 +52,20 @@ function useSay() {
 /** One-tap buttons: hide the block straight away (HOME-5), then send the tap as a message. */
 export function useBlockHandlers(version: number): BlockHandlers & { isHidden: (block: Block) => boolean } {
   const { hidden, hide } = useUiState();
+  const { isDeleted, remove } = useUndo();
   const queryClient = useQueryClient();
+  const send = (action: NotifyAction) =>
+    say({ text: action.label, ref: action.ref, action: action.kind, ...(action.value === undefined ? {} : { value: action.value }) }).then(() => queryClient.invalidateQueries());
   return {
-    isHidden: (block) => hidden.has(`${version}:${block.id}`),
+    isHidden: (block) => hidden.has(`${version}:${block.id}`) || isDeleted(`block:${block.id}`),
     onAction: (block: Block, action: NotifyAction) => {
       hide(`${version}:${block.id}`);
-      void say({ text: action.label, ref: action.ref, action: action.kind, ...(action.value === undefined ? {} : { value: action.value }) }).then(() => queryClient.invalidateQueries());
+      void send(action);
     },
+    // HOU-174: the card stays until the screen is redrawn with its new time.
+    onRetime: (_block, ref, time) => void send({ kind: ActionKind.retime, label: `Change time to ${time}`, ref, value: time }),
+    // HOU-174: like a backlog item's Delete (HOU-158): gone at once, sent when the Undo window ends.
+    onDelete: (block, ref, title) => remove(`block:${block.id}`, `Deleted “${title}”`, () => send({ kind: ActionKind.cancel, label: ActionLabel[ActionKind.cancel], ref })),
   };
 }
 

@@ -89,6 +89,23 @@ function remindCall(text: string): Call | null {
   return { tool: "remind", input: { text: rest.replace(/^./, (c) => c.toUpperCase()), for: who, when } };
 }
 
+// HOU-174: "cancel the 9 o'clock BoyBoy reminder", "make the BoyBoy reminder 7:30", "move that reminder to Thursday".
+const CANCEL_REMINDER = /^(?:please\s+)?(?:can you\s+)?(?:cancel|delete|remove|scrap|drop)\s+(.*\breminder)\b/i;
+const CHANGE_REMINDER = /^(?:please\s+)?(?:can you\s+)?(?:make|move|change|re-?time|push|bring|put)\s+(.*?\breminder)\b\s*(?:to|for|at)?\s*(.+?)[.!]*$/i;
+
+const CHANGE_IT = /^(.*?\breminder)\b.*?\b(?:make it|change it to|move it to)\s+(.+?)[.!]*$/i;
+
+/** A person asking to change or cancel a reminder they already have, or null. */
+function reminderChangeCall(text: string, about: string | null): Call | null {
+  const ref = about?.startsWith("reminder:") === true ? about : null;
+  const cancel = CANCEL_REMINDER.exec(text.trim());
+  if (cancel?.[1] !== undefined) return { tool: "cancel_reminder", input: { which: cancel[1], ref } };
+  // Cal's own words (2 Nov): "BoyBoy reminder on Wednesday 4th should be earlier than 9 - make it 730".
+  const change = CHANGE_REMINDER.exec(text.trim()) ?? (/^remind\b/i.test(text.trim()) ? null : CHANGE_IT.exec(text.trim()));
+  if (change?.[1] !== undefined && change[2] !== undefined) return { tool: "change_reminder", input: { which: change[1], ref, when: change[2] } };
+  return null;
+}
+
 /** "slow day", "we're away this weekend", "back to normal" → set_mode, or nothing. */
 function modeCall(lower: string): Call[] {
   const modeMatch = /\b(slow|sick|lazy|rough|hard|quiet)\s+day\b/.exec(lower);
@@ -124,6 +141,8 @@ function practiceIntent(prompt: string): Call[] {
   if (about !== null && /^(done|did it|finished|sorted|all done)\b/.test(lower)) return [{ tool: "respond", input: { ref: about, action: "done" } }];
   if (about !== null && /^not (today|now)\b/.test(lower)) return [{ tool: "respond", input: { ref: about, action: "not-today" } }];
 
+  const changeReminder = reminderChangeCall(text, about);
+  if (changeReminder !== null) return [changeReminder];
   const reminder = remindCall(text);
   if (reminder !== null) return [reminder];
   const sitter = /\b([A-Z][a-z]+)(?:'s| is)\s+(?:doing|babysitting|sitting|booked for|coming)\s+(?:on\s+)?(\w+day|tonight|tomorrow)\b/.exec(text);
