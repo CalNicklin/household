@@ -45,10 +45,15 @@ function server(options: { owner?: number } = {}) {
   writeFileSync(path.join(srv, "image"), `ghcr.io/calnicklin/household@${digest}\n`);
   copyFileSync(path.join(deploy, "compose.caddy-sites.yml"), path.join(srv, "compose.caddy-sites.yml"));
   for (const file of readdirSync(deploy).filter((f) => /^household-.*\.sh$/.test(f))) copyFileSync(path.join(deploy, file), path.join(lib, file));
+  // The one change to the real scripts: the owner they require is root's uid on the server, the test runner's here.
+  const common = readFileSync(path.join(deploy, "household-common.sh"), "utf8");
+  const owned = common.replace(/^SITES_OWNER_UID=0$/m, `SITES_OWNER_UID=${options.owner ?? uid}`);
+  if (owned === common && (options.owner ?? uid) !== 0) throw new Error("household-common.sh no longer sets SITES_OWNER_UID=0");
+  writeFileSync(path.join(lib, "household-common.sh"), owned);
   writeFileSync(path.join(lib, "restore.sh"), '#!/usr/bin/env bash\necho "restore.sh $*" >> "$STUB_LOG"\n', { mode: 0o755 });
   writeFileSync(path.join(bin, "docker"), stubDocker, { mode: 0o755 });
   const conf = path.join(root, "household.conf");
-  writeFileSync(conf, `HOUSEHOLD_DIR=${srv}\nSITES_DIR=${sites}\nSITES_OWNER_UID=${options.owner ?? uid}\nPREVIEWS_DIR=${path.join(root, "previews")}\n`);
+  writeFileSync(conf, `HOUSEHOLD_DIR=${srv}\nSITES_DIR=${sites}\nPREVIEWS_DIR=${path.join(root, "previews")}\n`);
   const log = path.join(root, "docker.log");
   writeFileSync(log, "");
   return {
@@ -102,6 +107,13 @@ describe("HOU-175: which sites the house's Caddy takes (household-common.sh)", (
     expect(hash).toMatch(/^[0-9a-f]{16}$/);
     writeFileSync(path.join(s.sites, "trader.caddy"), "trader.example.com {\n\trespond 404\n}\n");
     expect(overlay(s).stdout.split("\n")[1], "a changed site would not recreate Caddy").not.toBe(hash);
+    // A hidden file is a site too (Caddy's glob loads it): it counts in the hash, and alone it is enough.
+    const before = overlay(s).stdout.split("\n")[1];
+    writeFileSync(path.join(s.sites, ".monitor.caddy"), "monitor.example.com {\n\trespond 404\n}\n", { mode: 0o644 });
+    chmodSync(path.join(s.sites, ".monitor.caddy"), 0o644);
+    expect(overlay(s).stdout.split("\n")[1], "a hidden site would not recreate Caddy").not.toBe(before);
+    rmSync(path.join(s.sites, "trader.caddy"));
+    expect(withSites(s)).toBe(true);
   });
 
   it("[PRV-6] anything but root alone able to change a site leaves the overlay out, and says why", () => {
@@ -111,6 +123,11 @@ describe("HOU-175: which sites the house's Caddy takes (household-common.sh)", (
       ["a group-writable file", (s) => chmodSync(path.join(s.sites, "trader.caddy"), 0o664), /trader\.caddy is not a root-owned file/],
       ["an other-writable file", (s) => chmodSync(path.join(s.sites, "trader.caddy"), 0o646), /trader\.caddy is not a root-owned file/],
       ["a symlinked file", (s) => symlinkSync("/etc/hostname", path.join(s.sites, "link.caddy")), /link\.caddy is not a root-owned file/],
+      ["a hidden group-writable file (Caddy's glob loads it)", (s) => {
+        writeFileSync(path.join(s.sites, ".old.caddy"), "x\n");
+        chmodSync(path.join(s.sites, ".old.caddy"), 0o664);
+      }, /\.old\.caddy is not a root-owned file/],
+      ["a hidden symlink", (s) => symlinkSync("/etc/hostname", path.join(s.sites, ".link.caddy")), /\.link\.caddy is not a root-owned file/],
     ];
     for (const [what, spoil, note] of cases) {
       const s = server();

@@ -20,9 +20,8 @@ PREVIEW_REPO="${PREVIEW_REPO:-ghcr.io/calnicklin/household-preview}"
 export PREVIEWS_DIR
 # HOU-175: other apps' sites for the house's Caddy (root-owned *.caddy files; install.sh makes the directory).
 SITES_DIR="${SITES_DIR:-/etc/household/sites}"
-# Who must own it and its files: root. (A setting only so tests run unprivileged; like everything in
-# household.conf, only root can change it.)
-SITES_OWNER_UID="${SITES_OWNER_UID:-0}"
+# Who must own it and its files: root, always (not a setting; deploy/sites.test.ts edits only its own copy).
+SITES_OWNER_UID=0
 export SITES_DIR
 
 [ -f "$HOUSEHOLD_DIR/.env" ] || { echo "no $HOUSEHOLD_DIR/.env: run deploy/install.sh first" >&2; exit 1; }
@@ -43,6 +42,13 @@ if grep -qE '^MAIL_DOMAIN=.+' "$HOUSEHOLD_DIR/.env"; then COMPOSE_FILE="$COMPOSE
 # HOU-175: the house's Caddy also serves the sites in $SITES_DIR, but only when root alone can change what it
 # would load: the directory and every *.caddy in it owned by root, not writable by group or others, and no
 # symlinks. Otherwise the overlay is left out (saying why), and the house runs exactly as without it.
+# The *.caddy files Caddy's import would load: Go's glob matches hidden names too, so bash's must as well.
+sites_files() {
+  local f
+  for f in "$SITES_DIR"/*.caddy "$SITES_DIR"/.*.caddy; do
+    if [ -e "$f" ] || [ -L "$f" ]; then printf '%s\n' "$f"; fi
+  done
+}
 sites_usable() {
   local f found=""
   [ -d "$SITES_DIR" ] || return 1
@@ -50,21 +56,20 @@ sites_usable() {
     echo "note: $SITES_DIR is not root's alone (it must be a directory owned by root, writable by no group or other user), so the house's Caddy serves no extra sites" >&2
     return 1
   fi
-  for f in "$SITES_DIR"/*.caddy; do
-    [ -e "$f" ] || [ -L "$f" ] || continue
+  while IFS= read -r f; do
     if [ -L "$f" ] || [ ! -f "$f" ] || [ "$(stat -c %u "$f")" != "$SITES_OWNER_UID" ] || (( 0$(stat -c %a "$f") & 022 )); then
       echo "note: $f is not a root-owned file only root can write, so the house's Caddy serves no extra sites" >&2
       return 1
     fi
     found=yes
-  done
+  done < <(sites_files)
   [ -n "$found" ]
 }
 if [ -f "$HOUSEHOLD_DIR/compose.caddy-sites.yml" ] && sites_usable; then
   COMPOSE_FILE="$COMPOSE_FILE:$HOUSEHOLD_DIR/compose.caddy-sites.yml"
   # Compose can't see a mounted file change, so the files' hash is a label: a deploy recreates Caddy (which
   # reads its config only at start) exactly when a site file changed.
-  SITES_HASH="$(cd "$SITES_DIR" && sha256sum -- *.caddy | sha256sum | cut -c1-16)"
+  SITES_HASH="$(sites_files | sort | xargs -d '\n' sha256sum -- | sha256sum | cut -c1-16)"
   export SITES_HASH
 fi
 
