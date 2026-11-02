@@ -124,7 +124,8 @@ export function loadEnv(source: Record<string, string | undefined> = process.env
   if (unset.length > 0) throw new SettingsRefused(`PRV-6: the real house needs its own ${unset.join(", ")} (set them in .env; \`pnpm env:init\` generates them)`);
   // HOU-160: the practice model reads messages with keyword patterns; the real house never runs on it.
   // The one exception is a Docker test harness (deploy/test-mail.sh), which has no model to call and says
-  // so by name; nothing writes PRACTICE_MODEL_FOR_TESTS, so a .env that merely lacks MODEL_PROVIDER is refused.
+  // so by name in its own compose file; household-deploy refuses a .env carrying PRACTICE_MODEL_FOR_TESTS,
+  // so the real house never gets it, and a .env that merely lacks MODEL_PROVIDER is refused.
   if (env.MODEL_PROVIDER === ModelProvider.practice && source["PRACTICE_MODEL_FOR_TESTS"] !== "yes")
     throw new SettingsRefused("HOU-160: the real house will not run on the practice model: set MODEL_PROVIDER=anthropic and MODEL_ID=claude-opus-5-5 in .env (sudo deploy/install.sh adds them)");
   const key = PROVIDER_KEY[env.MODEL_PROVIDER];

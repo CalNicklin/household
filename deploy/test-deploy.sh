@@ -122,6 +122,18 @@ refused "MODEL_PROVIDER=practice" "will not run on the practice model"
 sed 's/^ANTHROPIC_API_KEY=.*/ANTHROPIC_API_KEY=/' "$work/env.good" > "$work/srv/.env"
 refused "no ANTHROPIC_API_KEY" "MODEL_PROVIDER=anthropic needs ANTHROPIC_API_KEY"
 
+step "HOU-160: the practice model's test-only opt-in never reaches the real house: household-deploy and -setup refuse it"
+cp "$work/env.good" "$work/srv/.env"
+echo "PRACTICE_MODEL_FOR_TESTS=yes" >> "$work/srv/.env"
+for cmd in "household-deploy.sh $next" household-setup.sh; do
+  set +e; "$lib/"$cmd < /dev/null > "$work/test-flag.log" 2>&1; rc=$?; set -e
+  [ "$rc" -eq 1 ] || { cat "$work/test-flag.log" >&2; fail "${cmd%% *} took a .env with PRACTICE_MODEL_FOR_TESTS (exit $rc)"; }
+  grep -q "sets PRACTICE_MODEL_FOR_TESTS, which is for Docker test harnesses only; delete that line" "$work/test-flag.log" || fail "${cmd%% *} did not say how to fix it"
+done
+[ "$(docker inspect -f '{{.Id}} {{.State.StartedAt}}' household-app-1)" = "$running" ] || fail "the running app was touched for PRACTICE_MODEL_FOR_TESTS"
+[ "$(cat "$work/srv/image")" = "localhost:5000/household@$digest" ] || fail "an image was recorded for PRACTICE_MODEL_FOR_TESTS"
+echo "refused PRACTICE_MODEL_FOR_TESTS in .env; the house kept running"
+
 step "HOU-160: install.sh's env-init fills in what an old .env lacks, changing nothing already there"
 grep -vE '^MODEL_(PROVIDER|ID)=' "$work/env.good" > "$work/srv/.env"
 cp "$work/srv/.env" "$work/env.old"

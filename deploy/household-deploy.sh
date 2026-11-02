@@ -13,6 +13,7 @@ if [[ ! "$digest" =~ ^sha256:[0-9a-f]{64}$ ]]; then
   exit 2
 fi
 image="$HOUSEHOLD_REPO@$digest"
+refuse_test_only_settings
 
 exec 9>"$HOUSEHOLD_DIR/.deploy.lock"
 flock -w 600 9
