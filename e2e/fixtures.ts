@@ -19,6 +19,15 @@ export async function login(page: Page, username = "priya"): Promise<void> {
   await page.goto("/");
 }
 
+/**
+ * HOU-166: wait until the service worker controls the page. Call it before `page.route`, then open the
+ * screen under test: once the worker is in charge every request goes through it, and one made while it
+ * is taking over (within a moment of login) can reach the server without Playwright's route seeing it.
+ */
+export async function underServiceWorker(page: Page): Promise<void> {
+  await expect.poll(() => page.evaluate(() => navigator.serviceWorker.controller !== null)).toBe(true);
+}
+
 /** Log in as a person does: the form on /login, then wherever it sends you. */
 export async function loginWithForm(page: Page, username = "priya"): Promise<void> {
   await page.goto("/login");

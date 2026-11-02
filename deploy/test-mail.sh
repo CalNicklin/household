@@ -141,7 +141,9 @@ grep -qE "^Currys\|$(date -u -d tomorrow +%F)\|10am–2pm\|f\|sam$" <<< "$arriva
 grep -E '"event":"dropped-unknown-sender"' <(docker logs household-app-1 2>&1) | sort | uniq -c || fail "the app did not drop and log the stranger"
 
 step "household-email last-confirmation"
-code="$("$lib/household-email.sh" last-confirmation)"
-echo "$code"
+printed="$("$lib/household-email.sh" last-confirmation)"
+echo "$printed"
+code="$(head -n1 <<< "$printed")"
 [ "$code" = 693452117 ] || fail "household-email printed '$code', not Gmail's code"
+grep -qxF 'https://mail-settings.google.com/mail/vf-%5BANGjdJ%5D-abc' <<< "$printed" || fail "household-email didn't print Gmail's confirmation link"
 step "PASS: HOU-150 against local Docker"
