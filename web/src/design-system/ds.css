@@ -634,6 +634,80 @@ a:hover {
   font-weight: var(--weight-semibold);
 }
 
+/* HOU-159: the composer and the one line under it that says what the mic is doing, or why it can't. */
+.ds-composer-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+}
+
+.ds-composer--listening {
+  border-color: var(--color-suggestion-accent);
+}
+
+/* HOU-159: the mic's one line under the composer, and what you said in the conversation: small, muted. */
+.ds-composer__note,
+.ds-conversation__said {
+  margin: 0;
+  padding: 0 var(--space-card-x);
+  font-size: var(--size-body-small);
+  color: var(--color-muted);
+  line-height: 1.4;
+}
+
+/* HOU-159: today's conversation with the house, above the composer. Small and calm; the newest answer is the big one. */
+.ds-conversation {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-tight);
+}
+
+/* Earlier exchanges never crowd out the screen; reversed, so it opens scrolled to the newest. */
+.ds-conversation__scroll {
+  display: flex;
+  flex-direction: column-reverse;
+  max-height: 30vh;
+  overflow-y: auto;
+}
+
+.ds-conversation__earlier {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-tight);
+}
+
+.ds-conversation__exchange {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.ds-conversation__house {
+  margin: 0;
+  padding: 10px var(--space-card-x);
+  border-radius: var(--radius-card);
+  background: var(--color-suggestion-bg);
+  color: var(--color-suggestion-text);
+  font-size: var(--size-body-small);
+  line-height: 1.4;
+}
+
+.ds-conversation__toggle {
+  align-self: flex-start;
+  min-height: var(--size-target-tap);
+  padding: 0 var(--space-card-x);
+  border: 0;
+  background: transparent;
+  color: var(--color-suggestion-accent);
+  font-size: var(--size-body-small);
+  font-weight: var(--weight-semibold);
+  cursor: pointer;
+}
+
 /* The house's answer (MOM-2): planner-made, so the suggestion green; big, calm type. */
 .ds-answer {
   display: flex;
@@ -1177,6 +1251,14 @@ a:hover {
   }
   .ds-composer {
     padding: 6px 6px 6px 18px;
+  }
+  .ds-composer__note,
+  .ds-conversation__said,
+  .ds-conversation__toggle {
+    padding: 0 18px;
+  }
+  .ds-conversation__house {
+    padding: 8px 18px;
   }
   .ds-answer {
     padding: 8px 18px 16px;

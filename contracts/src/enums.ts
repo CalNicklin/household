@@ -313,6 +313,19 @@ export const JobStatus = {
 export type JobStatus = ValueOf<typeof JobStatus>;
 export const zJobStatus = z.enum(JobStatus);
 
+/**
+ * HOU-159: where one of today's exchanges with the house stands. `quiet` is a message the house
+ * handled without a reply (nothing to say back); `failed` is one whose job failed, so no reply is coming.
+ */
+export const ExchangeState = {
+  waiting: "waiting",
+  answered: "answered",
+  quiet: "quiet",
+  failed: "failed",
+} as const;
+export type ExchangeState = ValueOf<typeof ExchangeState>;
+export const zExchangeState = z.enum(ExchangeState);
+
 export const NotificationStatus = {
   queued: "queued",
   sent: "sent",
@@ -475,6 +488,15 @@ export const ListWriteOutcome = {
 } as const;
 export type ListWriteOutcome = ValueOf<typeof ListWriteOutcome>;
 export const zListWriteOutcome = z.enum(ListWriteOutcome);
+
+/** HOU-150: how the mail receiver proved who sent an email on to orders@ (CH-3). */
+export const SenderProof = {
+  /** Gmail's auto-forward to us: the envelope `cal+caf_=<us>@gmail.com`, gmail.com's SPF and Google's ARC seal. */
+  envelopeSpf: "envelope-spf",
+  /** The From header's domain is the domain of a passing DKIM signature (a forward by hand). */
+  authorDkim: "author-dkim",
+} as const;
+export type SenderProof = ValueOf<typeof SenderProof>;
 
 /**
  * HOME-1: whose a Google calendar is. A person's own calendar is named by their person ID (`cal`,
