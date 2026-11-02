@@ -38,7 +38,35 @@ export function registerServiceWorker(): void {
     if (page === null || container.controller === null) return;
     void compare();
   });
-  void container.register("/sw.js", { updateViaCache: "none" }).catch(() => {});
+  void container
+    .register("/sw.js", { updateViaCache: "none" })
+    .then(watch)
+    .catch(() => {});
+}
+
+/** HOU-166: a new worker that has installed is told to take over until it does (see nudge). */
+function watch(registration: ServiceWorkerRegistration): void {
+  registration.addEventListener("updatefound", () => {
+    const worker = registration.installing;
+    worker?.addEventListener("statechange", () => {
+      if (worker.state === "installed") nudge(registration, 1_000);
+    });
+  });
+}
+
+/**
+ * HOU-166: ask a worker left waiting to take over (it calls skipWaiting() again, web/public/sw.js), then
+ * ask again after `after` ms, twice as long each time, until none is waiting. Chromium can drop a
+ * takeover: it stops the old worker to hand over, a fetch from this screen (the refetches that follow
+ * a reconnect) starts it again in that instant, and the new worker is left waiting with nothing to look
+ * again. The screen then never sees controllerchange, so it never reloads into the new build.
+ */
+function nudge(registration: ServiceWorkerRegistration, after: number): void {
+  const waiting = registration.waiting;
+  if (waiting === null) return;
+  // oxlint-disable-next-line unicorn/require-post-message-target-origin -- a ServiceWorker's postMessage has no target origin
+  waiting.postMessage("skip-waiting");
+  window.setTimeout(() => nudge(registration, after * 2), after);
 }
 
 /**

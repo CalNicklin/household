@@ -1,6 +1,6 @@
 import { Limits } from "@household/contracts";
 import type { Browser, Locator, Page } from "@playwright/test";
-import { evidence, expect, login, reset, say, test } from "./fixtures.ts";
+import { evidence, expect, login, reset, say, test, underServiceWorker } from "./fixtures.ts";
 
 /**
  * HOU-158: a person deletes backlog items, list items, whole lists and shop requests from the app.
@@ -152,6 +152,7 @@ test("[PRV-1][AUT-1] a person deletes a shop request that went nowhere, with Und
 test("[PRV-1] a delete that does not go through comes back, and the screen says so", async ({ page }) => {
   await page.clock.install();
   await login(page);
+  await underServiceWorker(page);
   await page.goto("/lists");
   await page.route("**/api/trpc/removeListItem**", (route) => route.fulfill({ status: 500, body: "{}" }));
   await list(page, "Shopping").getByRole("button", { name: "Delete kitchen roll" }).click();

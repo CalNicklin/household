@@ -1,6 +1,6 @@
 import { Limits } from "@household/contracts";
 import type { Page } from "@playwright/test";
-import { evidence, expect, login, reset, say, test } from "./fixtures.ts";
+import { evidence, expect, login, reset, say, test, underServiceWorker } from "./fixtures.ts";
 
 test.beforeEach(async ({ request }) => reset(request));
 
@@ -93,6 +93,7 @@ test("[CAP-6][PRV-1] anything said adds to a list, and it shows on the other scr
 
 test("[CAP-6] on a slow connection a rename cannot be typed over while it saves, and words typed while an add saves are kept", async ({ page }) => {
   await login(page);
+  await underServiceWorker(page);
   await page.goto("/lists");
   // A slow connection: every list write takes a moment to come back.
   await page.route(/\/api\/trpc\/(renameListItem|addListItem)/, async (route) => {
@@ -119,6 +120,7 @@ test("[CAP-6] on a slow connection a rename cannot be typed over while it saves,
 
 test("[CAP-6] tick then untick quickly on a slow connection: the last tap is what both screens keep", async ({ page, browser }) => {
   await login(page);
+  await underServiceWorker(page);
   await page.goto("/lists");
   // The first write is slow and the second is quick, so they would land in the wrong order if both were sent at once.
   let calls = 0;

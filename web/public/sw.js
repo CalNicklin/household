@@ -14,6 +14,11 @@ self.addEventListener("install", (event) => {
   self.skipWaiting();
 });
 
+// HOU-166: a page asks a worker left waiting to take over again (nudge in web/src/data/sw.ts).
+self.addEventListener("message", (event) => {
+  if (event.data === "skip-waiting") self.skipWaiting();
+});
+
 self.addEventListener("activate", (event) => {
   event.waitUntil(
     caches
