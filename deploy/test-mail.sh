@@ -57,10 +57,10 @@ HOUSEHOLD_REPO=localhost:5000/household
 CONF
 docker run --rm --network none --memory 128m -v "$repo/scripts/env-init.ts:/env-init.ts:ro" -v "$work/srv:/work" -w /work node:22-bookworm-slim node /env-init.ts --real > /dev/null
 printf 'HOUSEHOLD_DOMAIN=localhost\nMAIL_DOMAIN=orders.localhost\n' >> "$work/srv/.env"
-# HOU-160: the real house needs its model's key; no call is made with it here.
-echo "ANTHROPIC_API_KEY=placeholder-not-a-key" >> "$work/srv/.env"
-# No model key here: the practice model reads the order (record_arrival), as the house's model would.
+# No model key here: the practice model reads the order (record_arrival), as the house's model would. The
+# real house refuses the practice model (HOU-160) unless a test harness says so by name, as this one does.
 sed -i 's/^MODEL_PROVIDER=.*/MODEL_PROVIDER=practice/; s/^MODEL_ID=.*/MODEL_ID=practice-1/' "$work/srv/.env"
+echo "PRACTICE_MODEL_FOR_TESTS=yes" >> "$work/srv/.env"
 lib="$work/lib"
 install -d "$lib"
 install -m 755 "$repo"/deploy/household-*.sh "$repo/scripts/backup.sh" "$repo/scripts/restore.sh" "$lib/"

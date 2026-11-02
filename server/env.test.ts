@@ -38,6 +38,9 @@ describe("Settings", () => {
     expect(() => loadEnv({ ...real, MODEL_PROVIDER: "openai", MODEL_ID: "gpt" })).toThrow(/MODEL_PROVIDER=openai needs OPENAI_API_KEY/);
     expect(loadEnv(real)).toMatchObject({ MODEL_PROVIDER: "anthropic", MODEL_ID: "claude-opus-5-5" });
     expect(loadEnv(real)).not.toHaveProperty("ANTHROPIC_API_KEY");
+    // A Docker test harness may run the real house on the practice model only by saying so by name.
+    expect(loadEnv({ ...real, MODEL_PROVIDER: "practice", MODEL_ID: "practice-1", PRACTICE_MODEL_FOR_TESTS: "yes" }).MODEL_PROVIDER).toBe("practice");
+    expect(() => loadEnv({ ...real, MODEL_PROVIDER: "practice", PRACTICE_MODEL_FOR_TESTS: "true" })).toThrow(practiceModel);
     // The practice household still runs on the practice model, with no key.
     expect(loadEnv({}).MODEL_PROVIDER).toBe("practice");
   });

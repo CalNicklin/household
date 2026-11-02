@@ -70,6 +70,7 @@ case "$(sed -n 's/^MODEL_PROVIDER=//p' "$dir/.env" | tail -n1)" in
   openai) model_key=OPENAI_API_KEY ;;
   *) model_key="" ;;
 esac
+grep -qE '^PRACTICE_MODEL_FOR_TESTS=' "$dir/.env" && echo "remove PRACTICE_MODEL_FOR_TESTS from $dir/.env: it is for Docker test harnesses only, never the real house" >&2
 if [ -n "$model_key" ] && ! grep -qE "^$model_key=.+" "$dir/.env"; then
   echo "set $model_key in $dir/.env (sudo nano $dir/.env): until then household-deploy refuses to start the house" >&2
 fi
