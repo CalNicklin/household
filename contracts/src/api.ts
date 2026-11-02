@@ -98,7 +98,8 @@ export const zMuteInput = z.object({ person: z.string(), until: z.iso.datetime({
 export const zHealthEntryInput = z.object({ date: z.iso.date(), heavy: z.boolean() });
 export const zShoppingRequestInput = z.object({ item: z.string().min(1), sourceMessage: z.string() });
 export const zShoppingRequestUpdate = z.object({ id: z.string(), status: zShoppingStatus, chosen: zProductOption.nullable(), options: z.array(zProductOption) });
-export const zShoppingRunInput = z.object({ requestId: z.string(), log: z.array(z.object({ at: z.iso.datetime({ offset: true }), line: z.string() })), screenshots: z.array(z.string()) });
+/** `person` is whose request it ran for, kept on the run for PRV-7 once the request is deleted (HOU-158). */
+export const zShoppingRunInput = z.object({ requestId: z.string(), person: z.string(), log: z.array(z.object({ at: z.iso.datetime({ offset: true }), line: z.string() })), screenshots: z.array(z.string()) });
 export const zBasketAddInput = z.object({ requestId: z.string(), sku: z.string(), name: z.string() });
 export const zSummaryInput = z.object({ person: z.string(), deliveryDate: z.iso.date() });
 

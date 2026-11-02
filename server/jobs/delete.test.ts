@@ -112,7 +112,7 @@ describe("A person can delete, the house cannot", () => {
 
   test("[AUT-6][PRV-1] a run's log stays openable after a person deletes the request it ran for", async () => {
     const request = await shoppingRequest("Star anise", ShoppingStatus.failed);
-    const runId = await system().shopping.addRun({ requestId: request.id, log: [{ at: "2026-11-02T07:01:00.000Z", line: "searched for star anise" }], screenshots: ["runs/x/00-search.png"] });
+    const runId = await system().shopping.addRun({ requestId: request.id, person: request.person, log: [{ at: "2026-11-02T07:01:00.000Z", line: "searched for star anise" }], screenshots: ["runs/x/00-search.png"] });
     await priya().shopping.remove({ id: request.id });
     const run = await runView(h.rt, runId);
     expect(run?.log.map((l) => l.line)).toEqual(["searched for star anise"]);
@@ -124,7 +124,7 @@ describe("A person can delete, the house cannot", () => {
     const forTom = h.rt.as({ kind: ActorKind.agent, job: "j-tom", onBehalfOf: "tom", message: "m-tom" });
     const request = await forTom.shopping.request({ item: "Sumac", sourceMessage: "m-tom-sumac" });
     await system().shopping.update({ id: request.id, status: ShoppingStatus.failed, chosen: null, options: [] });
-    const runId = await system().shopping.addRun({ requestId: request.id, log: [{ at: "2026-11-02T07:01:00.000Z", line: "searched for sumac" }], screenshots: [] });
+    const runId = await system().shopping.addRun({ requestId: request.id, person: request.person, log: [{ at: "2026-11-02T07:01:00.000Z", line: "searched for sumac" }], screenshots: [] });
     await priya().shopping.remove({ id: request.id });
     expect(await system().shopping.run({ id: runId })).not.toBeNull();
     await system().shopping.deletePerson({ person: "tom" });

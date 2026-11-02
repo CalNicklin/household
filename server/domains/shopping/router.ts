@@ -72,12 +72,7 @@ export function shoppingRouter(db: ShoppingDb) {
       ctx.publish("shopping");
     }),
     addRun: systemProcedure.input(zShoppingRunInput).output(z.string()).mutation(async ({ ctx, input }) => {
-      // Whose request it ran for, kept on the run itself so PRV-7 finds it after the request is deleted (HOU-158).
-      const request = await db.query.requests.findFirst({ where: eq(schema.requests.id, input.requestId) });
-      const [row] = await db
-        .insert(schema.runs)
-        .values({ ...input, person: request?.person ?? null, createdAt: ctx.now })
-        .returning();
+      const [row] = await db.insert(schema.runs).values({ ...input, createdAt: ctx.now }).returning();
       if (row === undefined) throw new Error("insert failed");
       return row.id;
     }),
