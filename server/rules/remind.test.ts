@@ -99,7 +99,7 @@ describe("HOU-174: which reminder a person means, and its new time", () => {
     expect(matchReminders(open, "the dentist reminder", MON).map((r) => r.text)).toEqual(["Ring the dentist"]);
     expect(matchReminders(open, "the swimming reminder", MON)).toEqual([]);
     expect(matchReminders(open, "my reminder", MON)).toHaveLength(3);
-    // Cal's words name the day; a day that can't be settled matches nothing, so the house asks (AR-14).
+    // Cal's words name the day; a day that can't be settled matches nothing, so the house asks.
     expect(matchReminders(open, "BoyBoy reminder on Wednesday 4th", MON)).toHaveLength(2);
     expect(matchReminders(open, "the BoyBoy reminder on Tuesday 4 November", MON)).toEqual([]);
   });
@@ -112,9 +112,9 @@ describe("HOU-174: which reminder a person means, and its new time", () => {
     expect(retimeWhen("Thursday", boy, at(14), TZ)).toEqual({ date: "2026-11-05", time: "09:00" });
     expect(retimeWhen("tomorrow at 8", boy, at(14), TZ)).toEqual({ date: TUE, time: "08:00" });
     expect(retimeWhen("earlier", boy, at(14), TZ)).toBeNull();
-    // "later today" is later today with no time, not today at the reminder's old time (AR-5).
+    // "later today" is later today with no time, not today at the reminder's old time.
     expect(retimeWhen("later today", boy, at(14), TZ)).toEqual({ date: MON, time: null });
-    // A date written in digits is a day, never a clock time (AR-6).
+    // A date written in digits is a day, never a clock time.
     expect(reminderWhen("2026-11-04", at(14), TZ)).toEqual({ date: WED, time: null });
     expect(reminderWhen("4/11/2026", at(14), TZ)?.time ?? null).toBeNull();
     expect(reminderWhen("on 4 Nov 2026", at(14), TZ)).toEqual({ date: WED, time: null });

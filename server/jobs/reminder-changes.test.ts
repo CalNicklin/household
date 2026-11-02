@@ -81,7 +81,7 @@ describe("HOU-174: a reminder is moved or cancelled when a person asks, never du
     await expect(job.backlog.changeReminder({ id: r.id, date: WED, time: "06:00", sourceMessage: "this-message" })).rejects.toThrow(/PRV-1/);
     await expect(job.backlog.cancelReminder({ id: r.id, sourceMessage: "this-message" })).rejects.toThrow(/PRV-1/);
     await expect(h.rt.system("t").backlog.cancelReminder({ id: r.id, sourceMessage: "x" })).rejects.toThrow(/PRV-1|needs a person/);
-    // The reminder they are looking at (the About ref) is used only when it fits what they said (AR-4).
+    // The reminder they are looking at (the About ref) is used only when it fits what they said.
     const app = jobScope(h.rt, "j", "app-message", "tom", Channel.app);
     expect(await findReminder(app, "that one", `reminder:${r.id}`)).toEqual({ reminder: r });
     expect(await findReminder(app, "the swimming reminder", `reminder:${r.id}`)).toMatchObject({ say: expect.stringContaining("I couldn't tell which reminder") });
@@ -89,7 +89,7 @@ describe("HOU-174: a reminder is moved or cancelled when a person asks, never du
     const email = houseTools(jobScope(h.rt, "j", "email-message", "tom", Channel.email));
     expect(await email.cancel_reminder.execute?.({ which: "the BoyBoy reminder", ref: `reminder:${r.id}` }, {})).toEqual({ cancelled: false, say: "" });
     expect(await email.change_reminder.execute?.({ which: "the BoyBoy reminder", ref: `reminder:${r.id}`, when: "06:00" }, {})).toEqual({ changed: false, say: "" });
-    // Nor through respond, the agent's general tap tool: Change time and Delete aren't actions it takes (AR-13).
+    // Nor through respond, the agent's general tap tool: Change time and Delete aren't actions it takes.
     expect(await email.respond.inputSchema?.["~standard"].validate({ ref: `reminder:${r.id}`, action: ActionKind.cancel })).toHaveProperty("issues");
     expect(await respond(jobScope(h.rt, "j", "email-message", "tom", Channel.email), `reminder:${r.id}`, ActionKind.cancel, null)).toBe("");
     expect((await upcoming()).map((x) => x.time)).toEqual(["07:30"]);
