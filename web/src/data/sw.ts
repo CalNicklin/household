@@ -60,7 +60,7 @@ function watch(registration: ServiceWorkerRegistration): void {
  * waiting with nothing to look again: no controllerchange, so the screen never reloads into the new
  * build. Asking the worker to skipWaiting() again, update() and register() all leave it waiting; a
  * navigation inside the worker's scope makes Chromium try again. So while a worker is waiting, a hidden
- * frame opens a URL the worker passes straight to the network (any /api/ path; this one is a cheap 404),
+ * frame opens /api/takeover, which the worker passes straight to the network and the server answers 204,
  * and again after `after` ms, twice as long each time, until none is waiting.
  */
 function nudge(registration: ServiceWorkerRegistration, after: number): void {
@@ -69,7 +69,7 @@ function nudge(registration: ServiceWorkerRegistration, after: number): void {
   const frame = document.createElement("iframe");
   frame.dataset["takeover"] = "";
   frame.hidden = true;
-  frame.src = "/api/objects/takeover";
+  frame.src = "/api/takeover";
   document.body.append(frame);
   window.setTimeout(() => nudge(registration, after * 2), after);
 }
