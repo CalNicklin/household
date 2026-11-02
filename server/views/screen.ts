@@ -1,7 +1,7 @@
 import { ActionKind, type Block, BlockType, type LocalDate, type ScreenView, Section } from "@household/contracts";
 import { plannerBuildId } from "../build.ts";
 import type { Runtime } from "../runtime.ts";
-import { type Pencilled, pencilBlocks, pencilledItems, pencilWindow } from "../planner/pencil.ts";
+import { pencilBlocks, type Pencilled, pencilledItems, pencilWindow } from "../planner/pencil.ts";
 import { localDate } from "../time.ts";
 
 const CLOSING: ReadonlySet<string> = new Set<string>([ActionKind.done, ActionKind.notToday, ActionKind.snooze, ActionKind.handOver, ActionKind.accept, ActionKind.answer, ActionKind.notHelpful]);

@@ -2,7 +2,7 @@
 import { z } from "zod";
 import { zBlock } from "./blocks.ts";
 import { zArrival, zCalendarCopy, zCalendarWatch, zHourlyForecast, zJob, zLearningEvent, zListItem, zLocalTime, zNurseryEvent, zPersonSettings, zProductOption, zQuestion, zRhythm, zRuleSpec, zTelegramUserId } from "./domain.ts";
-import { LongTool, zActionKind, zDayPart, zBacklogTag, zChannel, zDeliveryChannel, zListWriteOutcome, zLongTool, zModeKind, zModelProvider, zNotificationStatus, zShoppingStatus, zTimerKind } from "./enums.ts";
+import { LongTool, zActionKind, zBacklogTag, zChannel, zDayPart, zDeliveryChannel, zListWriteOutcome, zLongTool, zModeKind, zModelProvider, zNotificationStatus, zShoppingStatus, zTimerKind } from "./enums.ts";
 import { zInboundMessage, zNotifyInput } from "./message.ts";
 
 export const zIdInput = z.object({ id: z.string() });
