@@ -29,7 +29,7 @@ import {
   zTimerRun,
   zTimerRunInput,
 } from "@household/contracts";
-import { and, desc, eq, gte, inArray, lt, sql } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, isNull, lt, sql } from "drizzle-orm";
 import { z } from "zod";
 import type { DomainDb } from "../../db/index.ts";
 import { iso, isoOrNull } from "../../db/map.ts";
@@ -291,7 +291,8 @@ export function jobsRouter(db: JobsDb) {
       await db
         .insert(schema.timerRuns)
         .values({ timer: input.timer, scheduledFor: new Date(input.scheduledFor), firedAt: input.missed ? null : ctx.now, missed: input.missed })
-        .onConflictDoNothing();
+        // HOU-170: a missed fire that runs late keeps its "missed" mark and gains the time it ran.
+        .onConflictDoUpdate({ target: [schema.timerRuns.timer, schema.timerRuns.scheduledFor], set: { firedAt: ctx.now }, where: input.missed ? sql`false` : isNull(schema.timerRuns.firedAt) });
     }),
     timerRuns: readProcedure.output(z.array(zTimerRun)).query(async () =>
       (await db.select().from(schema.timerRuns).orderBy(desc(schema.timerRuns.scheduledFor)).limit(500)).map((r) => ({ id: r.id, timer: r.timer, scheduledFor: iso(r.scheduledFor), firedAt: isoOrNull(r.firedAt), missed: r.missed })),

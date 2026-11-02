@@ -1,4 +1,4 @@
-import { ActionKind, type Block, Channel } from "@household/contracts";
+import { ActionKind, type Block, Channel, type HourlyForecast } from "@household/contracts";
 import { relations } from "drizzle-orm";
 import { date, integer, jsonb, pgTable, text, uniqueIndex } from "drizzle-orm/pg-core";
 import { at, createdAt, id, values } from "../../db/columns.ts";
@@ -56,6 +56,13 @@ export const offers = pgTable(
   },
   (t) => [uniqueIndex("offers_item").on(t.itemId), uniqueIndex("offers_date").on(t.date)],
 );
+
+/** PLT-3 / HOU-170: the last good forecast for each date, so a weather outage plans with it. */
+export const forecasts = pgTable("forecasts", {
+  date: date("date").primaryKey(),
+  hours: jsonb("hours").$type<HourlyForecast[]>().notNull(),
+  fetchedAt: at("fetched_at").notNull(),
+});
 
 export const plansRelations = relations(plans, ({ many }) => ({ responses: many(responses), offers: many(offers) }));
 export const responsesRelations = relations(responses, ({ one, many }) => ({

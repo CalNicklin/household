@@ -1,5 +1,6 @@
 import { ActionKind, BlockType, DayPart, type LocalDate, LongTool, ModeKind, NotificationStatus, RhythmSource, ShoppingStatus } from "@household/contracts";
 import { START_REF_PREFIX } from "../planner/first-day.ts";
+import { forecasts } from "../planner/gather.ts";
 import { addLocalDays, localDate, localHour, weekdayOf } from "../time.ts";
 import type { JobScope } from "./scope.ts";
 
@@ -37,7 +38,8 @@ export async function subjectFor(scope: JobScope, ref: string, date: LocalDate):
 async function weatherNow(scope: JobScope, now: Date): Promise<string> {
   const settings = await scope.rt.system("weather").household.settings();
   const date = localDate(now, scope.rt.timeZone);
-  const hours = await scope.rt.ports.weather.hourly(date, settings.latitude, settings.longitude, scope.rt.timeZone);
+  // HOU-170: a weather outage never fails a tap; the kept forecast stands in, or "unknown".
+  const hours = (await forecasts(scope.rt, [date], settings.latitude, settings.longitude))[date] ?? [];
   const h = hours.find((x) => Number(x.hour.slice(11, 13)) === localHour(now, scope.rt.timeZone)) ?? hours[0];
   if (h === undefined) return "unknown";
   return `${h.precipitationProbability < 40 ? "dry" : "wet"} ${Math.round(h.temperatureC)}°`;

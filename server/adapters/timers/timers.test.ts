@@ -2,7 +2,9 @@ import { TimerKind } from "@household/contracts";
 import { afterAll, beforeAll, describe, expect, test } from "vitest";
 import type { TestHousehold } from "../../testing/household.ts";
 import { householdWithApp, jobForKey, storedShape } from "../../testing/http.ts";
-import { recordMissed } from "./index.ts";
+import { atLocal } from "../../time.ts";
+import { waitForJob } from "../../jobs/launch.ts";
+import { recordMissed, runMissedMorningPlan } from "./index.ts";
 import { acceptTimer } from "../../coordinator/accept.ts";
 
 let h: TestHousehold;
@@ -32,5 +34,18 @@ describe("timers adapter", () => {
     expect(missed).toBeGreaterThanOrEqual(1);
     const runs = await api.jobs.timerRuns();
     expect(runs).toContainEqual(expect.objectContaining({ timer: TimerKind.morningPlan, scheduledFor: "2026-11-02T05:30:00.000Z", missed: true }));
+  });
+
+  test("[CH-5] HOU-170: a morning plan the server was down for runs late on start, once, and the run log still says it was missed", async () => {
+    const at = atLocal("2026-11-03", 5, 30, "Europe/London").toISOString();
+    await h.rt.system("test").jobs.recordTimer({ timer: TimerKind.morningPlan, scheduledFor: at, missed: true });
+    const jobId = await runMissedMorningPlan(h.rt, atLocal("2026-11-03", 9, 15, "Europe/London"));
+    expect(jobId).not.toBeNull();
+    await waitForJob(jobId ?? "");
+    expect((await h.rt.system("test").jobs.job({ id: jobId ?? "" }))?.status).toBe("succeeded");
+    const run = (await h.rt.system("test").jobs.timerRuns()).find((r) => r.timer === TimerKind.morningPlan && r.scheduledFor === at);
+    expect(run?.missed).toBe(true);
+    expect(run?.firedAt).not.toBeNull();
+    expect(await runMissedMorningPlan(h.rt, atLocal("2026-11-03", 9, 20, "Europe/London"))).toBeNull();
   });
 });

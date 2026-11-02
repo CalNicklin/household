@@ -1,9 +1,10 @@
 import { DBOS } from "@dbos-inc/dbos-sdk";
-import { zTimerKind } from "@household/contracts";
+import { TimerKind, zTimerKind } from "@household/contracts";
 import { z } from "zod";
 import { acceptTimer } from "../../coordinator/accept.ts";
 import type { Runtime } from "../../runtime.ts";
 import type { Adapter } from "../registry.ts";
+import { localDate } from "../../time.ts";
 import { cronOf, expectedFires, SCHEDULES } from "./schedule.ts";
 
 let runtime: Runtime | null = null;
@@ -39,11 +40,27 @@ export async function recordMissed(rt: Runtime, now: Date = rt.ports.clock.now()
   return missed;
 }
 
+/**
+ * HOU-170: DBOS fires a schedule only while the server is up and never backfills, so a server that
+ * was down or restarting at 05:30 skipped the day's morning plan for good (the learning, scores,
+ * tomorrow's plan and the morning nudges with it). Today's missed morning plan now runs late, once
+ * (the fire's duplicate-check key is its scheduled time); the run log still shows it as missed.
+ */
+export async function runMissedMorningPlan(rt: Runtime, now: Date = rt.ports.clock.now()): Promise<string | null> {
+  const today = localDate(now, rt.timeZone);
+  const runs = await rt.system("timers").jobs.timerRuns();
+  const missed = runs.find((r) => r.timer === TimerKind.morningPlan && r.missed && r.firedAt === null && localDate(new Date(r.scheduledFor), rt.timeZone) === today);
+  if (missed === undefined) return null;
+  console.warn(JSON.stringify({ event: "timer-run-late", timer: missed.timer, scheduledFor: missed.scheduledFor }));
+  return (await acceptTimer(rt, TimerKind.morningPlan, new Date(missed.scheduledFor))).jobId;
+}
+
 export const adapter: Adapter = {
   name: "timers",
   start: async (rt) => {
     runtime = rt;
     await DBOS.applySchedules(SCHEDULES.map((s) => ({ scheduleName: `household:${s.timer}`, workflowFn: timerFired, schedule: cronOf(s), context: { timer: s.timer }, cronTimezone: rt.timeZone, automaticBackfill: false })));
     await recordMissed(rt);
+    await runMissedMorningPlan(rt);
   },
 };

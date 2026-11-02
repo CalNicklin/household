@@ -45,9 +45,9 @@ export async function api(request: APIRequestContext, username = "priya"): Promi
 }
 
 /** A fresh practice household at a given practice time; waits for the morning plan. */
-export async function reset(request: APIRequestContext, at = "2026-11-02T07:00:00.000Z"): Promise<void> {
+export async function reset(request: APIRequestContext, at = "2026-11-02T07:00:00.000Z", options: { weatherDown?: boolean } = {}): Promise<void> {
   await api(request);
-  const r = await request.post("/api/practice/reset", { data: { at } });
+  const r = await request.post("/api/practice/reset", { data: { at, weatherDown: options.weatherDown ?? false } });
   expect(r.ok()).toBe(true);
   const { jobId } = await json(zJobRef, r);
   await waitForJob(request, jobId);

@@ -1,4 +1,4 @@
-import { ActionKind, type Plan, type Response, zDateInput, zHandOver, zHandOverInput, zOffer, zOfferInput, zPersonInput, zPlan, zRespondInput, zResponse, zSavePlanInput } from "@household/contracts";
+import { ActionKind, type Plan, type Response, zDateInput, zHandOver, zHandOverInput, zOffer, zOfferInput, zPersonInput, zPlan, zRespondInput, zResponse, zSaveForecastInput, zSavePlanInput, zStoredForecast } from "@household/contracts";
 import { and, desc, eq, gte, lt, max, sql } from "drizzle-orm";
 import { z } from "zod";
 import type { DomainDb } from "../../db/index.ts";
@@ -31,6 +31,18 @@ export function plansRouter(db: PlansDb) {
       if (row === undefined) throw new Error("insert failed");
       ctx.publish("plan");
       return toPlan(row);
+    }),
+    /** HOU-170: keep the newest good forecast for a date (PLT-3). */
+    saveForecast: systemProcedure.input(zSaveForecastInput).mutation(async ({ ctx, input }) => {
+      await db
+        .insert(schema.forecasts)
+        .values({ date: input.date, hours: input.hours, fetchedAt: ctx.now })
+        .onConflictDoUpdate({ target: schema.forecasts.date, set: { hours: input.hours, fetchedAt: ctx.now } });
+    }),
+    /** HOU-170: the last good forecast for a date, or null if it was never fetched. */
+    forecast: readProcedure.input(zDateInput).output(zStoredForecast.nullable()).query(async ({ input }) => {
+      const row = await db.query.forecasts.findFirst({ where: eq(schema.forecasts.date, input.date) });
+      return row === undefined ? null : { date: row.date, hours: row.hours, fetchedAt: iso(row.fetchedAt) };
     }),
     latest: readProcedure.input(zDateInput).output(zPlan.nullable()).query(async ({ input }) => {
       const row = await db.query.plans.findFirst({ where: eq(schema.plans.date, input.date), orderBy: desc(schema.plans.version) });

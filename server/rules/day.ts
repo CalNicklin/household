@@ -129,7 +129,8 @@ function weatherPhrase(facts: HouseFacts, date: LocalDate, fromHour: number): st
   const hours = hourlyFor(facts, date);
   const temp = hours.find((f) => Number(f.hour.slice(11, 13)) >= fromHour)?.temperatureC ?? hours[0]?.temperatureC;
   const t = temp === undefined ? "" : `, ${Math.round(temp)}°`;
-  if (hours.length === 0) return "No forecast";
+  // HOU-170: no forecast means the weather service was down and none was kept for this date.
+  if (hours.length === 0) return "Forecast not available";
   if (isDryHour(facts, date, fromHour)) {
     const w = dryWindowFrom(facts, date, fromHour);
     if (w !== null && w.end <= DAY_END_HOUR) return `Dry until ${hourWord(w.end)}${t}`;

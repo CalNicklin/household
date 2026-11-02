@@ -337,6 +337,13 @@ export type ShoppingRun = z.infer<typeof zShoppingRun>;
 
 // ── jobs ─────────────────────────────────────────────────────────────────────
 
+/** One hour of a day's forecast, in the house's local time ("2026-11-02T14:00"). */
+export const zHourlyForecast = z.object({ hour: z.string(), precipitationProbability: z.number(), temperatureC: z.number() });
+export type HourlyForecast = z.infer<typeof zHourlyForecast>;
+/** PLT-3 / HOU-170: the last good forecast for a date, kept so an outage can plan with it. */
+export const zStoredForecast = z.object({ date: z.iso.date(), hours: z.array(zHourlyForecast), fetchedAt: zIsoDateTime });
+export type StoredForecast = z.infer<typeof zStoredForecast>;
+
 export const zToolCallRecord = z.object({ tool: z.string(), input: z.unknown(), output: z.unknown() });
 
 export const zJob = z.object({
