@@ -8,7 +8,8 @@
 #   sudo deploy/install.sh --mail-domain orders.example.com
 # It never touches the other apps on the server. It:
 #   - installs the compose file, Caddyfile and household-* commands (re-run it after changing deploy/);
-#   - generates every secret on the server into /srv/household/.env (root only), once;
+#   - generates every secret on the server into /srv/household/.env (root only), and on every run adds any
+#     setting it lacks (never changing one that is there);
 #   - finds the existing Hindsight's Docker network so the app can reach it;
 #   - creates the `household` user, whose SSH key can only run household-deploy, via one sudoers rule;
 #   - for previews: installs /srv/household-previews, and a second key that can only run household-preview;
@@ -34,7 +35,7 @@ lib=/usr/local/lib/household dir=/srv/household etc=/etc/household
 install -d -m 755 "$lib" "$etc"
 install -d -m 750 "$dir"
 install -m 755 "$repo"/deploy/household-*.sh "$repo/scripts/backup.sh" "$repo/scripts/restore.sh" "$lib/"
-for c in deploy setup backup restore preview telegram google email; do ln -sfn "$lib/household-$c.sh" "/usr/local/sbin/household-$c"; done
+for c in deploy setup backup restore preview telegram google email status; do ln -sfn "$lib/household-$c.sh" "/usr/local/sbin/household-$c"; done
 # Credential files only the app (uid 10001 in its image) can read, mounted read-only into it.
 install -d -o 10001 -g root -m 700 "$dir/credentials"
 install -m 644 "$repo/deploy/compose.yml" "$repo/deploy/compose.hindsight.yml" "$repo/deploy/compose.caddy-previews.yml" "$repo/deploy/compose.mail.yml" "$repo/deploy/Caddyfile" "$repo/deploy/Caddyfile.previews" "$repo/deploy/Caddyfile.mail" "$dir/"
@@ -57,12 +58,22 @@ CONF
   chmod 644 "$etc/household.conf"
 fi
 
-# Secrets: generated here, once, by the same script as everywhere else (PRV-6). Never printed.
-if [ ! -f "$dir/.env" ]; then
-  docker run --rm --network none --memory 128m -v "$repo/scripts/env-init.ts:/env-init.ts:ro" -v "$dir:/work" -w /work node:22-bookworm-slim node /env-init.ts --real > /dev/null
-  echo "generated the secrets in $dir/.env"
-fi
+# Secrets: generated here by the same script as everywhere else (PRV-6), never printed. HOU-160: on every
+# run, not only the first, so a house set up before a setting existed (MODEL_PROVIDER) gets it. It adds only
+# what .env lacks and never changes a value already there; it says which names it added.
+added="$(docker run --rm --network none --memory 128m -v "$repo/scripts/env-init.ts:/env-init.ts:ro" -v "$dir:/work" -w /work node:22-bookworm-slim node /env-init.ts --real | sed -n 's/^added to .env: //p')"
+[ "$added" = nothing ] || echo "added to $dir/.env: $added"
 chmod 600 "$dir/.env"
+# The key the chosen provider reads (server/env.ts, PROVIDER_KEY): without it the app refuses to start.
+case "$(sed -n 's/^MODEL_PROVIDER=//p' "$dir/.env" | tail -n1)" in
+  anthropic) model_key=ANTHROPIC_API_KEY ;;
+  openai) model_key=OPENAI_API_KEY ;;
+  *) model_key="" ;;
+esac
+grep -qE '^PRACTICE_MODEL_FOR_TESTS=' "$dir/.env" && echo "remove PRACTICE_MODEL_FOR_TESTS from $dir/.env: it is for Docker test harnesses only, never the real house" >&2
+if [ -n "$model_key" ] && ! grep -qE "^$model_key=.+" "$dir/.env"; then
+  echo "set $model_key in $dir/.env (sudo nano $dir/.env): until then household-deploy refuses to start the house" >&2
+fi
 if [ -n "$domain" ]; then
   sed -i '/^HOUSEHOLD_DOMAIN=/d' "$dir/.env"
   echo "HOUSEHOLD_DOMAIN=$domain" >> "$dir/.env"

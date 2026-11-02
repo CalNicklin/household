@@ -3,6 +3,7 @@
 # Sets up the real house once (PLT-8), with the image household-deploy put in place, then starts it.
 # Prints each adult's generated app password once, to this terminal only.
 source "$(dirname "$(readlink -f "$0")")/household-common.sh"
+refuse_test_only_settings
 image="$(deployed_image)"
 [ -n "$image" ] || { echo "nothing deployed yet: push to main (or re-run the deploy workflow) first" >&2; exit 1; }
 export HOUSEHOLD_IMAGE="$image"

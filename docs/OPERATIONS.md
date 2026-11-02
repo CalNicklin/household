@@ -114,7 +114,9 @@ pushes it to GHCR.
   healthy rolls back to the previous image. Before then nothing in the databases changes: the setup
   check reads only, and migrations run only when the new app starts. A rollback doesn't undo migrations
   the new app already ran. If the old image can't run on the newer schema, restore last night's backup
-  (below) or deploy a fix.
+  (below) or deploy a fix. Before it switches, the new image checks `/srv/household/.env` the way it
+  would at startup; if it would refuse it (a practice secret, the practice model, a missing API key,
+  below), the deploy stops with that one `settings-refused` line and the running house carries on.
 - **Secrets:** generated on the server into `/srv/household/.env` (root only, mode 600) by
   `pnpm env:init --real`, run by `install.sh`. GitHub holds only the SSH key, host and known_hosts. The
   key is in the `production` environment, which only `main` may use, so no pull request's workflow can
@@ -143,9 +145,11 @@ sudo deploy/install.sh --domain house.example.com --deploy-key "$(cat household-
 ```
 
 It installs `/srv/household` (compose file, Caddyfile, `.env` with every secret generated there), the
-`household-deploy`, `household-setup`, `household-backup`, `household-restore`, `household-telegram` and `household-google` commands, the
+`household-deploy`, `household-setup`, `household-status`, `household-backup`, `household-restore`, `household-telegram` and `household-google` commands, the
 `household` user with its forced command and sudoers rule (`/etc/sudoers.d/household-deploy`), and the
-nightly backup timer. Running it again is safe: it keeps the secrets and changes only what you pass.
+nightly backup timer. Running it again is safe: it keeps every line already in `.env`, adds any setting
+it lacks (generating secrets as usual, saying which names it added and never printing a value), and
+changes only what you pass.
 Check what it found: `sudo grep -E '^(HOUSEHOLD_DOMAIN|HINDSIGHT_NETWORK)=' /srv/household/.env`.
 Copy `/srv/household/.env` into the password manager once. It holds `STORAGE_KEY`, without which the
 object backups can't be read.
@@ -185,7 +189,9 @@ from the laptop. Until all three secrets exist, the deploy workflow skips with a
 household-deploy` (GitHub never shows a secret back, so you need the private key file, or make a new key
 and re-run `install.sh --deploy-key` with its `.pub`), then `gh secret delete HOUSEHOLD_SSH_KEY`.
 
-**4. The first deploy.** Actions → deploy → Run workflow (on `main`), or merge anything to `main`. The first
+**4. The first deploy.** First put the model's key in `.env` (`sudo nano /srv/household/.env`, set
+`ANTHROPIC_API_KEY`): without it every deploy is refused, the first one included (HOU-160, **The model**
+below). Then Actions → deploy → Run workflow (on `main`), or merge anything to `main`. The first
 deploy pulls the image, starts Postgres and SeaweedFS, and stops with "The house is not set up yet". Then,
 on the server, describe the house (no secrets in it):
 
@@ -211,10 +217,40 @@ sudo household-setup < house.json
 `healthOwner` is the one adult whose health tracking may exist (PRV-2). Leave it out and nobody's does.
 It prints each adult's app login once (username and a generated password): put them in the password
 manager. Then fill in the credentials `.env` still lacks (`sudo nano /srv/household/.env`:
-`ANTHROPIC_API_KEY`, `TELEGRAM_BOT_TOKEN`; see `.env.example`). Google Calendar has its own steps
+`TELEGRAM_BOT_TOKEN`; see `.env.example`). Google Calendar has its own steps
 (**Google Calendar**, below). Redeploy what's running with
 `sudo household-deploy "$(sudo cut -d@ -f2 /srv/household/image)"`. Every later push to `main` deploys
 itself.
+
+**The model (HOU-160).** The real house never runs on the practice model (a keyword matcher that, for
+example, files "How are you?" in the backlog). `/srv/household/.env` must have:
+
+| Key | Value |
+| --- | --- |
+| `MODEL_PROVIDER` | `anthropic` (`install.sh` adds it when missing) |
+| `MODEL_ID` | `claude-opus-5-5` (`install.sh` adds it when missing) |
+| `ANTHROPIC_API_KEY` | the key from console.anthropic.com (only you can add it) |
+
+With `MODEL_PROVIDER` unset or `practice`, or the provider's key empty, the app refuses to start and
+`household-deploy` refuses to switch to it, each with one line naming what to set. A house set up before
+these keys existed: first add `ANTHROPIC_API_KEY` with `sudo nano /srv/household/.env`, then `git pull`
+the checkout and `sudo deploy/install.sh` (it adds `MODEL_PROVIDER` and `MODEL_ID`), then redeploy with
+`sudo household-deploy "$(sudo cut -d@ -f2 /srv/household/image)"`. Key first: an image from before
+this check starts without complaint on `MODEL_PROVIDER=anthropic` with no key, and then fails every
+message, so don't run `household-setup` or `household-restore` (both restart the app) between
+`install.sh` and adding the key. Check which model the running house
+uses with:
+
+```bash
+sudo household-status
+# image: ghcr.io/calnicklin/household@sha256:...
+# app: running healthy
+# house: the real house (home)
+# model: anthropic claude-opus-5-5 (ANTHROPIC_API_KEY set)
+```
+
+It asks the running app container, so it shows what that container started with, and never prints a
+key. The app also logs it at start, in the `listening` line's `model`.
 
 **5. Check it's up.**
 
@@ -223,6 +259,7 @@ curl -fsS https://house.example.com/healthz          # ok
 sudo docker compose -p household ps                   # caddy, app, postgres, objects: healthy
 sudo docker stats --no-stream $(sudo docker ps -q --filter label=com.docker.compose.project=household)
 sudo docker logs household-app-1 2>&1 | grep -E '"event":"(listening|ports-missing-credentials)"'
+sudo household-status                                 # model: anthropic claude-opus-5-5 (ANTHROPIC_API_KEY set)
 sudo docker ps --format '{{.Names}} {{.Status}}'      # hindsight and docker-ib-gateway-1 still up, unchanged
 free -m
 ```
@@ -481,6 +518,10 @@ workflows do: the committed tree, on a BuildKit builder in its own container. It
 - setup printing the logins;
 - the app healthy behind Caddy with no helper (`/healthz` ok, everything else asking for a login,
   HTTP redirected to HTTPS);
+- a `.env` the new image refuses (no `MODEL_PROVIDER`, `MODEL_PROVIDER=practice`, no
+  `ANTHROPIC_API_KEY`) not deployed, with the running app container untouched and healthy (HOU-160);
+- `install.sh`'s env-init adding `MODEL_PROVIDER` and `MODEL_ID` to an old `.env` without changing a line
+  of it, and `household-status` showing the model;
 - a broken image rolled back;
 - a backup restored with the house healthy again.
 

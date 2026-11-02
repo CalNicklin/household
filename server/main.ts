@@ -4,7 +4,7 @@ import { practicePorts } from "../practice/fakes.ts";
 import { migrateAll, seedPractice } from "../practice/seed.ts";
 import { loadAdapters } from "./adapters/registry.ts";
 import { acceptTimer } from "./coordinator/accept.ts";
-import { houseCalendars, loadEnv, unknownCalendarOwners } from "./env.ts";
+import { houseCalendars, loadEnvOrExit, modelStatus, unknownCalendarOwners } from "./env.ts";
 import { createApp } from "./http/app.ts";
 import { practiceRoutes } from "./http/practice.ts";
 import { realPorts } from "./integrations/index.ts";
@@ -17,7 +17,7 @@ import { localDate } from "./time.ts";
 
 /** PLT-8: the whole system is this one process plus Postgres, object storage, Hindsight and the helper. */
 async function main(): Promise<void> {
-  const env = loadEnv();
+  const env = loadEnvOrExit();
   await migrateAll(env);
   const emails = new Map<string, string>();
   const shopping = env.HELPER_URL === undefined ? undefined : new HttpShoppingHelper(env.HELPER_URL, env.HELPER_TOKEN);
@@ -54,7 +54,7 @@ async function main(): Promise<void> {
   for (const a of adapters) await a.start?.(rt);
   const app = createApp(rt, adapters, env.PRACTICE ? practiceRoutes(rt) : undefined);
   serve({ fetch: app.fetch, port: env.PORT });
-  console.log(JSON.stringify({ event: "listening", port: env.PORT, practice: env.PRACTICE, adapters: adapters.map((a) => a.name) }));
+  console.log(JSON.stringify({ event: "listening", port: env.PORT, practice: env.PRACTICE, model: modelStatus(env), adapters: adapters.map((a) => a.name) }));
   // HOME-11: after a restart, today's plan exists before anyone looks.
   const today = localDate(ports.clock.now(), rt.timeZone);
   if ((await rt.system("boot").plans.latest({ date: today })) === null) await acceptTimer(rt, TimerKind.morningPlan, ports.clock.now());

@@ -1,15 +1,15 @@
 import { zHouseSetup } from "@household/contracts";
 import { migrateAll } from "../practice/seed.ts";
-import { loadEnv } from "../server/env.ts";
+import { loadEnvOrExit } from "../server/env.ts";
 import { isHouseSetUp, setUpHouse } from "../server/setup/house.ts";
 
 /**
  * PLT-8: set up the real house once, on the server. Reads the house (no secrets) on stdin and prints
  * each adult's generated app password once, to the terminal that ran it (`sudo household-setup < house.json`
  * on the server runs this in the app's image). `--check` only answers, reading and migrating nothing:
- * exit 0 if set up, 3 if not.
+ * exit 0 if set up, 3 if not, and 78 (one `settings-refused` line) if the app would refuse these settings.
  */
-const env = loadEnv();
+const env = loadEnvOrExit();
 if (env.PRACTICE) {
   console.error("house:setup is for the real house (PRACTICE=false); the practice household seeds itself");
   process.exit(2);
