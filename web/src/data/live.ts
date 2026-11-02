@@ -1,10 +1,39 @@
-import { useQueryClient } from "@tanstack/react-query";
+import { type Query, type QueryClient, useQueryClient } from "@tanstack/react-query";
 import { useEffect } from "react";
 import { flushOutbox } from "./send.ts";
 import { checkForUpdate } from "./sw.ts";
 
 function localDay(): string {
   return new Date().toDateString();
+}
+
+/**
+ * HOU-161: refetch every active query, but never cancel one already on its way. A burst of changes
+ * (a job and the re-plan it starts) used to cancel every in-flight fetch on each change, so a slow
+ * screen like Shop never landed until the burst ended. A query still fetching (retrying or paused
+ * included) is owed one more fetch, made the moment it settles: it may be carrying an answer from
+ * before the change (HOME-1). Each query waits only on itself, so a failing one holds up no other.
+ */
+function refresher(queryClient: QueryClient): { refresh: () => void; stop: () => void } {
+  const owed = new Set<string>();
+  // Stale again, and refetched now if a screen shows it; one no screen shows waits for its next mount.
+  const refetch = (query: Query) => void queryClient.invalidateQueries({ queryKey: query.queryKey, exact: true }, { cancelRefetch: false });
+  const stop = queryClient.getQueryCache().subscribe((event) => {
+    if (event.type !== "updated" || (event.action.type !== "success" && event.action.type !== "error")) return;
+    // HOU-161: Lists' optimistic setQueryData mid-fetch is a "success" too; the fetch is still on its way.
+    if (event.query.state.fetchStatus !== "idle") return;
+    if (owed.delete(event.query.queryHash)) refetch(event.query);
+  });
+  const refresh = () => {
+    // Stale everywhere, so an inactive screen refetches when it is next shown; nothing refetched here.
+    void queryClient.invalidateQueries({ refetchType: "none" });
+    // A fetch still on its way is owed one more even when its screen is gone: coming back joins it.
+    for (const query of queryClient.getQueryCache().findAll()) {
+      if (query.state.fetchStatus !== "idle") owed.add(query.queryHash);
+      else if (query.isActive()) refetch(query);
+    }
+  };
+  return { refresh, stop };
 }
 
 /**
@@ -19,11 +48,7 @@ function localDay(): string {
 export function useLive(): void {
   const queryClient = useQueryClient();
   useEffect(() => {
-    // Cancel first: a query still on its first load ignores invalidation and keeps the answer it is
-    // fetching, so a change landing while the screen opens would otherwise never be shown (HOME-1).
-    const refresh = () => {
-      void queryClient.cancelQueries().then(() => queryClient.invalidateQueries());
-    };
+    const { refresh, stop } = refresher(queryClient);
     const live: { source: EventSource | null } = { source: null };
     const connect = () => {
       const source = new EventSource("/api/live");
@@ -70,6 +95,7 @@ export function useLive(): void {
     window.addEventListener("online", onOnline);
     return () => {
       live.source?.close();
+      stop();
       window.clearInterval(timer);
       document.removeEventListener("visibilitychange", onVisible);
       window.removeEventListener("online", onOnline);
