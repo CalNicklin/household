@@ -18,6 +18,8 @@ function refresher(queryClient: QueryClient): { refresh: () => void; stop: () =>
   const refetch = (query: Query) => void queryClient.refetchQueries({ queryKey: query.queryKey, exact: true, type: "active" }, { cancelRefetch: false });
   const stop = queryClient.getQueryCache().subscribe((event) => {
     if (event.type !== "updated" || (event.action.type !== "success" && event.action.type !== "error")) return;
+    // AR-3: a setQueryData mid-fetch is a "success" too, but the fetch is still on its way.
+    if (event.query.state.fetchStatus !== "idle") return;
     if (owed.delete(event.query.queryHash)) refetch(event.query);
   });
   const refresh = () => {
