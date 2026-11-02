@@ -596,6 +596,218 @@ shows:
 - closing a PR removing its preview, and a PR with no preview getting no certificate;
 - the house's containers never restarted, and its volumes and `.env` unchanged.
 
+## Order emails (HOU-150)
+
+Order confirmations reach the house by email with no mail service in between: Gmail forwards them to
+`orders@orders.tracesknown.com`, the house's own mail receiver on the VPS takes them on port 25, and each
+order becomes an **Arriving** block (CAP-9). The receiver only receives. It sends nothing, ever: no
+replies, no bounces, no relaying.
+
+| Container (compose project `household`) | Memory cap (swap capped too) | Reachable from |
+| --- | --- | --- |
+| `mail` (the house's image, `mail/main.ts`) | 128 MB | the internet, port 25 only |
+
+The receiver is an overlay, `deploy/compose.mail.yml`. The house adds it only once `install.sh` has been
+given `--mail-domain`, so until then a deploy runs exactly the four containers above. With it the house is
+680 MB at most, and 1.3 GB with two previews.
+
+- **One address:** mail for `orders@<mail domain>` is taken. Every other recipient is refused at `RCPT`
+  (`550`), whoever sent it, so the receiver can't be used as a relay. There is no `AUTH` to log in with.
+  - Messages over 5 MB are refused (`552`). A message with more than ten DKIM/ARC headers is answered
+    `250` and dropped unchecked, like any unproven mail.
+  - Connections are limited: at most four from the internet at once and two from any one address. Each
+    is closed after a minute idle or ten minutes in all, and ten messages per connection.
+  - One message is checked at a time, for at most 30 seconds. A check that runs past that is answered
+    `451` and abandoned. It stops at its next step and never reaches the app.
+  - The container's healthcheck always gets in, so a flood can't fail a deploy.
+  - The reasons are in `contracts/limits.ts` (`inboundEmail*`).
+- **Who sent it:** anyone can send to `orders@`, and a forwarded order's `From:` is the shop. So the
+  receiver works out who forwarded it from what their mail provider vouches for, never from what the
+  headers say (`mail/verify.ts`):
+  - **Gmail's auto-forward:** it comes from Google's servers with the envelope sender
+    `cal+caf_=orders=orders.tracesknown.com@gmail.com`, aimed at our own address, and carries Gmail's ARC
+    seal (google.com). When SPF for `gmail.com` passes and that seal verifies, that is `cal@gmail.com`.
+    An SPF pass alone proves no one: anyone on shared servers (Google's, Microsoft's, an ISP's) can pass
+    it for another customer, so no other envelope counts.
+  - **A forward by hand** (`Fwd:` from Cal's own mailbox): its `From:` domain carries a passing DKIM
+    signature of that same domain, over a `To:`/`Cc:` naming our address. An old signed email re-sent to
+    us doesn't count. The shop is then taken from the forwarded message's own `From:` line.
+
+  `X-Forwarded-For`, `X-Forwarded-To`, `Delivered-To`, `Resent-From` and `To:` are written by whoever
+  sent the email, so they prove nothing and are never used. The app then accepts the email only if a
+  proven address is an adult's `email` from `house.json` (CH-3).
+  - Anything else is answered `250` and dropped, and the drop is logged (`mail-dropped-unproven-sender`,
+    or the app's `dropped-unknown-sender`). Refusing it would make the sending server bounce it to
+    whoever is in its envelope.
+  - Only a DNS lookup failing for now, a check running out of time, or the app being unreachable gets
+    `451`, so a real forward is tried again.
+  - Only proven mail is parsed.
+- **TLS:** Caddy gets and renews the certificate for the mail domain, as it does for the house. The
+  receiver offers STARTTLS with it once it exists, and checks for a renewal every ten minutes. Until then,
+  for the first few minutes after the first deploy, it takes mail without TLS rather than offer a
+  self-signed certificate.
+- **Privileges and reach:**
+  - The container starts as root with no capability but `SETUID`/`SETGID`, only to copy Caddy's key for
+    the mail domain (Caddy keeps its keys root-only).
+  - It then runs the receiver as the image's unprivileged `house` user with no capabilities, on a
+    read-only filesystem.
+  - It is on a network of its own, shared only with the app. It can't reach Postgres, object storage or
+    Caddy.
+  - It gets only `EMAIL_WEBHOOK_SECRET`, not the house's `.env`, and posts to the app's `/webhooks/email`.
+- **Gmail's forwarding confirmation** is kept (the code and when it came, in memory only) and never
+  reaches the app. `sudo household-email last-confirmation` prints the code if it came within the hour,
+  and nothing else. The deploy user can't run it.
+- **Who is who:** the Gmail address that forwards must be that adult's `email` in `house.json` (step 4
+  of the real house), e.g. `"email": "cal@gmail.com"`. Gmail's envelope uses the address exactly as the
+  account is named. Forwards from an address that isn't anyone's are dropped and logged as
+  `dropped-unknown-sender`.
+
+### Cal's one-time steps for order emails
+
+`tracesknown.com` is at Namecheap; the house is `house.tracesknown.com`. The mail domain is
+`orders.tracesknown.com`, so the forwarding address is `orders@orders.tracesknown.com`. A subdomain
+keeps the receiver away from any mail on `tracesknown.com` itself.
+
+**1. DNS at Namecheap.** Domain List → `tracesknown.com` → **Manage** → **Advanced DNS**.
+
+a. Under **Host Records**, **Add New Record**: type **A Record**, Host `orders`, Value the VPS's IPv4
+   address (the same as `house`), TTL Automatic. Save it with the tick. Add no AAAA record for `orders`,
+   even if `house` has one. Docker hands IPv6 connections to the receiver from its own address, which
+   would make SPF fail for every forward.
+
+b. Scroll down to **Mail Settings** and look at what it says now, **before changing anything**:
+
+   - **No Email Service** (or empty): nothing on `tracesknown.com` receives mail. Choose **Custom MX**.
+   - **Email Forwarding**, **Private Email**, **Gmail**/Google Workspace, or anything else: some mail on
+     `tracesknown.com` works today. Switching to **Custom MX** replaces that service's MX records, and
+     mail to `…@tracesknown.com` stops arriving. Avoid it this way:
+     1. Before switching, note the current MX records: `dig +short MX tracesknown.com` (for Email
+        Forwarding they are `eforward1` to `eforward5.registrar-servers.com`; for Private Email,
+        `mx1`/`mx2.privateemail.com`). Also note the `@` TXT record that starts `v=spf1`.
+     2. Choose **Custom MX**, then add each of those back with Host `@`, the same mail server and the
+        same priority. Keep the SPF TXT record.
+     3. Send a test to an address on `tracesknown.com` that worked before, and check it still arrives.
+        If it doesn't, put **Mail Settings** back the way it was. Then skip c (no MX record for
+        `orders`): a mail server sends to a host's A record when it has no MX record (RFC 5321 5.1),
+        so the receiver still gets mail. Step 5's test send tells you whether it does.
+
+c. In **Custom MX**, **Add New Record**: Host `orders`, Mail Server `orders.tracesknown.com`, Priority
+   `10`, TTL Automatic. Save it.
+
+d. Check from your laptop (allow up to 30 minutes):
+
+```bash
+dig +short A orders.tracesknown.com     # the VPS's IPv4 address
+dig +short MX orders.tracesknown.com    # 10 orders.tracesknown.com.
+dig +short MX tracesknown.com           # unchanged from before (or empty if there was no mail)
+```
+
+**2. Port 25 on the server.** Hetzner allows inbound 25 (only *outbound* 25 is blocked on new accounts,
+and the receiver never sends). If the server is in a **Hetzner Cloud Firewall** (Cloud Console →
+Firewalls), add an inbound rule: TCP, port `25`, source any IPv4. If `ufw` is on, add it there too, so the
+rules say what is open (Docker's published ports bypass ufw anyway): `sudo ufw allow 25/tcp`. Nothing
+else on the server may be listening on 25. `sudo ss -ltnp 'sport = :25'` must print nothing. If it shows
+`exim4` or `postfix`, stop and disable it: `sudo systemctl disable --now exim4`.
+
+**3. Re-run `install.sh` and redeploy.** On the server:
+
+```bash
+cd ~/household && git pull
+sudo deploy/install.sh --mail-domain orders.tracesknown.com
+sudo household-deploy "$(sudo cut -d@ -f2 /srv/household/image)"
+```
+
+It installs `deploy/compose.mail.yml`, `deploy/Caddyfile.mail` and `household-email`, and writes
+`MAIL_DOMAIN` to `/srv/household/.env`. It keeps every secret and refuses if something else already has
+port 25. Check:
+
+```bash
+sudo docker compose -p household ps                    # mail: healthy, 0.0.0.0:25->2525/tcp
+sudo docker logs household-mail-1 2>&1 | grep -E 'mail-(listening|certificate)'
+```
+
+`"starttls":true`, or a later `mail-certificate-arrived`, means Caddy got the certificate. It takes a
+few minutes, and the receiver picks it up within twenty. `sudo docker restart household-mail-1` takes it
+at once.
+
+**4. Gmail.** Do this in the Gmail account whose address is your `email` in `house.json`.
+
+a. ⚙ → **See all settings** → **Forwarding and POP/IMAP** → **Add a forwarding address** →
+   `orders@orders.tracesknown.com` → **Next** → **Proceed**. Gmail sends a confirmation email to it.
+
+b. On the server, within the hour:
+
+```bash
+sudo household-email last-confirmation       # prints the code, e.g. 693452117
+```
+
+c. Back in Gmail's Forwarding settings, enter that code in **Confirmation code** → **Verify**. Leave
+   **Disable forwarding** selected: forwarding everything isn't wanted, only orders.
+
+d. The filter: in the search box's **Show search options**, put this in **Has the words** (adjust it
+   for your shops):
+
+```
+subject:(order OR dispatched OR delivery OR arriving OR "on its way")
+```
+
+   → **Create filter** → tick **Forward it to** `orders@orders.tracesknown.com` → **Create filter**.
+   Only new mail is forwarded. The house keeps only the shop and the day of each order (PRV-3), and
+   ignores anything that isn't an order.
+
+**5. A test send.** Send yourself an email that looks like an order, from another account, e.g. Subject
+`Your Screwfix order is confirmed`, body `Arriving tomorrow between 8am and 1pm.` Gmail's filter forwards
+it. Within a minute or two:
+
+```bash
+sudo docker logs household-mail-1 2>&1 | grep -E '"event":"mail-' | tail -3
+# {"event":"mail-handed-to-app","outcome":"accepted","proof":["envelope-spf",…]}
+```
+
+The home screen on the iPad then shows an **Arriving** block for tomorrow (arrivals show the day before
+and the day itself). It is named after the email's sender, which for a real order is the shop; for this
+test it is the other account's name. If the log shows `mail-dropped-unproven-sender` instead, the forward
+didn't pass as Gmail's. Check there is no AAAA record for `orders`, and that the forwarding address is
+exactly `orders@orders.tracesknown.com`. The log line shows which of SPF, DKIM and ARC failed. If the app's
+log has `dropped-unknown-sender`, the forwarding address isn't your `email` in `house.json`.
+
+### Tried on the build sandbox — 1 November 2026
+
+The build sandbox can't reach the real server or real mail. So `deploy/test-mail.sh` deploys the house
+with the real `household-deploy`, with `MAIL_DOMAIN=orders.localhost`, against local Docker. A test DNS
+server (`scripts/mail-proof.ts`, in its own container) answers the receiver's SPF, DKIM, DMARC and ARC
+lookups with test records and keys. It treats the Docker gateway as Google's servers. The practice model
+reads the orders, because there is no model key. Everything else goes over real SMTP into port 25:
+
+- **The container:**
+  - the receiver ran as uid 10001 with no capabilities, on a read-only filesystem;
+  - from its network it reached the app and nothing else (not Postgres, SeaweedFS's S3 or master port,
+    or Caddy);
+  - it offered STARTTLS with the certificate Caddy issued for `orders.localhost` (Caddy's local CA, as
+    `.localhost` gets).
+- **A Gmail-shaped auto-forward** of a Screwfix order (`sam+caf_=…@gmail.com`, Google's ARC seal, the
+  shop's DKIM signature intact) was answered `250`. The app recorded
+  `Screwfix | tomorrow | 8am–1pm | someone in | sam`.
+- **A forward by hand** of a Currys order (From sam, signed by gmail.com, To orders@) was recorded as
+  `Currys | tomorrow | 10am–2pm | sam`, named after the shop.
+- **The home screen** couldn't be drawn in the sandbox: planning a day needs the weather service, which
+  the sandbox can't reach.
+- **Three spoofs** were answered `250` and none became an arrival:
+  - forwarding headers naming sam, from a server that isn't Google: dropped by the receiver;
+  - `From: sam` sent from another domain: dropped by the receiver;
+  - a stranger's own Gmail forward with the headers rewritten: only the stranger was proven, and the app
+    dropped and logged them.
+- **Refused:**
+  - mail for another address here: `550` at RCPT;
+  - a relay attempt to two outside addresses: `550`, `550`;
+  - a 5.3 MB message: `552`;
+  - a third session at once from one address: `421`.
+- **Gmail-shaped forwarding confirmation:** `household-email last-confirmation` printed its code and
+  nothing else.
+- **Memory:** 72 MiB at idle, and at most 83 MiB of the 128 MiB cap under a burst of 40 one-megabyte
+  messages, two connections at a time. Every message was answered `250`, with no restart and no OOM
+  kill.
+
 ## Agent review (HOU-151)
 
 Every push to a PR from this repository (never a fork's) is reviewed by `.github/workflows/agent-review.yml`

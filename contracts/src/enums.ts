@@ -489,6 +489,15 @@ export const ListWriteOutcome = {
 export type ListWriteOutcome = ValueOf<typeof ListWriteOutcome>;
 export const zListWriteOutcome = z.enum(ListWriteOutcome);
 
+/** HOU-150: how the mail receiver proved who sent an email on to orders@ (CH-3). */
+export const SenderProof = {
+  /** Gmail's auto-forward to us: the envelope `cal+caf_=<us>@gmail.com`, gmail.com's SPF and Google's ARC seal. */
+  envelopeSpf: "envelope-spf",
+  /** The From header's domain is the domain of a passing DKIM signature (a forward by hand). */
+  authorDkim: "author-dkim",
+} as const;
+export type SenderProof = ValueOf<typeof SenderProof>;
+
 /**
  * HOME-1: whose a Google calendar is. A person's own calendar is named by their person ID (`cal`,
  * `chloe`); `shared` is the household's shared calendar, whose events keep the attendee-email rule.

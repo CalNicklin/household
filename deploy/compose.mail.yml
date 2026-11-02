@@ -1,0 +1,65 @@
+# HOU-150: the house's own mail receiver, for order emails forwarded to orders@<MAIL_DOMAIN>. Added to the
+# real house's project by household-common.sh only when MAIL_DOMAIN is in /srv/household/.env
+# (install.sh --mail-domain), so a deploy without it runs exactly as before.
+#
+# Caddy gets the certificate for MAIL_DOMAIN (Caddyfile.mail); the receiver reads it for STARTTLS. The
+# receiver takes mail for orders@<MAIL_DOMAIN> only, never sends any, and hands each email whose sender
+# it can prove to the app's email webhook on the project's own network.
+
+# Its hard memory cap (swap capped too), added to the house's 552 MB in compose.yml.
+x-memory:
+  mail: &mail-memory 128m
+
+services:
+  # The app also joins the receiver's own network, the only thing the receiver can reach in the house.
+  app:
+    networks: [default, mailhook]
+
+  caddy:
+    environment:
+      MAIL_DOMAIN: ${MAIL_DOMAIN:?}
+    volumes:
+      - ./Caddyfile.mail:/etc/caddy/mail/mail.caddy:ro
+
+  mail:
+    image: ${HOUSEHOLD_IMAGE:?household-deploy sets HOUSEHOLD_IMAGE}
+    restart: unless-stopped
+    mem_limit: *mail-memory
+    memswap_limit: *mail-memory
+    logging:
+      driver: json-file
+      options: { max-size: 10m, max-file: "3" }
+    # SMTP for the internet: port 25, to the receiver's unprivileged 2525.
+    ports: ["25:2525"]
+    # The entrypoint starts as root only to read Caddy's (root-only) key for MAIL_DOMAIN, then runs the
+    # receiver as the image's `house` user (mail/entrypoint.sh). No other capability, and nothing writable
+    # but its two memory-backed directories.
+    user: "0:0"
+    entrypoint: ["/app/mail/entrypoint.sh"]
+    cap_drop: [ALL]
+    cap_add: [SETUID, SETGID]
+    security_opt: ["no-new-privileges:true"]
+    read_only: true
+    pids_limit: 64
+    tmpfs:
+      - /run/mail-tls:size=1m,mode=0755
+      - /run/mail-state:size=1m,mode=0700,uid=10001
+    volumes:
+      - caddy-data:/caddy-data:ro
+    # Its own network, shared only with the app: it parses mail from the internet, so it gets no route to
+    # Postgres, object storage or Caddy. (The network reaches the internet, for the DNS of SPF and DKIM.)
+    networks: [mailhook]
+    environment:
+      MAIL_DOMAIN: ${MAIL_DOMAIN:?}
+      EMAIL_WEBHOOK_URL: http://app:3001/webhooks/email
+      EMAIL_WEBHOOK_SECRET: ${EMAIL_WEBHOOK_SECRET:?}
+      # Node's heap stays well inside the cap.
+      NODE_OPTIONS: --max-old-space-size=80
+    healthcheck:
+      test: ["CMD", "node", "-e", "const s=require('net').connect(2525,'127.0.0.1');s.setTimeout(5000,()=>process.exit(1));s.on('data',d=>{s.end('QUIT\\r\\n');process.exit(String(d).startsWith('220')?0:1)});s.on('error',()=>process.exit(1))"]
+      interval: 30s
+      start_period: 20s
+      retries: 3
+
+networks:
+  mailhook: {}
