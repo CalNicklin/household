@@ -70,10 +70,18 @@ household_compose() { docker compose "$@"; }
 # HOU-175: the sites are files the house doesn't write, so before any `up` that could recreate Caddy, its
 # whole config, sites included, goes through `caddy validate` in a throwaway Caddy (no ports published).
 # Invalid: says which file and line, and fails. Needs HOUSEHOLD_IMAGE set, like every compose command.
+# `caddy validate` doesn't bind, so the adapted config is also checked for any listener but the front address
+# (Caddyfile.sites) and 127.0.0.1: a site with its own `bind` would fail to start, or reach the previews.
+# shellcheck disable=SC2016 # expanded in the throwaway Caddy, where the entrypoint sets CADDY_FRONT_IP
+SITES_CHECK='caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile || exit 1
+listen="$(caddy adapt --config /etc/caddy/Caddyfile --adapter caddyfile 2> /dev/null | grep -o "\"listen\":\[[^]]*\]" | grep -o "\"[^\"]*\"" | grep -vx "\"listen\"")"
+[ -n "$listen" ] || { echo "Error: the config has no listener"; exit 1; }
+other="$(printf "%s\n" "$listen" | grep -vxE "\"((tcp|udp)[0-9]?/)?(127\.0\.0\.1|${CADDY_FRONT_IP:-none}):[0-9]+\"" | tr "\n" " " | sed "s/ \$//")"
+[ -z "$other" ] || { echo "Error: a site listens on $other, not only on the front address: no site may set its own bind"; exit 1; }'
 sites_valid() {
   local out
   [[ ":$COMPOSE_FILE:" == *":$HOUSEHOLD_DIR/compose.caddy-sites.yml:"* ]] || return 0
-  if out="$(household_compose run --rm --no-deps -T caddy caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile < /dev/null 2>&1)"; then
+  if out="$(household_compose run --rm --no-deps -T caddy sh -c "$SITES_CHECK" < /dev/null 2>&1)"; then
     echo "caddy config with $SITES_DIR is valid"
     return 0
   fi

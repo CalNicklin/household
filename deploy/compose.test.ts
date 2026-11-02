@@ -161,7 +161,10 @@ describe("HOU-175: other apps' sites on the house's Caddy", () => {
   });
 
   it("[PLT-8] every command that starts the house validates Caddy's whole config with the sites first", () => {
-    expect(common).toContain("household_compose run --rm --no-deps -T caddy caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile");
+    expect(common).toContain('household_compose run --rm --no-deps -T caddy sh -c "$SITES_CHECK"');
+    // Validation, then (since validate binds nothing) no listener but the front address and 127.0.0.1.
+    expect(common).toMatch(/^SITES_CHECK='caddy validate --config \/etc\/caddy\/Caddyfile --adapter caddyfile \|\| exit 1$/m);
+    expect(common).toContain('(127\\.0\\.0\\.1|${CADDY_FRONT_IP:-none}):[0-9]+');
     for (const [file, before] of [["household-deploy.sh", "household_compose up"], ["household-setup.sh", "household_compose up"], ["household-restore.sh", "\"$HOUSEHOLD_LIB/restore.sh\""]] as const) {
       const text = read(file);
       const validate = text.search(/^(if ! )?sites_valid\b/m);

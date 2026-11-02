@@ -888,7 +888,7 @@ and the trader side owns them, the services behind them, and their logins.
   house's own network, where Docker delivers ports 80 and 443; the previews' network is internal, with
   no gateway. A preview that connects to Caddy finds nothing listening (`deploy/test-deploy.sh` shows it
   refused on 80 and 443 while the host reaches the site). A site file must not set its own `bind`,
-  which would undo this. Caddy listens on IPv4 only then; the house's Docker networks have no IPv6.
+  which would undo this: the validation refuses any listener but the front address and 127.0.0.1. Caddy listens on IPv4 only then; the house's Docker networks have no IPv6.
 - **Validated before it is used:** before switching anything, `household-deploy` runs Caddy's whole
   config, sites included, through `caddy validate` in a throwaway Caddy. If a file is invalid, the deploy
   stops, naming the file and line (`Error: … /etc/household/sites/monitor.caddy:2: unrecognized directive: …`),
