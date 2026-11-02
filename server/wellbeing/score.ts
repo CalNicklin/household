@@ -61,6 +61,7 @@ function soloAt(facts: HouseFacts, person: string, date: LocalDate, hour: number
 }
 
 function hardModeOn(facts: HouseFacts, date: LocalDate): boolean {
+  // A score is for the whole day, so a slow day ended in the afternoon still counts (no `now`).
   const m = modeOn(facts, date);
   return m !== null && (m.mode === ModeKind.slow || m.mode === ModeKind.sick);
 }

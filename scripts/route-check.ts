@@ -4,6 +4,7 @@ import { z } from "zod";
 import { practicePorts } from "../practice/fakes.ts";
 import { resetPractice } from "../practice/seed.ts";
 import { HouseAgent } from "../server/agent/agent.ts";
+import { setsModeAhead } from "../server/agent/practice-model.ts";
 import { jobScope } from "../server/agent/scope.ts";
 import { loadEnv } from "../server/env.ts";
 import { createRuntime } from "../server/runtime.ts";
@@ -46,9 +47,7 @@ try {
     const tools = scope.toolCalls.map((c) => c.tool);
     const shown = scope.toolCalls.map((c) => `${c.tool}(${JSON.stringify(c.input)})`).join(" + ") || "none";
     // HOU-156: a phrase marked `ahead` must (or must not) set its mode for a later day.
-    const modeCalls = scope.toolCalls.filter((c) => c.tool === "set_mode");
-    const ahead = modeCalls.length > 0 && modeCalls.every((c) => typeof c.input === "object" && c.input !== null && "from" in c.input && typeof c.input.from === "string" && c.input.from !== "");
-    const ok = p.expect.some((e) => e.join("+") === tools.join("+")) && (p.ahead === undefined || p.ahead === ahead);
+    const ok = p.expect.some((e) => e.join("+") === tools.join("+")) && (p.ahead === undefined || p.ahead === setsModeAhead(scope.toolCalls));
     if (ok) passed++;
     rows.push(`| ${i + 1} | ${cell(p.text)} | ${cell(shown)} | ${p.expect.map((e) => e.join("+")).join(" or ")}${p.ahead === undefined ? "" : p.ahead ? " (ahead)" : " (from now)"} | ${ok ? "yes" : "**no**"} | ${cell(reply)} |`);
     process.stdout.write(`${ok ? "ok  " : "MISS"} ${p.text} -> ${tools.join("+") || "none"}\n`);

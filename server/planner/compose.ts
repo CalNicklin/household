@@ -235,7 +235,7 @@ export function compose(input: ComposeInput): Block[] {
     title: longDate(date),
     line: contextLine(facts, date, now),
   };
-  const mode = modeOn(facts, date);
+  const mode = modeOn(facts, date, now);
   if (mode !== null) return composeMode(input, mode, header);
 
   const body: Block[] = [...(input.fill === null ? [] : firstDayBlocks(input.fill)), ...input.rules.map(ruleBlock), ...calendarBlocks(input), ...tomorrowEvents(input)];

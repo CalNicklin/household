@@ -29,7 +29,7 @@ export async function planningSignals(rt: Runtime, date: LocalDate, now: Date, f
   const avoid = [...(await avoidedDayParts(rt))];
   const todayOffer = (await api.plans.offers()).find((o) => o.date === date)?.itemId ?? null;
   const heavy = await heavyPeople(rt, date, facts);
-  const mode = modeOn(facts, date);
+  const mode = modeOn(facts, date, now);
   const oneThing = mode === null ? null : ((await oneThingCandidates(rt, facts, date, now, new Set(closed), mode.setBy))[0] ?? null);
   return { closed, avoid, offerTo: Object.fromEntries(await offerTargets(rt)), todayOffer, heavy, oneThing, question: await questionFor(rt, date) };
 }

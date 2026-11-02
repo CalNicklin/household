@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, test } from "vitest";
 import { z } from "zod";
-import { practiceModel } from "./practice-model.ts";
+import { practiceModel, setsModeAhead } from "./practice-model.ts";
 
 const zPhrases = z.object({ phrases: z.array(z.object({ text: z.string(), expect: z.array(z.array(z.string())), ahead: z.boolean().optional() })) });
 const { phrases } = zPhrases.parse(JSON.parse(readFileSync(new URL("../../practice/phrases/routing.json", import.meta.url), "utf8")));
@@ -14,12 +14,6 @@ async function toolsFor(text: string): Promise<{ tools: string[]; inputs: unknow
   return { tools: calls.map((c) => c.toolName), inputs: calls.map((c) => JSON.parse(c.input) as unknown) };
 }
 
-/** HOU-156: whether every set_mode call names a later day to start on. */
-function setsAhead(tools: readonly string[], inputs: readonly unknown[]): boolean {
-  const modes = inputs.filter((_, i) => tools[i] === "set_mode");
-  return modes.length > 0 && modes.every((i) => typeof i === "object" && i !== null && "from" in i && typeof i.from === "string" && i.from !== "");
-}
-
 describe("HOU-148: the practice model routes the household's phrases the way a person would expect", () => {
   test.each(phrases)("[CAP-1][AUT-1][MOM-2] $text", async ({ text, expect: acceptable }) => {
     const { tools } = await toolsFor(text);
@@ -28,7 +22,7 @@ describe("HOU-148: the practice model routes the household's phrases the way a p
 
   test.each(phrases.flatMap((p) => (p.ahead === undefined ? [] : [{ text: p.text, ahead: p.ahead }])))("[MOM-4] set ahead or from now (HOU-156): $text", async ({ text, ahead }) => {
     const { tools, inputs } = await toolsFor(text);
-    expect(setsAhead(tools, inputs)).toBe(ahead);
+    expect(setsModeAhead(tools.map((tool, i) => ({ tool, input: inputs[i] })))).toBe(ahead);
   });
 
   test("[MOM-4] a span set ahead names its first and last day (HOU-156)", async () => {

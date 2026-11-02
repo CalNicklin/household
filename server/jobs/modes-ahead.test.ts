@@ -89,4 +89,22 @@ describe("HOU-156: a mode set ahead for a later day", () => {
     expect(JSON.stringify(out)).toContain("Which day");
     expect(await h.rt.system("t").household.modesBetween({ from: atLocal("2026-11-09", 0, 0, TZ).toISOString(), to: atLocal("2026-11-30", 0, 0, TZ).toISOString() })).toEqual(before);
   });
+
+  test("[MOM-4] on a weekend set ahead, 'slow day' on the Saturday leaves Sunday away and says so (AR-2)", async () => {
+    h.ports.clock.set(atLocal("2026-11-09", 9, 0, TZ), true);
+    await h.sayAndWait("we're away this weekend");
+    h.ports.clock.set(atLocal("2026-11-14", 9, 0, TZ), true);
+    expect(await replyTo(await h.sayAndWait("slow day"))).toContain("Tomorrow is still away.");
+    expect((await h.rt.system("t").household.activeMode())?.mode).toBe(ModeKind.slow);
+    const sundayNoon = atLocal("2026-11-15", 12, 0, TZ).toISOString();
+    expect(await h.rt.system("t").household.modesBetween({ from: sundayNoon, to: sundayNoon })).toMatchObject([{ mode: ModeKind.away, startsAt: atLocal("2026-11-15", 0, 0, TZ).toISOString() }]);
+  });
+
+  test("[MOM-4] 'back to normal' in the afternoon makes the rest of today normal on the screen, and Sunday stays away (AR-1)", async () => {
+    h.ports.clock.set(atLocal("2026-11-14", 13, 0, TZ), true);
+    expect(await replyTo(await h.sayAndWait("back to normal"))).toContain("Back to a normal day. Tomorrow is still away.");
+    expect(await h.rt.system("t").household.activeMode()).toBeNull();
+    expect((await screenView(h.rt, "priya", "2026-11-14")).blocks.some((b) => b.type === BlockType.mode)).toBe(false);
+    expect((await weekModes())["2026-11-15"]).toBe(ModeKind.away);
+  });
 });

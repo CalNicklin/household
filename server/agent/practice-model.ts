@@ -61,6 +61,21 @@ const splitItems = (s: string) =>
     .map((x) => x.trim().replace(/^(some|more|a|an)\s+/i, ""))
     .filter((x) => x.length > 0);
 
+/** "slow day", "we're away this weekend", "back to normal" → set_mode, or nothing. */
+function modeCall(lower: string): Call[] {
+  const modeMatch = /\b(slow|sick|lazy|rough|hard|quiet)\s+day\b/.exec(lower);
+  const extend = /\b(extend|keep)\b.*\b(slow|sick)\s+day\b.*\b(tomorrow|weekend)\b|\b(slow|sick)\s+day\b.*\b(till|until|through)\s+(tomorrow|the weekend)\b/.exec(lower);
+  // HOU-156: a later day ("this weekend", "on Friday", "from Saturday until Monday") sets the mode ahead for it.
+  const DAY = "(this weekend|the weekend|tomorrow|(?:mon|tues|wednes|thurs|fri|satur|sun)day|\\d{1,2}(?:st|nd|rd|th)? (?:of )?(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*)";
+  const untilDay = new RegExp(`\\b(?:until|till|through|to)\\s+${DAY}\\b`).exec(lower)?.[1] ?? null;
+  const fromDay = new RegExp(`\\bfrom\\s+${DAY}\\b`).exec(lower)?.[1] ?? (/\b(until|till|through)\b/.test(lower) ? null : (new RegExp(`\\b${DAY}\\b`).exec(lower)?.[1] ?? null));
+  const from = extend !== null || fromDay === null ? {} : { from: fromDay, ...(untilDay === null ? {} : { until: untilDay }) };
+  if (/\b(normal day|back to normal|cancel (the )?(slow|sick) day|not a slow day|not away)\b/.test(lower)) return [{ tool: "set_mode", input: { mode: "normal", ...from } }];
+  if (/\b(we're|we are|i'm|i am)\s+away\b|\baway (today|this weekend|until)\b/.test(lower)) return [{ tool: "set_mode", input: { mode: "away", ...from } }];
+  if (modeMatch !== null) return [{ tool: "set_mode", input: { mode: modeMatch[1] === "sick" ? "sick" : "slow", until: extend === null ? null : "tomorrow", ...from } }];
+  return [];
+}
+
 /** Message text → tool calls. Order matters: the most specific phrasing wins. */
 function practiceIntent(prompt: string): Call[] {
   const text = field(prompt, "Message") ?? "";
@@ -70,17 +85,7 @@ function practiceIntent(prompt: string): Call[] {
 
   if (channel === "email") return [{ tool: "record_arrival", input: { email: text } }];
 
-  const calls: Call[] = [];
-  const modeMatch = /\b(slow|sick|lazy|rough|hard|quiet)\s+day\b/.exec(lower);
-  const extend = /\b(extend|keep)\b.*\b(slow|sick)\s+day\b.*\b(tomorrow|weekend)\b|\b(slow|sick)\s+day\b.*\b(till|until|through)\s+(tomorrow|the weekend)\b/.exec(lower);
-  // HOU-156: a later day ("this weekend", "on Friday", "from Saturday until Monday") sets the mode ahead for it.
-  const DAY = "(this weekend|the weekend|tomorrow|(?:mon|tues|wednes|thurs|fri|satur|sun)day|\\d{1,2}(?:st|nd|rd|th)? (?:of )?(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*)";
-  const untilDay = new RegExp(`\\b(?:until|till|through|to)\\s+${DAY}\\b`).exec(lower)?.[1] ?? null;
-  const fromDay = new RegExp(`\\bfrom\\s+${DAY}\\b`).exec(lower)?.[1] ?? (/\b(until|till|through)\b/.test(lower) ? null : (new RegExp(`\\b${DAY}\\b`).exec(lower)?.[1] ?? null));
-  const from = extend !== null || fromDay === null ? {} : { from: fromDay, ...(untilDay === null ? {} : { until: untilDay }) };
-  if (/\b(normal day|back to normal|cancel (the )?(slow|sick) day|not a slow day|not away)\b/.test(lower)) calls.push({ tool: "set_mode", input: { mode: "normal", ...from } });
-  else if (/\b(we're|we are|i'm|i am)\s+away\b|\baway (today|this weekend|until)\b/.test(lower)) calls.push({ tool: "set_mode", input: { mode: "away", ...from } });
-  else if (modeMatch !== null) calls.push({ tool: "set_mode", input: { mode: modeMatch[1] === "sick" ? "sick" : "slow", until: extend === null ? null : "tomorrow", ...from } });
+  const calls: Call[] = modeCall(lower);
   if (/\b(one thing|what should i do|what do i do|what can i do|what now|what's next|whats next|if i do one|what should (?:i|we) prioriti[sz]e|focus on)\b/.test(lower)) calls.push({ tool: "what_now", input: {} });
   if (calls.length > 0) return calls;
 
@@ -165,4 +170,14 @@ export function practiceModel(modelId: string): LanguageModelV4 {
       };
     },
   };
+}
+
+/**
+ * HOU-156: whether a message's tool calls set its mode for a later day: there is a set_mode call and
+ * each one names a day in `from`. The routing phrases' `ahead` is checked with this, by the practice
+ * model's test and by scripts/route-check.ts against a real model.
+ */
+export function setsModeAhead(calls: readonly { tool: string; input: unknown }[]): boolean {
+  const modes = calls.filter((c) => c.tool === "set_mode");
+  return modes.length > 0 && modes.every((c) => typeof c.input === "object" && c.input !== null && "from" in c.input && typeof c.input.from === "string" && c.input.from !== "");
 }

@@ -141,9 +141,9 @@ export function householdRouter(db: HouseholdDb) {
       return rows.map(toMode);
     }),
     /**
-     * MOM-3/4, HOU-156: a mode starts now, or at a later `startsAt` ("we're away this weekend"). Set
-     * now, it replaces whatever is on, as it always did. Set ahead, it replaces only its own span: a
-     * mode on when it starts pauses and carries on after it. Either way, modes set ahead inside its
+     * MOM-3/4, HOU-156: a mode starts now, or at a later `startsAt` ("we're away this weekend"). It
+     * replaces only its own span: a mode on when it starts carries on after it if it was set ahead,
+     * or if this one is; a mode set for now ends there, as it always did. Modes set ahead inside the
      * span start when it ends, or go if they end inside it. `normal` only clears the span.
      */
     setMode: actorProcedure.input(zSetModeRequest).output(zMode).mutation(async ({ ctx, input }) => {
@@ -158,7 +158,10 @@ export function householdRouter(db: HouseholdDb) {
         const m = schema.modes;
         const inEffect = and(lte(m.startsAt, start), gt(m.endsAt, start));
         // Set ahead, it replaces only the days it covers: what was on before it carries on after it.
-        const resumes = ahead ? (await tx.select().from(m).where(and(inEffect, gt(m.endsAt, end)))).map((r) => ({ mode: r.mode, setBy: r.setBy, setAt: r.setAt, startsAt: end, endsAt: r.endsAt })) : [];
+        // Set now, it ends what is on, as it always did, except the later days of a mode set ahead
+        // ("we're away this weekend", then "slow day" on the Saturday leaves Sunday away).
+        const after = (await tx.select().from(m).where(and(inEffect, gt(m.endsAt, end)))).filter((r) => ahead || r.startsAt > r.setAt);
+        const resumes = after.map((r) => ({ mode: r.mode, setBy: r.setBy, setAt: r.setAt, startsAt: end, endsAt: r.endsAt }));
         await tx.update(m).set({ endsAt: start }).where(inEffect);
         if (resumes.length > 0) await tx.insert(m).values(resumes);
         if (end > start) {

@@ -19,7 +19,7 @@ export async function weekView(rt: Runtime, _person: string): Promise<WeekView> 
     const latest = await api.plans.latest({ date });
     // HOU-156: a day's saved plan made before a mode was set ahead for it (or cleared) is out of date.
     const savedMode = latest?.blocks.find((b) => b.type === BlockType.mode);
-    const saved = (savedMode?.type === BlockType.mode ? savedMode.mode : null) === (modeOn(facts, date)?.mode ?? null) ? latest : null;
+    const saved = (savedMode?.type === BlockType.mode ? savedMode.mode : null) === (modeOn(facts, date, now)?.mode ?? null) ? latest : null;
     const closed = new Set((await api.plans.responsesOn({ date })).map((r) => r.ref));
     // HOU-149: "Getting started" is about the home screen, not a day, so Week never shows it.
     const blocks =

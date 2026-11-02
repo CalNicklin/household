@@ -7,7 +7,7 @@ import { adultsOf, contextLine, eventsOn } from "../rules/day.ts";
 import { parseOrder } from "../rules/orders.ts";
 import { guessTags } from "../rules/tags.ts";
 import { dayIn, daysIn } from "../rules/when.ts";
-import { addLocalDays, clock, localDate, longDate, startOfLocalDay } from "../time.ts";
+import { addLocalDays, atLocal, clock, localDate, longDate, startOfLocalDay } from "../time.ts";
 import { respond, subjectFor } from "./respond.ts";
 import type { JobScope } from "./scope.ts";
 
@@ -103,14 +103,21 @@ export function houseTools(scope: JobScope) {
       if (span === null || last === null || last < span.from) return { say: "Which day do you mean? Say a day, like Saturday or 7 November." };
       const ahead = span.from > date;
       const startsAt = ahead ? startOfLocalDay(span.from, tz) : now;
-      const endsAt = input.mode === ModeKind.normal && !ahead ? now : startOfLocalDay(addLocalDays(last, 1), tz);
+      // Every mode, normal included, clears to the midnight after its last day; a mode set ahead that
+      // runs past it carries on from there (the household router keeps its later days).
+      const endsAt = startOfLocalDay(addLocalDays(last, 1), tz);
       await api.household.setMode({ mode: input.mode, ...(ahead ? { startsAt: startsAt.toISOString() } : {}), endsAt: endsAt.toISOString() });
       // Today and tomorrow have saved plans the home screen shows; later days are planned the morning before.
       for (const d of [date, addLocalDays(date, 1)]) if (d >= span.from && d <= last && !scope.effects.replan.includes(d)) scope.effects.replan.push(d);
       if (!ahead) {
-        if (input.mode === ModeKind.normal) return { say: "Back to a normal day." };
+        // HOU-156: a mode set ahead that carries on afterwards is said, so nobody thinks it went.
+        const next = addLocalDays(last, 1);
+        const noon = atLocal(next, 12, 0, tz).toISOString();
+        const later = (await api.household.modesBetween({ from: noon, to: noon })).find((m) => m.mode !== ModeKind.normal && m.startsAt <= noon);
+        const still = later === undefined ? "" : ` ${last === date ? "Tomorrow" : longDate(next)} is still ${MODE_NAME[later.mode].toLowerCase()}.`;
+        if (input.mode === ModeKind.normal) return { say: `Back to a normal day.${still}` };
         const until = last === date ? "midnight" : last === addLocalDays(date, 1) ? "the end of tomorrow" : `the end of ${longDate(last)}`;
-        return { say: `${MODE_NAME[input.mode]} until ${until}. I've made today smaller.` };
+        return { say: `${MODE_NAME[input.mode]} until ${until}. I've made today smaller.${still}` };
       }
       const days = span.from === last ? longDate(span.from) : `${longDate(span.from)} to ${longDate(last)}`;
       if (input.mode === ModeKind.normal) return { say: `${days}: back to normal days.` };

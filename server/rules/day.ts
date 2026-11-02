@@ -34,10 +34,19 @@ export type HouseFacts = {
 /**
  * MOM-1/4, HOU-156: the slow, sick or away day this date is, if any: a mode that has started by the
  * date (set that day or ahead for it) and is still on at midday. The most recently set one wins.
+ * Given `now`, today's mode must also be on now, so a mode ended early ("back to normal" at 13:00)
+ * is gone from the rest of today, as it was when the screen read only the mode on now.
  */
-export function modeOn(facts: Pick<HouseFacts, "modes" | "timeZone">, date: LocalDate): Mode | null {
+export function modeOn(facts: Pick<HouseFacts, "modes" | "timeZone">, date: LocalDate, now?: Date): Mode | null {
   const midday = atLocal(date, 12, 0, facts.timeZone);
-  const on = facts.modes.filter((m) => m.mode !== ModeKind.normal && localDate(new Date(m.startsAt), facts.timeZone) <= date && new Date(m.endsAt) > midday);
+  const onNow = now !== undefined && localDate(now, facts.timeZone) === date ? now : null;
+  const on = facts.modes.filter(
+    (m) =>
+      m.mode !== ModeKind.normal &&
+      localDate(new Date(m.startsAt), facts.timeZone) <= date &&
+      new Date(m.endsAt) > midday &&
+      (onNow === null || (new Date(m.startsAt) <= onNow && new Date(m.endsAt) > onNow)),
+  );
   return on.sort((a, b) => b.setAt.localeCompare(a.setAt))[0] ?? null;
 }
 
