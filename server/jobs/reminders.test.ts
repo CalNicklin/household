@@ -31,6 +31,8 @@ describe("CAP-10: reminders you ask for", () => {
     const [block] = await reminderBlocks(MON);
     expect(block).toMatchObject({ section: Section.later, provenance: Provenance.person, time: "20:00", title: "Discuss Wise Owls", detail: "For Priya & Tom" });
     expect(block?.actions.map((a) => a.label)).toEqual(["Done", "Not now"]);
+    // PRO-6: the reminder takes nothing from the day's one backlog offer, which is still on the screen.
+    expect((await screenView(h.rt, "priya", MON)).blocks.filter((b) => b.type === BlockType.backlogPick)).toHaveLength(1);
     // Nothing is sent before its time.
     const before = h.ports.messenger.sent.length;
     await timer(TimerKind.reminders, MON, 19, 45);
@@ -87,7 +89,7 @@ describe("CAP-10: reminders you ask for", () => {
     // item, none of them one of the reminders, and Monday's plan offered at most one (PRO-6).
     const items = await h.rt.system("t").backlog.list();
     const mondayOffers = (await h.rt.system("t").plans.offers()).filter((o) => o.date === MON);
-    expect(mondayOffers.length).toBeLessThanOrEqual(1);
+    expect(mondayOffers).toHaveLength(1);
     for (const o of mondayOffers) expect(["Discuss Wise Owls", "Put the bins out", "Ring the dentist"]).not.toContain(items.find((i) => i.id === o.itemId)?.text);
     h.ports.clock.set(atLocal(TUE, 9, 0, TZ), true);
     expect(await replyTo(await h.sayAndWait("remind Chloe to book swimming"))).toContain("Who should I remind?");
