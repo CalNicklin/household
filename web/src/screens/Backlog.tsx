@@ -38,6 +38,9 @@ function TagChips({ item }: { item: BacklogItem }) {
  */
 const backlogKey = (item: BacklogItem) => `backlog:${item.id}`;
 
+/** HOU-179: which menu a row gets. */
+type RowKind = "active" | "pencilled" | "parked";
+
 function useBacklogMenu() {
   const trpc = useTRPC();
   const { isDeleted, remove } = useUndo();
@@ -46,11 +49,11 @@ function useBacklogMenu() {
   const deleteEntry = (item: BacklogItem) => ({ key: "delete", label: "Delete", onSelect: () => remove(backlogKey(item), `Deleted “${item.text}”`, () => del.mutateAsync({ id: item.id })) });
   return {
     shown: <T,>(rows: readonly T[], item: (row: T) => BacklogItem) => rows.filter((r) => !isDeleted(backlogKey(item(r)))),
-    /** `pencilled`: null for a parked item, whose menu has Delete only. */
-    menu: (item: BacklogItem, pencilled: boolean | null) => {
-      const pencil = pencilled === true ? "Move" : ActionLabel[ActionKind.accept];
+    /** An active row gets Done and Pencil it in (Move once pencilled in); a parked row, Delete only. */
+    menu: (item: BacklogItem, row: RowKind) => {
+      const pencil = row === "pencilled" ? "Move" : ActionLabel[ActionKind.accept];
       const active =
-        pencilled === null
+        row === "parked"
           ? []
           : [
               { key: "done", label: ActionLabel[ActionKind.done], onSelect: () => taps.done(backlogKey(item), backlogKey(item), item.text) },
@@ -84,7 +87,7 @@ export function BacklogScreen() {
         <Section label={BacklogGroupLabel[BacklogGroup.soon]} tone="suggestion">
           <ListCard label={BacklogGroupLabel[BacklogGroup.soon]}>
             {soon.map(({ item, slot, pencilled }) => (
-              <BacklogRow key={item.id} title={item.text} meta={slot} tone="suggestion" menu={menu(item, pencilled)} />
+              <BacklogRow key={item.id} title={item.text} meta={slot} tone="suggestion" menu={menu(item, pencilled ? "pencilled" : "active")} />
             ))}
           </ListCard>
           {data !== undefined && soon.length === 0 ? <Text tone="muted">Nothing has a slot this week yet.</Text> : null}
@@ -92,14 +95,14 @@ export function BacklogScreen() {
         <Section label={BacklogGroupLabel[BacklogGroup.waiting]}>
           <ListCard label={BacklogGroupLabel[BacklogGroup.waiting]}>
             {waiting.map(({ item, waitingFor }) => (
-              <BacklogRow key={item.id} title={item.text} meta={waitingFor} menu={menu(item, false)} />
+              <BacklogRow key={item.id} title={item.text} meta={waitingFor} menu={menu(item, "active")} />
             ))}
           </ListCard>
         </Section>
         <Section label={BacklogGroupLabel[BacklogGroup.justAdded]}>
           <ListCard label={BacklogGroupLabel[BacklogGroup.justAdded]}>
             {justAdded.map(({ item, byline }) => (
-              <BacklogRow key={item.id} title={item.text} meta={byline} menu={menu(item, false)}>
+              <BacklogRow key={item.id} title={item.text} meta={byline} menu={menu(item, "active")}>
                 <TagChips item={item} />
               </BacklogRow>
             ))}
@@ -119,7 +122,7 @@ export function BacklogScreen() {
         <Section label={BacklogGroupLabel[BacklogGroup.parked]}>
           <ListCard label={BacklogGroupLabel[BacklogGroup.parked]}>
             {parked.map((item) => (
-              <BacklogRow key={item.id} title={item.text} meta="Parked until you bring it back" menu={menu(item, null)}>
+              <BacklogRow key={item.id} title={item.text} meta="Parked until you bring it back" menu={menu(item, "parked")}>
                 <Button variant="secondary" onClick={() => bringBack.mutate({ id: item.id })}>
                   Bring back
                 </Button>
