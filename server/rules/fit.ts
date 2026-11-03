@@ -49,48 +49,75 @@ function hourFacts(facts: HouseFacts, date: LocalDate, hour: number) {
 }
 
 /**
+ * The earliest window on `date` starting from hour `firstStart` to `lastStart` where every tag holds for
+ * long enough, with someone free, not before `from` and never starting at or after the deadline.
+ */
+function windowOn(facts: HouseFacts, item: Pick<BacklogItem, "tags">, date: LocalDate, from: Date, deadline: Deadline | null, firstStart: number, lastStart: number): Slot | null {
+  const needHours = Math.max(1, Math.ceil(durationOf(item) / 60));
+  const needs = item.tags.filter((t) => !Object.values(Durations).some((d) => d === t));
+  let runStart: number | null = null;
+  let who: string[] = [];
+  let kidsNote: string | null = null;
+  for (let h = firstStart; h <= DAY_END_HOUR; h++) {
+    if (runStart === null && h > lastStart) return null;
+    const at = atLocal(date, h, 0, facts.timeZone);
+    const f = hourFacts(facts, date, h);
+    const ok = at >= from && f.free.length > 0 && needs.every((t) => f.holds.has(t)) && (runStart !== null || !tooLate(deadline, at));
+    if (!ok) {
+      runStart = null;
+      continue;
+    }
+    if (runStart === null) {
+      runStart = h;
+      who = f.free;
+      kidsNote = f.kidsAway;
+    } else {
+      who = who.filter((w) => f.free.includes(w));
+    }
+    if (who.length === 0) {
+      runStart = null;
+      continue;
+    }
+    if (h - runStart + 1 >= needHours) {
+      const why: string[] = [];
+      if (needs.includes(BacklogTag.dry)) why.push("dry");
+      if (needs.includes(BacklogTag.daylight)) why.push("light");
+      if (needs.includes(BacklogTag.bothHome)) why.push("both home");
+      if (needs.includes(BacklogTag.noKids) && kidsNote !== null) why.push(kidsNote);
+      if (needs.includes(BacklogTag.officeHours)) why.push("office hours");
+      return { date, startHour: runStart, endHour: runStart + needHours, who, why };
+    }
+  }
+  return null;
+}
+
+/**
  * The earliest window in the next `days` days where every tag holds for long enough, with someone free.
  * HOU-178: with a `deadline` (the item's own "by Friday lunchtime"), no window starts at or after it.
  */
 export function findSlot(facts: HouseFacts, item: Pick<BacklogItem, "tags">, from: Date, fromDate: LocalDate, days = 7, deadline: Deadline | null = null): Slot | null {
-  const needHours = Math.max(1, Math.ceil(durationOf(item) / 60));
-  const needs = item.tags.filter((t) => !Object.values(Durations).some((d) => d === t));
   for (let d = 0; d < days; d++) {
-    const date = addLocalDays(fromDate, d);
-    let runStart: number | null = null;
-    let who: string[] = [];
-    let kidsNote: string | null = null;
-    for (let h = DAY_START_HOUR; h <= DAY_END_HOUR; h++) {
-      const at = atLocal(date, h, 0, facts.timeZone);
-      const f = hourFacts(facts, date, h);
-      const ok = at >= from && f.free.length > 0 && needs.every((t) => f.holds.has(t)) && (runStart !== null || !tooLate(deadline, at));
-      if (!ok) {
-        runStart = null;
-        continue;
-      }
-      if (runStart === null) {
-        runStart = h;
-        who = f.free;
-        kidsNote = f.kidsAway;
-      } else {
-        who = who.filter((w) => f.free.includes(w));
-      }
-      if (who.length === 0) {
-        runStart = null;
-        continue;
-      }
-      if (h - runStart + 1 >= needHours) {
-        const why: string[] = [];
-        if (needs.includes(BacklogTag.dry)) why.push("dry");
-        if (needs.includes(BacklogTag.daylight)) why.push("light");
-        if (needs.includes(BacklogTag.bothHome)) why.push("both home");
-        if (needs.includes(BacklogTag.noKids) && kidsNote !== null) why.push(kidsNote);
-        if (needs.includes(BacklogTag.officeHours)) why.push("office hours");
-        return { date, startHour: runStart, endHour: runStart + needHours, who, why };
-      }
-    }
+    const slot = windowOn(facts, item, addLocalDays(fromDate, d), from, deadline, DAY_START_HOUR, DAY_END_HOUR);
+    if (slot !== null) return slot;
   }
   return null;
+}
+
+/**
+ * HOU-178 (PRO-8): every gap the rules allow for "Pencil it in" over the next `days` days: the earliest
+ * window in each morning, afternoon and evening where the item's tags hold, someone is free, and it
+ * starts before the deadline in the item's words. The agent may only choose one of these.
+ */
+export function allowedGaps(facts: HouseFacts, item: Pick<BacklogItem, "tags">, from: Date, fromDate: LocalDate, days: number, deadline: Deadline | null): Slot[] {
+  const gaps: Slot[] = [];
+  for (let d = 0; d < days; d++) {
+    const date = addLocalDays(fromDate, d);
+    for (const part of Object.values(DayPart)) {
+      const slot = windowOn(facts, item, date, from, deadline, partStartHour(part), partEndHour(part));
+      if (slot !== null) gaps.push(slot);
+    }
+  }
+  return gaps;
 }
 
 /** "Needs dry weather and both home" — what an item is waiting for (CAP-4). */
@@ -104,6 +131,11 @@ export function waitingFor(item: Pick<BacklogItem, "tags">): string {
 /** The hour a part of the day starts, as `partOfDay` reads it (the day itself starts at DAY_START_HOUR). */
 export function partStartHour(part: DayPart): number {
   return part === DayPart.morning ? DAY_START_HOUR : part === DayPart.afternoon ? 12 : 17;
+}
+
+/** The last hour a window in this part of the day can start. */
+function partEndHour(part: DayPart): number {
+  return part === DayPart.morning ? 11 : part === DayPart.afternoon ? 16 : DAY_END_HOUR;
 }
 
 export function partOfDay(hour: number): DayPart {

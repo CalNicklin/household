@@ -4,7 +4,11 @@ import { deadlineOf } from "../rules/deadline.ts";
 import { guessTags } from "../rules/tags.ts";
 import { testHousehold, type TestHousehold } from "../testing/household.ts";
 import { addLocalDays, atLocal } from "../time.ts";
+import { respond } from "../agent/respond.ts";
+import { jobScope } from "../agent/scope.ts";
+import { partStartHour } from "../rules/fit.ts";
 import { gatherFacts, pickCandidates } from "./gather.ts";
+import { parsePencil } from "./pencil.ts";
 
 let h: TestHousehold;
 let fridge: BacklogItem;
@@ -60,23 +64,28 @@ describe("HOU-178: a backlog item's own deadline (Cal's garage fridge)", () => {
     for (const date of ["2026-11-07", "2026-11-08", "2026-11-09"]) expect(await fridgeOn(date, atLocal(date, 7, 0, TZ)), date).toBeUndefined();
   });
 
-  test("[CAP-2][PRV-1] accepting a Sunday slot is refused with the reason and a slot before it; nothing is recorded and the item is untouched", async () => {
+  test("[CAP-2][PRO-8] Pencil it in on Tuesday 3 November gives the fridge a time before Friday 12:00, with the reason", async () => {
     h.ports.clock.set(atLocal("2026-11-03", 9, 10, TZ), true);
     const ref = `backlog:${fridge.id}`;
+    // The card's own slot is Sunday morning, as Cal's was: the house chooses again from the allowed gaps.
     const tapped = await h.tap(ref, ActionKind.accept, { person: "cal", value: "2026-11-08 morning" });
     await h.wait(tapped);
     const reply = (await h.rt.system("t").jobs.replyFor({ id: tapped.messageId }))?.text ?? "";
-    expect(reply).toMatch(/^That's too late: it's needed by Friday lunchtime, so I haven't pencilled it in\. (This|Tomorrow|Wednesday|Thursday|Friday) (morning|afternoon|evening) is free before then\.$/);
-    expect(reply).not.toMatch(/Friday (afternoon|evening)/);
-    expect(await h.rt.system("t").plans.responsesForRef({ ref })).toEqual([]);
+    expect(reply).toMatch(new RegExp(`^Pencilled in for (this|tomorrow|Thursday|Friday) (morning|afternoon|evening): ${FRIDGE}\\. .+, and it's before Friday lunchtime\\.$`));
+    const [response] = await h.rt.system("t").plans.responsesForRef({ ref });
+    const slot = parsePencil(response?.value ?? null);
+    if (slot === null) throw new Error("no pencil slot recorded");
+    expect(atLocal(slot.date, partStartHour(slot.dayPart), 0, TZ) < DEADLINE).toBe(true);
+    // PRV-1: the person's item is as they wrote it.
     expect(await h.rt.system("t").backlog.get({ id: fridge.id })).toEqual(fridge);
   });
 
-  test("[CAP-2] a slot before the deadline is still pencilled in as before", async () => {
+  test("[CAP-2][PRV-1] a slot after the deadline sent straight to respond (an old card, or the chat's respond tool) is refused with the reason; nothing is recorded", async () => {
     h.ports.clock.set(atLocal("2026-11-03", 9, 10, TZ), true);
-    const ref = `backlog:${fridge.id}`;
-    const tapped = await h.tap(ref, ActionKind.accept, { person: "cal", value: `${THU} evening` });
-    await h.wait(tapped);
-    expect((await h.rt.system("t").jobs.replyFor({ id: tapped.messageId }))?.text).toBe(`Pencilled in for Thursday evening: ${FRIDGE}.`);
+    const late = await h.rt.as({ kind: ActorKind.person, person: "cal" }).backlog.create({ text: "Return the hired ladder by Thursday", tags: guessTags("Return the hired ladder"), createdVia: Channel.app, sourceMessage: "hou-178-ladder" });
+    const ref = `backlog:${late.id}`;
+    const say = await respond(jobScope(h.rt, "job-hou-178", "msg-hou-178", "cal", Channel.app), ref, ActionKind.accept, "2026-11-08 morning");
+    expect(say).toMatch(/^That's too late: it's needed by Thursday, so I haven't pencilled it in\. (.+ is free before then|There's no free slot for it before then)\.$/);
+    expect(await h.rt.system("t").plans.responsesForRef({ ref })).toEqual([]);
   });
 });

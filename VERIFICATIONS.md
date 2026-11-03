@@ -68,7 +68,7 @@ The app does the remembering. Things that currently live in one of our heads arr
 - [ ] PRO-5 On the morning of a delivery that needs someone in, you get a message. Deliveries that can be left get no message.
 - [ ] PRO-6 The app offers at most one backlog item a day, and only once.
 - [ ] PRO-7 Each of us can set how many messages a day we want (three to start) and quiet hours (9pm to 7am to start). Anything over the limit waits for the morning screen.
-- [ ] PRO-8 All these reminders are fixed rules with tests, not AI guesses. The AI only chooses which backlog item fits a gap and how to word things.
+- [ ] PRO-8 All these reminders are fixed rules with tests, not AI guesses. The AI only chooses which backlog item fits a gap, which allowed gap a backlog item fits when someone asks to pencil it in, and how to word things.
 - [ ] PRO-9 Dismiss a message on your phone and it is dismissed everywhere. Nothing is shown twice.
 - [ ] PRO-10 Nursery parties, inset days and closures show under Tomorrow the day before, with who is covering, or a warning if nobody is.
 

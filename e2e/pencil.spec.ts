@@ -21,7 +21,8 @@ test("[PRO-6][HOME-5] Pencil it in on a later day's Week card closes the card, c
 
   await pencil.click();
   // The confirmation, in today's conversation.
-  const confirmation = page.getByText(new RegExp(`^Pencilled in for (tomorrow|\\w+day) (morning|afternoon|evening): ${title}\\.$`));
+  // HOU-178: the time is the one the house chose on the tap, from the allowed gaps, with why in a few words.
+  const confirmation = page.getByText(new RegExp(`^Pencilled in for (this|tomorrow|\\w+day) (morning|afternoon|evening): ${title}\\. \\S.*\\.$`));
   await expect(confirmation).toBeVisible();
   const line = ((await confirmation.textContent()) ?? "").split(":")[0] ?? "";
   // The card is gone from Week, also after a reload (the server closed it, not just this screen).

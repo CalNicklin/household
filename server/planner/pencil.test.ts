@@ -59,18 +59,22 @@ describe("HOU-173: a backlog pick on a later day", () => {
 
   test("[PRO-6][LRN-1][PRV-1] Pencil it in closes the card on Week, shows it pencilled in on that day and the Backlog, confirms, and is learned from", async () => {
     const accept = pick.actions.find((a) => a.kind === ActionKind.accept);
-    const slot = parsePencil(accept?.value ?? null);
-    if (accept === undefined || slot === null) throw new Error("no Pencil it in");
-    const day = slot.date === "2026-11-03" ? "tomorrow" : new Intl.DateTimeFormat("en-GB", { weekday: "long", timeZone: "UTC" }).format(new Date(slot.date));
+    if (accept === undefined) throw new Error("no Pencil it in");
     const tapped = await h.tap(pick.ref, ActionKind.accept, { value: accept.value ?? "" });
     await h.wait(tapped);
     const reply = (await h.rt.system("t").jobs.replyFor({ id: tapped.messageId }))?.text ?? "";
-    expect(reply).toBe(`Pencilled in for ${day} ${slot.dayPart}: ${pick.title}.`);
-    // The answer is shown in today's conversation, as the confirmation.
-    expect((await conversationView(h.rt, "priya")).map((e) => e.reply?.text)).toContain(reply);
-    // Kept against Wednesday's plan, so the card closes on Week (and Today never had it).
+    // Kept against Wednesday's plan, so the card closes on Week (and Today never had it). HOU-178:
+    // the slot is the one the house chose when it was tapped, from the gaps the rules allow.
     const responses = await h.rt.system("t").plans.responsesForRef({ ref: pick.ref });
     expect(responses.map((r) => [r.action, r.date])).toEqual([[ActionKind.accept, WED]]);
+    const slot = parsePencil(responses[0]?.value ?? null);
+    if (slot === null) throw new Error("no pencil slot recorded");
+    expect(slot.date >= MON).toBe(true);
+    const day = slot.date === MON ? "this" : slot.date === "2026-11-03" ? "tomorrow" : new Intl.DateTimeFormat("en-GB", { weekday: "long", timeZone: "UTC" }).format(new Date(slot.date));
+    // The day and part, the item, then why in a few words (HOU-178).
+    expect(reply).toMatch(new RegExp(`^Pencilled in for ${day} ${slot.dayPart}: ${pick.title}\\. \\S.*\\.$`));
+    // The answer is shown in today's conversation, as the confirmation.
+    expect((await conversationView(h.rt, "priya")).map((e) => e.reply?.text)).toContain(reply);
     expect((await weekDay(WED)).some((b) => b.id === pick.id)).toBe(false);
     expect((await screenView(h.rt, "priya", MON)).blocks.some((b) => b.id === pick.id)).toBe(false);
     // Pencilled in on its day, as a fact with no buttons, and on its Backlog row.

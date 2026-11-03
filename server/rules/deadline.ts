@@ -8,8 +8,11 @@ import { addLocalDays, atLocal, isRealDate, localDate, startOfLocalDay } from ".
 import { clockIn, PART_OF_DAY } from "./remind.ts";
 import { dayIn, daysIn } from "./when.ts";
 
-/** The instant it is needed by; `words` are the item's own ("by Friday lunchtime"), for saying why. */
-export type Deadline = { at: Date; words: string };
+/**
+ * The instant it is needed by. `words` are the item's own ("by Friday lunchtime", "ahead of the
+ * weekend"), and `day` the day part of them ("Friday lunchtime", "the weekend"), for saying why.
+ */
+export type Deadline = { at: Date; words: string; day: string };
 
 /** "by", "before" or "ahead of", then the words up to the next punctuation. */
 const KEYWORD = /\b(by|before|ahead of)\s+([^,.;:!?()]+)/gi;
@@ -63,7 +66,7 @@ export function deadlineOf(item: Pick<BacklogItem, "text" | "createdAt">, timeZo
     const phrase = said.toLowerCase();
     if (!NAMES_A_DAY.test(phrase)) continue;
     const at = deadlineAt(keyword, phrase, added, timeZone);
-    if (at !== null && (found === null || at < found.at)) found = { at, words: `${keyword} ${said}` };
+    if (at !== null && (found === null || at < found.at)) found = { at, words: `${keyword} ${said}`, day: said };
   }
   return found;
 }
