@@ -14,8 +14,8 @@ import { dayIn, daysIn } from "./when.ts";
  */
 export type Deadline = { at: Date; words: string; day: string };
 
-/** "by", "before" or "ahead of", then the words up to the next punctuation. */
-const KEYWORD = /\b(by|before|ahead of)\s+([^,.;:!?()]+)/gi;
+/** "by", "before" or "ahead of", then the words up to the next punctuation; a clock time's ":" or "." ("8:30") is not punctuation. */
+const KEYWORD = /\b(by|before|ahead of)\s+((?:\d[:.]\d\d|[^,.;:!?()])+)/gi;
 /** The words after the keyword name a day: a weekday, today, tomorrow, the weekend, a date, "the 12th". */
 const NAMES_A_DAY = /^(?:(?:the|this|next)\s+)?(?:mon|tue|wed|thu|fri|sat|sun|today|tonight|tomorrow|weekend|\d|jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)/;
 /** Where a deadline phrase stops: "by Friday so they can collect it" is about Friday. */

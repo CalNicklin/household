@@ -35,6 +35,11 @@ describe("HOU-178: the deadline in a backlog item's own words", () => {
     expect(at("Wrap the present by Saturday evening")).toBe(atLocal("2026-11-07", 19, 0, TZ).toISOString());
     expect(at("Drop the parcel off by Wednesday at 4")).toBe(atLocal("2026-11-04", 16, 0, TZ).toISOString());
     expect(at("Ring the plumber by tomorrow")).toBe(startOfLocalDay("2026-11-04", TZ).toISOString());
+    // A clock time with a colon or a dot, before or after the day (AR-2).
+    expect(at("Pay the council tax by 8:30am Friday")).toBe(atLocal("2026-11-06", 8, 30, TZ).toISOString());
+    expect(at("Move the car before 10:30 tomorrow")).toBe(atLocal("2026-11-03", 10, 30, TZ).toISOString());
+    expect(at("Drop the forms off by 9.30 on Thursday")).toBe(atLocal("2026-11-05", 9, 30, TZ).toISOString());
+    expect(at("Collect the parcel by Friday at 4:15pm.")).toBe(atLocal("2026-11-06", 16, 15, TZ).toISOString());
   });
 
   test("[CAP-2] no deadline: no day after by / before / ahead of, or none at all", () => {
