@@ -90,6 +90,23 @@ describe("HOU-179: Pencil it in from the Backlog", () => {
   });
 });
 
+describe("HOU-179: Pencil it in from the Backlog on an item offered over a week ago (AR-1)", () => {
+  test("[PRO-8][CAP-4] the pencil is kept against today, so it is read back on the Backlog", async () => {
+    const later = "2026-11-12";
+    h.ports.clock.set(atLocal(later, 9, 0, TZ), true);
+    try {
+      const tapped = await h.tap(`backlog:${todaysOffer}`, ActionKind.accept, { person: "cal", value: "Pencil it in" });
+      await h.wait(tapped);
+      expect(await reply(tapped.messageId)).toMatch(/^Pencilled in for /);
+      const responses = await sys().plans.responsesForRef({ ref: `backlog:${todaysOffer}` });
+      expect(responses.at(-1)?.date).toBe(later);
+      expect((await backlogScreen(h.rt)).soon.find((r) => r.item.id === todaysOffer)?.pencilled).toBe(true);
+    } finally {
+      h.ports.clock.set(atLocal(TUE, 16, 40, TZ), true);
+    }
+  });
+});
+
 describe("HOU-179: Done from the Backlog", () => {
   test("[PRV-1] the router refuses Done from the system, and from a job acting on another message", async () => {
     const other = h.rt.as({ kind: ActorKind.agent, job: "j-other", onBehalfOf: "cal", message: "another-message" });
