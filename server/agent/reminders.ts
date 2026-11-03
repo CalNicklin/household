@@ -1,5 +1,5 @@
 import { type LocalDate, type Reminder, ReminderStatus } from "@household/contracts";
-import { matchReminders, type ReminderWhen } from "../rules/remind.ts";
+import { matchReminders, type ReminderWhen, saysWhich } from "../rules/remind.ts";
 import { addLocalDays, localDate, localTime, longDate } from "../time.ts";
 import type { JobScope } from "./scope.ts";
 
@@ -22,8 +22,20 @@ const CLOSED: Record<Exclude<ReminderStatus, "open">, string> = {
 /** What to say about a reminder that is no longer open (done, on the Backlog or cancelled). */
 export const closedSay = (status: ReminderStatus): string => (status === ReminderStatus.open ? "" : CLOSED[status]);
 
-/** What became of a reminder that is no longer open, and that nothing was changed. */
-const goneSay = (rs: readonly Reminder[], today: LocalDate) => `${rs.map((r) => `${reminderLine(r, today)}. ${closedSay(r.status)}`).join(" ")} Nothing was changed.`;
+/** A closed reminder's state, in a list of several. */
+const CLOSED_WORD: Record<Exclude<ReminderStatus, "open">, string> = {
+  [ReminderStatus.done]: "done",
+  [ReminderStatus.moved]: "on the Backlog",
+  [ReminderStatus.cancelled]: "cancelled",
+};
+
+/** What became of reminders that are no longer open, and that nothing was changed; short enough to be said whole. */
+function goneSay(rs: readonly Reminder[], today: LocalDate): string {
+  const [one] = rs;
+  if (rs.length === 1 && one !== undefined) return `${reminderLine(one, today)}. ${closedSay(one.status)} Nothing was changed.`;
+  const list = rs.map((r) => `${reminderLine(r, today)} (${r.status === ReminderStatus.open ? "open" : CLOSED_WORD[r.status]})`).join("; ");
+  return `None of those is still on: ${list}. Nothing was changed.`;
+}
 
 /**
  * The reminder they are looking at (the About ref), when it fits what they said ("that one" fits any).
@@ -47,12 +59,12 @@ export async function findReminder(scope: JobScope, which: string, ref: string |
   const [only] = found;
   if (found.length === 1 && only !== undefined) return { reminder: only };
   if (found.length === 0) {
-    // HOU-177: the one they named is already done, on the Backlog or cancelled: say so, never offer another
-    // in its place. Only when what they said narrows it down ("that reminder" alone names none of them).
+    // HOU-177: the ones they named are already done, on the Backlog or cancelled: say so, never offer another
+    // in their place. Only when what they said names them ("that reminder" alone names none).
     const closed = await scope.api.backlog.upcomingReminders({ from: today, closed: true });
     const gone = matchReminders(closed, which, today);
-    // What they said picked these out: fewer than all of them, or the only one there is.
-    const named = gone.length > 0 && (gone.length < closed.length || closed.length === 1);
+    // What they said picked these out (a day, a time or what it's about), or there is only the one.
+    const named = gone.length > 0 && (saysWhich(which) || closed.length === 1);
     if (named) return { say: goneSay(gone, today) };
   }
   if (open.length === 0) return { say: "There are no reminders coming up." };

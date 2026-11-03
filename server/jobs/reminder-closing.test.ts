@@ -1,7 +1,7 @@
 import { ActionKind, ActorKind, type Block, BlockType, Channel, ReminderStatus, TimerKind } from "@household/contracts";
 import { afterAll, beforeAll, describe, expect, test } from "vitest";
 import { jobScope } from "../agent/scope.ts";
-import { houseTools } from "../agent/tools.ts";
+import { houseTools, TAP_A_REMINDER } from "../agent/tools.ts";
 import { acceptTimer } from "../coordinator/accept.ts";
 import { testHousehold, type TestHousehold } from "../testing/household.ts";
 import { atLocal } from "../time.ts";
@@ -110,7 +110,7 @@ describe("HOU-177 (PRV-1): only a person's tap marks a reminder done or puts it 
     const r = (await boyBoy()).find((x) => x.time === "09:00");
     if (r === undefined) throw new Error("no 09:00 reminder");
     const tools = houseTools(jobScope(h.rt, "j", "app-message", "tom", Channel.app));
-    const refused = { say: "Nothing was changed: a reminder is done or put off by tapping it. Ask to change its time or cancel it instead." };
+    const refused = { say: TAP_A_REMINDER };
     for (const action of [ActionKind.done, ActionKind.snooze, ActionKind.notToday]) expect(await tools.respond.execute?.({ ref: `reminder:${r.id}`, action }, {})).toEqual(refused);
     // Nor "move this to tomorrow" with the reminder as the About ref.
     expect(await tools.move_to_tomorrow.execute?.({ ref: `reminder:${r.id}` }, {})).toEqual(refused);
@@ -125,5 +125,18 @@ describe("HOU-177 (PRV-1): only a person's tap marks a reminder done or puts it 
     // Tom's own tap still works.
     expect(await tapped(`reminder:${r.id}`, ActionKind.snooze)).toBe(`Moved to Thursday 5 November: ${r.text}.`);
     expect(await tapped(`reminder:${r.id}`, ActionKind.done)).toBe(`Done: ${r.text}.`);
+  });
+
+  test("[CAP-10] the words name several reminders that are all done, and none open: each is named as done, none other offered", async () => {
+    const swim = [] as string[];
+    for (const at of ["10", "11"]) {
+      expect(await said(`remind me on Friday at ${at} to book the swimming lessons`)).toMatch(/^I'll remind you at /);
+      const r = (await h.rt.system("t").backlog.upcomingReminders({ from: MON })).find((x) => x.text.includes("swimming") && !swim.includes(x.id));
+      if (r === undefined) throw new Error("no swimming reminder");
+      swim.push(r.id);
+    }
+    for (const id of swim) expect(await tapped(`reminder:${id}`, ActionKind.done)).toMatch(/^Done: /);
+    const reply = await said("cancel the swimming reminder");
+    expect(reply).toBe("None of those is still on: 10:00 Friday 6 November: Book the swimming lessons (done); 11:00 Friday 6 November: Book the swimming lessons (done). Nothing was changed.");
   });
 });

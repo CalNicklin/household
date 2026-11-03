@@ -23,7 +23,7 @@ const NOTHING_PRESSING = { title: "Nothing pressing today", why: "No rule, calen
  * HOU-177 (PRV-1): Done and Not now on a reminder are only ever a person's tap. By message, a reminder
  * changes only through change_reminder or cancel_reminder, which find the one the person named.
  */
-const TAP_A_REMINDER = "Nothing was changed: a reminder is done or put off by tapping it. Ask to change its time or cancel it instead.";
+export const TAP_A_REMINDER = "Nothing was changed: a reminder is done or put off by tapping it. Ask to change its time or cancel it instead.";
 
 /** The household's tools. Each runs as the agent actor for this job's person (PRV-1 is enforced by the routers). */
 export function houseTools(scope: JobScope) {

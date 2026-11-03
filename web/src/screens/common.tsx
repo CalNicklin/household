@@ -39,11 +39,13 @@ function useSay() {
   const queryClient = useQueryClient();
   const newestExchange = useNewestExchange();
   return (text: string, spoken: boolean) => {
-    markSaid(newestExchange(), text);
     const ref = about?.ref;
     setAbout(null);
     // HOU-158: a delete still in its Undo window is sent first, so "add milk" after deleting milk adds it.
-    void flush()
+    // Flushed before marking what they said, so a reminder's Delete (which marks "Delete") never shows in its place.
+    const flushed = flush();
+    markSaid(newestExchange(), text);
+    void flushed
       .then(() => say({ text, ...(ref === undefined ? {} : { ref }), ...(spoken ? { spoken } : {}) }))
       .then(() => queryClient.invalidateQueries());
   };
