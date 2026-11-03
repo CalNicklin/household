@@ -10,7 +10,10 @@ import { conversationView } from "../views/conversation.ts";
 import { screenView } from "../views/screen.ts";
 import { weekView } from "../views/week.ts";
 import { gatherFacts, pickReason } from "./gather.ts";
-import { parsePencil } from "./pencil.ts";
+import { gapReason } from "../agent/pencil-gap.ts";
+import { deadlineOf } from "../rules/deadline.ts";
+import { allowedGaps, partOfDay } from "../rules/fit.ts";
+import { parsePencil, pencilledLine } from "./pencil.ts";
 
 let h: TestHousehold;
 const MON = "2026-11-02";
@@ -69,10 +72,14 @@ describe("HOU-173: a backlog pick on a later day", () => {
     expect(responses.map((r) => [r.action, r.date])).toEqual([[ActionKind.accept, WED]]);
     const slot = parsePencil(responses[0]?.value ?? null);
     if (slot === null) throw new Error("no pencil slot recorded");
-    expect(slot.date >= MON).toBe(true);
-    const day = slot.date === MON ? "this" : slot.date === "2026-11-03" ? "tomorrow" : new Intl.DateTimeFormat("en-GB", { weekday: "long", timeZone: "UTC" }).format(new Date(slot.date));
-    // The day and part, the item, then why in a few words (HOU-178).
-    expect(reply).toMatch(new RegExp(`^Pencilled in for ${day} ${slot.dayPart}: ${pick.title}\\. \\S.*\\.$`));
+    // The practice model takes the first allowed gap from now, with no reason of its own, so the rules say why.
+    const item = await h.rt.system("t").backlog.get({ id: pick.ref.slice("backlog:".length) });
+    if (item === null) throw new Error("no item");
+    const now = h.ports.clock.now();
+    const [first] = allowedGaps(await gatherFacts(h.rt, MON, 7), item, now, MON, 7, deadlineOf(item, TZ));
+    if (first === undefined) throw new Error("no allowed gap");
+    expect(slot).toEqual({ date: first.date, dayPart: partOfDay(first.startHour) });
+    expect(reply).toBe(`${pencilledLine(slot, MON)}: ${pick.title}. ${gapReason(first, deadlineOf(item, TZ), MON)}`);
     // The answer is shown in today's conversation, as the confirmation.
     expect((await conversationView(h.rt, "priya")).map((e) => e.reply?.text)).toContain(reply);
     expect((await weekDay(WED)).some((b) => b.id === pick.id)).toBe(false);
