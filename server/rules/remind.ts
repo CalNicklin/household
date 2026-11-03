@@ -175,6 +175,15 @@ const NOT_ABOUT = new Set(
   "the a an my our your his her their this that these those one ones reminder reminders remind me us it for to on at in of and about please can you could set i we cancel delete remove scrap drop change move make push bring earlier later instead o'clock oclock clock am pm today tonight tomorrow morning afternoon evening night monday tuesday wednesday thursday friday saturday sunday".split(" "),
 );
 
+/** The words in what they said that say what a reminder is about. */
+const aboutWords = (text: string) => (text.match(/[a-z][a-z']+/g) ?? []).map((w) => w.replace(/'s$/, "")).filter((w) => w.length >= 3 && !NOT_ABOUT.has(w));
+
+/** HOU-177: whether what they said picks reminders out at all (a day, a time or what it's about), unlike "that one". */
+export function saysWhich(which: string): boolean {
+  const text = which.toLowerCase();
+  return NAMES_A_DAY.test(text) || /\b(today|tonight|tomorrow)\b/.test(text) || clockWords(text) !== null || aboutWords(text).length > 0;
+}
+
 /**
  * HOU-174: which of the open reminders a person means ("the BoyBoy reminder", "the 9 o'clock one",
  * "Wednesday's reminder"). Every reminder that fits what they said: one is the one, none or several
@@ -194,7 +203,7 @@ export function matchReminders<R extends Pick<Reminder, "text" | "date" | "time"
     const hours = clock.meridiem === undefined ? [clock.hour % 24, (clock.hour + 12) % 24] : [(clock.hour % 12) + (clock.meridiem === "pm" ? 12 : 0)];
     found = found.filter((r) => r.time !== null && hours.some((h) => r.time === hhmm(h, clock.minute)));
   }
-  const words = (text.match(/[a-z][a-z']+/g) ?? []).map((w) => w.replace(/'s$/, "")).filter((w) => w.length >= 3 && !NOT_ABOUT.has(w));
+  const words = aboutWords(text);
   if (words.length === 0) return found;
   const score = (r: R) => words.filter((w) => r.text.toLowerCase().includes(w)).length;
   const best = Math.max(0, ...found.map(score));

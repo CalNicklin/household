@@ -36,7 +36,7 @@ token=""
 echo "have $image"
 
 # The deploy files are pinned on the server; say so when this image carries different ones.
-for f in compose.yml compose.hindsight.yml compose.mail.yml Caddyfile Caddyfile.mail; do
+for f in compose.yml compose.hindsight.yml compose.mail.yml compose.caddy-sites.yml Caddyfile Caddyfile.mail Caddyfile.sites; do
   theirs="$(docker run --rm --network none --memory 32m --entrypoint sha256sum "$image" "/app/deploy/$f" 2> /dev/null | cut -d' ' -f1 || true)"
   ours="$(sha256sum "$HOUSEHOLD_DIR/$f" 2> /dev/null | cut -d' ' -f1 || true)"
   if [ -n "$theirs" ] && [ "$theirs" != "$ours" ]; then echo "note: deploy/$f changed in this image; re-run deploy/install.sh on the server to use it"; fi
@@ -44,6 +44,14 @@ done
 
 export HOUSEHOLD_IMAGE="$image"
 previous="$(deployed_image)"
+
+# HOU-175: other apps' sites are validated with Caddy's whole config before anything is switched. If they
+# are invalid the deploy stops here and the running Caddy (and house) carry on untouched.
+if ! sites_valid; then
+  echo "the house's Caddy config with $SITES_DIR is invalid (above), so nothing was switched; ${previous:+the house keeps running $previous and }the running Caddy carries on" >&2
+  echo "fix or remove that file, then redeploy: sudo household-deploy $digest" >&2
+  exit 1
+fi
 household_compose up -d --wait --wait-timeout 180 postgres objects
 
 set +e

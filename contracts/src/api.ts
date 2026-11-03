@@ -26,10 +26,18 @@ export const zLocalDateRangeInput = z.object({ from: z.iso.date(), to: z.iso.dat
  */
 export const zReminderChangeInput = z.object({ id: z.string(), date: z.iso.date(), time: zLocalTime.nullable(), sourceMessage: z.string() });
 export const zReminderCancelInput = z.object({ id: z.string(), sourceMessage: z.string() });
-/** HOU-174: open reminders on `from` or later, the ones a person could still change or cancel. */
-export const zUpcomingRemindersInput = z.object({ from: z.iso.date() });
-/** CAP-10: "Not now" or "Later" moves a reminder to another day, keeping its time. */
-export const zReminderMoveInput = z.object({ id: z.string(), date: z.iso.date() });
+/**
+ * HOU-174: open reminders on `from` or later, the ones a person could still change or cancel. HOU-177:
+ * with `closed`, those already done, moved to the Backlog or cancelled instead, to say what became of one.
+ */
+export const zUpcomingRemindersInput = z.object({ from: z.iso.date(), closed: z.boolean().optional() });
+/**
+ * CAP-10: "Not now" or "Later" moves a reminder to another day, keeping its time. HOU-177: only from the
+ * message of the person who tapped it (PRV-1), like a change or cancel.
+ */
+export const zReminderMoveInput = z.object({ id: z.string(), date: z.iso.date(), sourceMessage: z.string() });
+/** CAP-10: Done on a reminder. HOU-177: only from the message of the person who tapped it (PRV-1). */
+export const zReminderDoneInput = z.object({ id: z.string(), sourceMessage: z.string() });
 /** CAP-10: open reminders with no time from before `today` become backlog items. */
 export const zRemindersToBacklogInput = z.object({ today: z.iso.date() });
 export const zBacklogSetTagsInput = z.object({ id: z.string(), tags: z.array(zBacklogTag) });

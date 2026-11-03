@@ -93,7 +93,8 @@ function remindCall(text: string): Call | null {
 const CANCEL_REMINDER = /^(?:please\s+)?(?:can you\s+)?(?:cancel|delete|remove|scrap|drop)\s+(.*\breminder)\b/i;
 const CHANGE_REMINDER = /^(?:please\s+)?(?:can you\s+)?(?:make|move|change|re-?time|push|bring|put)\s+(.*?\breminder)\b\s*(?:to|for|at)?\s*(.+?)[.!]*$/i;
 
-const CHANGE_IT = /^(.*?\breminder)\b.*?\b(?:make it|change it to|move it to)\s+(.+?)[.!]*$/i;
+// HOU-177: "mak eit" as typed on a phone.
+const CHANGE_IT = /^(.*?\breminder)\b.*?\b(?:mak\s?e\s?it|change it to|move it to)\s+(.+?)[.!]*$/i;
 
 /** A person asking to change or cancel a reminder they already have, or null. */
 function reminderChangeCall(text: string, about: string | null): Call | null {

@@ -5,7 +5,7 @@ import { parsePencil, pencilledLine } from "../planner/pencil.ts";
 import { deadlineOf, tooLate } from "../rules/deadline.ts";
 import { findSlot, partOfDay, partStartHour } from "../rules/fit.ts";
 import { addLocalDays, atLocal, dayPartWords, localDate, localHour, longDate, weekdayOf } from "../time.ts";
-import { cancelReminder, changeReminder, closedSay } from "./reminders.ts";
+import { cancelReminder, changeReminder, closedSay, replanFor } from "./reminders.ts";
 import type { JobScope } from "./scope.ts";
 
 export function dayPartOf(hour: number): DayPart {
@@ -62,18 +62,22 @@ async function respondToReminder(scope: JobScope, ref: string, action: ActionKin
   };
   if (action === ActionKind.done) {
     await scope.api.plans.respond({ ref, action, channel: scope.channel, date, value: null });
-    await scope.api.backlog.reminderDone({ id: reminder.id });
+    await scope.api.backlog.reminderDone({ id: reminder.id, sourceMessage: scope.messageId });
     scope.effects.closeRefs.push({ ref, status: "done" });
     replan(date);
+    // Its own day's plan, and the day before's, which shows it under Tomorrow (HOU-177).
+    await replanFor(scope, [reminder.date]);
     return `Done: ${reminder.text}.`;
   }
   if (action === ActionKind.snooze || action === ActionKind.notToday) {
     const to = addLocalDays(reminder.date > date ? reminder.date : date, 1);
     await scope.api.plans.respond({ ref, action: ActionKind.snooze, channel: scope.channel, date, value: to });
-    await scope.api.backlog.moveReminder({ id: reminder.id, date: to });
+    await scope.api.backlog.moveReminder({ id: reminder.id, date: to, sourceMessage: scope.messageId });
     scope.effects.closeRefs.push({ ref, status: "dismissed" });
     replan(date);
     replan(addLocalDays(date, 1));
+    // Every plan that showed it or will show it: its old day, its new day and the day before each (HOU-177).
+    await replanFor(scope, [reminder.date, to]);
     return to === addLocalDays(date, 1) ? `Moved to tomorrow: ${reminder.text}.` : `Moved to ${longDate(to)}: ${reminder.text}.`;
   }
   // HOU-174: a person's Change time or Delete on the reminder (PRV-1: they asked). Never from an email,

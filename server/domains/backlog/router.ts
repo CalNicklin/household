@@ -15,12 +15,13 @@ import {
   zReminder,
   zReminderCancelInput,
   zReminderChangeInput,
+  zReminderDoneInput,
   zReminderMoveInput,
   zRemindersToBacklogInput,
   zRemindInput,
   zUpcomingRemindersInput,
 } from "@household/contracts";
-import { and, asc, desc, eq, gte, inArray, isNull, lt, lte, type SQL } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray, isNull, lt, lte, ne, type SQL } from "drizzle-orm";
 import { z } from "zod";
 import type { DomainDb } from "../../db/index.ts";
 import { iso } from "../../db/map.ts";
@@ -57,7 +58,7 @@ const toReminder = (r: typeof schema.reminders.$inferSelect): Reminder => ({
  * HOU-174: a change a person asked for to a reminder, with who asked and who set it. The change itself
  * is the person acting (PRV-1), whether they tapped it or said it to the house.
  */
-function logReminderChange(change: "retimed" | "cancelled", r: Reminder, by: string, to: Pick<Reminder, "date" | "time"> | null): void {
+function logReminderChange(change: "retimed" | "cancelled" | "done" | "moved", r: Reminder, by: string, to: Pick<Reminder, "date" | "time"> | null): void {
   console.info(JSON.stringify({ event: "reminder-changed-by-person", change, id: r.id, by, askedBy: r.askedBy, from: { date: r.date, time: r.time }, to }));
 }
 
@@ -75,13 +76,13 @@ export function backlogRouter(db: BacklogDb) {
     if (row === undefined) forbid(`no reminder ${id}`);
     return row;
   };
-  /** CAP-10: open reminders matching `when`, by day and time. */
-  const openReminders = async (when: SQL | undefined) =>
+  /** CAP-10: open reminders matching `when`, by day and time. HOU-177: or only the closed ones. */
+  const openReminders = async (when: SQL | undefined, closed = false) =>
     (
       await db
         .select()
         .from(schema.reminders)
-        .where(and(eq(schema.reminders.status, ReminderStatus.open), when))
+        .where(and(closed ? ne(schema.reminders.status, ReminderStatus.open) : eq(schema.reminders.status, ReminderStatus.open), when))
         .orderBy(asc(schema.reminders.date), asc(schema.reminders.time), asc(schema.reminders.createdAt))
     ).map(toReminder);
   const setReminder = async (ctx: { publish: (t: "backlog") => void }, id: string, values: Partial<typeof schema.reminders.$inferInsert>) => {
@@ -217,24 +218,37 @@ export function backlogRouter(db: BacklogDb) {
       return row === undefined ? null : toReminder(row);
     }),
 
-    /** CAP-10: Done, by a person or a job acting for one. */
-    reminderDone: actorProcedure.input(zIdInput).output(zReminder).mutation(async ({ ctx, input }) => {
-      await reminderRow(input.id);
-      return setReminder(ctx, input.id, { status: ReminderStatus.done, doneAt: ctx.now });
+    /**
+     * CAP-10: Done, because a person tapped it. HOU-177: only a person, or a job acting on the message they
+     * sent (PRV-1), never the system or a job handling another message. Logged with who.
+     */
+    reminderDone: actorProcedure.input(zReminderDoneInput).output(zReminder).mutation(async ({ ctx, input }) => {
+      const by = askingPerson(ctx.actor, input.sourceMessage);
+      const reminder = toReminder(await reminderRow(input.id));
+      if (reminder.status !== ReminderStatus.open) return reminder;
+      const done = await setReminder(ctx, input.id, { status: ReminderStatus.done, doneAt: ctx.now });
+      logReminderChange("done", reminder, by, null);
+      return done;
     }),
 
-    /** CAP-10: "Not now" (or "Later" on a message) moves an open reminder to another day; its time stays. */
+    /**
+     * CAP-10: "Not now" (or "Later" on a message) moves an open reminder to another day; its time stays.
+     * HOU-177: only for a person, as reminderDone. Logged with who.
+     */
     moveReminder: actorProcedure.input(zReminderMoveInput).output(zReminder).mutation(async ({ ctx, input }) => {
-      const reminder = await reminderRow(input.id);
-      if (reminder.status !== ReminderStatus.open) return toReminder(reminder);
-      return setReminder(ctx, input.id, { date: input.date });
+      const by = askingPerson(ctx.actor, input.sourceMessage);
+      const reminder = toReminder(await reminderRow(input.id));
+      if (reminder.status !== ReminderStatus.open) return reminder;
+      const moved = await setReminder(ctx, input.id, { date: input.date });
+      logReminderChange("moved", reminder, by, { date: moved.date, time: moved.time });
+      return moved;
     }),
 
     /** HOU-174: open reminders from a day on, by day and time: the ones a person could still change. */
     upcomingReminders: readProcedure
       .input(zUpcomingRemindersInput)
       .output(z.array(zReminder))
-      .query(async ({ input }) => openReminders(gte(schema.reminders.date, input.from))),
+      .query(async ({ input }) => openReminders(gte(schema.reminders.date, input.from), input.closed === true)),
 
     /**
      * HOU-174: a new day or time for an open reminder, because a person asked (PRV-1). Logged with who

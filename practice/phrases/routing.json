@@ -21,6 +21,7 @@
     { "text": "make the BoyBoy reminder 7:30", "expect": [["change_reminder"]] },
     { "text": "move the dentist reminder to Thursday", "expect": [["change_reminder"]] },
     { "text": "cancel the 9 o'clock BoyBoy reminder", "expect": [["cancel_reminder"]], "note": "HOU-174: how Cal removes the duplicate" },
+    { "text": "BoyBoy reminder on Wesnday 4th should be earlier than 9 - mak eit 730", "expect": [["change_reminder"]], "note": "HOU-177: Cal's 2 Nov message as typed; once it closed the 09:00 reminder through respond" },
     { "text": "delete the dentist reminder", "expect": [["cancel_reminder"]] },
     { "text": "remind me to cancel the gym membership", "expect": [["remind"]], "note": "HOU-174: setting a reminder about cancelling, not cancelling one" },
     { "text": "set up the new wifi router in the loft", "expect": [["capture"]] },

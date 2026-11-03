@@ -23,7 +23,9 @@ cleanup() {
   ( cd "$work/srv" 2>/dev/null && HOUSEHOLD_IMAGE=x docker compose -p household -f compose.yml --env-file .env down -v --remove-orphans > /dev/null 2>&1 ) || true
   docker rm -f household-test-registry > /dev/null 2>&1 || true
   docker image rm -f "$local_image" > /dev/null 2>&1 || true
-  rm -rf "$work"
+  [ -z "${stub:-}" ] || kill "$stub" 2> /dev/null || true
+  [ -z "${previews_net:-}" ] || docker network rm household-previews > /dev/null 2>&1 || true
+  rm -rf "$work" "${sites_root:-}"
 }
 trap cleanup EXIT
 step() { printf '\n== %s\n' "$*"; }
@@ -43,12 +45,18 @@ echo "pushed $digest"
 step "the server as install.sh leaves it: deploy files, settings, secrets generated in place"
 install -d -m 750 "$work/srv"
 install -d -o 10001 -m 700 "$work/srv/credentials"
-cp "$repo"/deploy/compose.yml "$repo"/deploy/compose.hindsight.yml "$repo"/deploy/Caddyfile "$work/srv/"
+cp "$repo"/deploy/compose.yml "$repo"/deploy/compose.hindsight.yml "$repo"/deploy/compose.caddy-sites.yml "$repo"/deploy/compose.caddy-previews.yml "$repo"/deploy/Caddyfile "$repo"/deploy/Caddyfile.sites "$repo"/deploy/Caddyfile.previews "$work/srv/"
+# HOU-175: where the trader side's *.caddy files would be; it doesn't exist until the sites step below.
+sites_root="$(mktemp -d)"
+chmod 755 "$sites_root"
+sites="$sites_root/sites"
 cat > "$HOUSEHOLD_CONF" <<CONF
 HOUSEHOLD_DIR=$work/srv
 HOUSEHOLD_REPO=localhost:5000/household
 BACKUP_DEST=$work/backups
 BACKUP_KEEP=1
+SITES_DIR=$sites
+PREVIEWS_DIR=$work/previews
 CONF
 docker run --rm --network none --memory 128m -v "$repo/scripts/env-init.ts:/env-init.ts:ro" -v "$work/srv:/work" -w /work node:22-bookworm-slim node /env-init.ts --real > /dev/null
 echo "HOUSEHOLD_DOMAIN=localhost" >> "$work/srv/.env"
@@ -94,6 +102,7 @@ login="$(curl -sk -D - -o /dev/null -H 'content-type: application/json' -d "{\"u
 grep -qi '^set-cookie: .*; Secure' <<< "$login" || fail "sam could not log in with the generated password over HTTPS"
 docker logs household-app-1 2>&1 | grep -q 'ports-missing-credentials.*shopping (no helper: nothing is added)' || fail "the app did not say it runs without a helper"
 echo "healthy behind Caddy; login works; no helper"
+[ "$(docker inspect -f '{{range .Mounts}}{{.Destination}} {{end}}{{.HostConfig.ExtraHosts}}' household-caddy-1)" = "/config /data /etc/caddy/Caddyfile []" ] || fail "with no sites directory, Caddy has more than the house's mounts or hosts (HOU-175)"
 
 step "HOU-160: a .env the new image refuses never takes the house down: the old container keeps running"
 # Built FROM the image above, so on the Docker daemon's own builder, which can see it (not BUILDX_BUILDER's).
@@ -166,6 +175,118 @@ grep -q "rolled back to localhost:5000/household@$digest" "$work/deploy3.log" ||
 [ "$(cat "$work/srv/image")" = "localhost:5000/household@$digest" ] || fail "the broken image was recorded as deployed"
 [ "$(curl -sk https://localhost/healthz)" = ok ] || fail "not healthy after the rollback"
 echo "the broken image failed its health check; rolled back to the working one"
+
+step "HOU-175: other apps' sites on the house's Caddy, only from a directory root alone can write, validated first"
+caddy_now() { docker inspect -f '{{.Id}} {{.State.StartedAt}}' household-caddy-1; }
+deploy_sites() { # <log name>: redeploy the running image; its exit code
+  set +e; "$lib/household-deploy.sh" "$digest" < /dev/null > "$work/$1.log" 2>&1; local rc=$?; set -e
+  return "$rc"
+}
+# The trader side's stand-in: a server on the host, listening only on the address host-gateway names.
+gateway="$(docker run --rm --add-host host.docker.internal:host-gateway --entrypoint getent caddy:2.10.2-alpine hosts host.docker.internal | cut -d' ' -f1)"
+[ -n "$gateway" ] || fail "no host-gateway address"
+port=38470
+node -e 'require("http").createServer((q,r)=>r.end("trader stub "+q.headers.host)).listen(+process.argv[2],process.argv[1])' "$gateway" "$port" &
+stub=$!
+for _ in $(seq 20); do curl -sf "http://$gateway:$port/" > /dev/null && break; sleep 0.5; done
+# A login made up for this run, put in front of the site the way docs/OPERATIONS.md recommends.
+site_password="$(od -An -N12 -tx1 /dev/urandom | tr -d ' \n')"
+site_hash="$(printf '%s\n%s\n' "$site_password" "$site_password" | docker run --rm -i caddy:2.10.2-alpine caddy hash-password | tail -n1)"
+[[ "$site_hash" == '$2'* ]] || fail "caddy hash-password gave no bcrypt hash"
+trader="$(printf 'trader.localhost {\n\tbasic_auth {\n\t\tcal %s\n\t}\n\treverse_proxy host.docker.internal:%s\n}\n' "$site_hash" "$port")"
+house_ok() { [ "$(curl -sk --resolve localhost:443:127.0.0.1 https://localhost/healthz)" = ok ] || fail "the house stopped serving: $1"; }
+trader_code() { curl -sk -o /dev/null -w '%{http_code}' --resolve trader.localhost:443:127.0.0.1 "$@" https://trader.localhost/; }
+
+# The PR previews' network, with the house's Caddy on it (as install.sh --preview-domain leaves it), and a
+# stand-in preview on it: what does it get from Caddy for <host> on <port>?
+docker network inspect household-previews > /dev/null 2>&1 && fail "a household-previews network already exists here; nothing was touched"
+docker network create --internal household-previews > /dev/null
+previews_net=yes
+install -d -m 755 "$work/previews/live"
+echo "PREVIEW_DOMAIN=preview.localhost" >> "$work/srv/.env"
+deploy_sites previews-on || { cat "$work/previews-on.log" >&2; fail "the house did not deploy with the previews' overlay"; }
+from_preview() { # <port> <host>
+  local ip
+  ip="$(docker inspect -f '{{(index .NetworkSettings.Networks "household-previews").IPAddress}}' household-caddy-1)"
+  docker run --rm --network household-previews --memory 64m --entrypoint node "$local_image" -e '
+    const [ip, port, host] = process.argv.slice(1);
+    const req = require(port === "443" ? "https" : "http").request({ host: ip, port, servername: host, headers: { host }, rejectUnauthorized: false, timeout: 5000 }, (r) => { console.log(`answered ${r.statusCode}`); process.exit(0); });
+    req.on("error", (e) => { console.log(e.code === "ECONNREFUSED" ? "refused" : `error ${e.code}`); process.exit(0); });
+    req.on("timeout", () => { console.log("timeout"); process.exit(0); });
+    req.end();' "$ip" "$1" "$2"
+}
+# Without other apps' sites nothing changes: a preview reaches Caddy as the internet does (FB-5).
+[[ "$(from_preview 443 localhost)" == answered* ]] || fail "the stand-in preview could not reach Caddy without sites: $(from_preview 443 localhost)"
+
+# A directory someone besides root can write: left out, and the house deploys exactly as before.
+before="$(caddy_now)"
+install -d -m 775 "$sites"
+printf '%s' "$trader" > "$sites/trader.caddy"
+deploy_sites sites-unsafe || { cat "$work/sites-unsafe.log" >&2; fail "a deploy with an unsafe sites directory failed"; }
+grep -q "^note: $sites is not root's alone" "$work/sites-unsafe.log" || fail "no note about the group-writable directory"
+chmod 755 "$sites"; chown 1000 "$sites/trader.caddy"
+deploy_sites sites-unsafe-file || fail "a deploy with a site file root doesn't own failed"
+grep -q "^note: $sites/trader.caddy is not a root-owned file" "$work/sites-unsafe-file.log" || fail "no note about the file root doesn't own"
+chown 0 "$sites/trader.caddy"; ln -s /etc/hostname "$sites/link.caddy"
+deploy_sites sites-symlink || fail "a deploy with a symlinked site failed"
+grep -q "^note: $sites/link.caddy is not a root-owned file" "$work/sites-symlink.log" || fail "no note about the symlink"
+rm "$sites/link.caddy"
+[ "$(caddy_now)" = "$before" ] || fail "Caddy was recreated while the sites directory was unsafe"
+echo "an unsafe directory, a file root doesn't own, and a symlink were each left out; Caddy untouched"
+
+# The deploy user (any user but root) can't add a site.
+chmod 644 "$sites/trader.caddy"
+if setpriv --reuid=65534 --regid=65534 --clear-groups sh -c "echo x > '$sites/evil.caddy'" 2> /dev/null; then fail "a non-root user could add a site"; fi
+if setpriv --reuid=65534 --regid=65534 --clear-groups sh -c "echo x >> '$sites/trader.caddy'" 2> /dev/null; then fail "a non-root user could change a site"; fi
+echo "a non-root user can neither add nor change a site"
+
+# A valid site: Caddy is recreated with it, and serves it (behind its login) next to the house.
+deploy_sites sites-valid || { cat "$work/sites-valid.log" >&2; fail "a deploy with a valid site failed"; }
+grep -q "^caddy config with $sites is valid$" "$work/sites-valid.log" || fail "the deploy did not validate the sites"
+[ "$(docker inspect -f '{{.HostConfig.ExtraHosts}}' household-caddy-1)" = "[host.docker.internal:host-gateway]" ] || fail "Caddy has no host-gateway name"
+docker inspect -f '{{range .Mounts}}{{if eq .Destination "/etc/caddy/sites"}}{{.Source}} {{.RW}}{{end}}{{end}}' household-caddy-1 | grep -qx "$sites false" || fail "the sites are not mounted read-only"
+for _ in $(seq 30); do [ "$(trader_code)" = 401 ] && break; sleep 1; done
+[ "$(trader_code)" = 401 ] || fail "the trader site answered $(trader_code) without its login"
+[ "$(curl -sk --resolve trader.localhost:443:127.0.0.1 -u "cal:$site_password" https://trader.localhost/)" = "trader stub trader.localhost" ] || fail "the trader site did not reach the stub on the host"
+house_ok "with a valid site"
+[ "$(curl -s -o /dev/null -w '%{http_code}' http://localhost/healthz)" = 308 ] || fail "plain HTTP no longer redirects with a site"
+echo "trader.localhost reaches the stub on $gateway:$port through Caddy, behind its login; the house serves as before"
+# FB-5: a PR preview reaches Caddy on the previews' network, where nothing listens while sites are served.
+for p in 443 80; do
+  got="$(from_preview "$p" trader.localhost)"
+  [ "$got" = refused ] || fail "a preview asking Caddy for trader.localhost on port $p got: $got"
+done
+[ "$(from_preview 443 localhost)" = refused ] || fail "a preview still reaches Caddy while sites are served"
+echo "a preview asking Caddy for trader.localhost (443 and 80) is refused, while the host reaches it"
+
+# An invalid site: the deploy refuses before switching anything, names the file, and nothing stops serving.
+before="$(caddy_now)"
+printf 'monitor.localhost {\n\tnot_a_directive\n}\n' > "$sites/monitor.caddy"
+if deploy_sites sites-invalid; then fail "a deploy with an invalid site went ahead"; fi
+grep -q "^Error: .*$sites/monitor.caddy:2: unrecognized directive: not_a_directive" "$work/sites-invalid.log" || { cat "$work/sites-invalid.log" >&2; fail "the refusal did not name the invalid file"; }
+grep -q "nothing was switched; the house keeps running localhost:5000/household@$digest" "$work/sites-invalid.log" || fail "the refusal did not say the house carries on"
+[ "$(caddy_now)" = "$before" ] || fail "Caddy was touched by an invalid site"
+house_ok "with an invalid site"
+[ "$(curl -sk --resolve trader.localhost:443:127.0.0.1 -u "cal:$site_password" https://trader.localhost/)" = "trader stub trader.localhost" ] || fail "the valid site stopped serving"
+# A site that validates but would bind elsewhere (its own `bind`): refused too, before Caddy is touched.
+printf 'monitor.localhost {\n\tbind 0.0.0.0\n\trespond "monitor"\n}\n' > "$sites/monitor.caddy"
+if deploy_sites sites-bind; then fail "a deploy with a site that sets its own bind went ahead"; fi
+grep -q '^Error: a site listens on \["0.0.0.0:443"\], not only on the front address' "$work/sites-bind.log" || { cat "$work/sites-bind.log" >&2; fail "the refusal did not name the listener"; }
+[ "$(caddy_now)" = "$before" ] || fail "Caddy was touched by a site with its own bind"
+house_ok "with a site that sets its own bind"
+echo "an invalid site was refused, naming $sites/monitor.caddy:2; and a site with its own bind was refused; Caddy, the house and the valid site carried on"
+
+# No sites again: the house goes back to exactly its own Caddy.
+rm "$sites"/*.caddy
+deploy_sites sites-none || fail "a deploy with an empty sites directory failed"
+# (The previews' overlay stays on: Caddy has its mounts, and none of the sites'.)
+docker inspect -f '{{range .Mounts}}{{.Destination}} {{end}}' household-caddy-1 | grep -qE '/etc/caddy/(sites|front)' && fail "Caddy kept the sites' mounts after they were removed"
+[ "$(docker inspect -f '{{.HostConfig.ExtraHosts}}' household-caddy-1)" = "[]" ] || fail "Caddy kept the host-gateway name after the sites were removed"
+[[ "$(from_preview 443 localhost)" == answered* ]] || fail "without sites, Caddy is not back to listening as before"
+house_ok "after the sites were removed"
+[ "$(trader_code)" != 401 ] || fail "the trader site is still served"
+if grep -lF -e "$site_password" "$work"/*.log; then fail "the site's password was printed"; fi
+echo "with an empty sites directory Caddy is the house's own again"
 
 step "memory: every container has its cap"
 docker stats --no-stream --format '{{.Name}} {{.MemUsage}}' household-app-1 household-postgres-1 household-objects-1 household-caddy-1

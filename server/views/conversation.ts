@@ -16,14 +16,15 @@ function pickOf(toolCalls: readonly { tool: string; output: unknown }[]): Answer
  * time zone, so yesterday's is gone. HOU-149: an answer from `what_now` also carries the one thing
  * it named, so the screen shows the thing and its reason rather than prose. HOU-173: an accept tap
  * is an exception, so its answer ("Pencilled in for Wednesday morning") shows as the confirmation; so
- * is a reminder's Change time (HOU-174).
+ * is a reminder's Change time (HOU-174), and its Delete (HOU-177: "Cancelled …", or why it wasn't).
  */
 export async function conversationView(rt: Runtime, person: string): Promise<ConversationView> {
   const api = rt.system("views");
   const since = startOfLocalDay(localDate(rt.ports.clock.now(), rt.timeZone), rt.timeZone).toISOString();
   // HOU-173: an accept's answer is news ("Pencilled in for Wednesday morning"), so it shows. HOU-174: so
-  // is a reminder's Change time ("Moved: …", or that the time has already gone).
-  const exchanges = (await api.jobs.exchanges({ person, since })).filter((e) => !e.tap || e.action === ActionKind.accept || e.action === ActionKind.retime);
+  // is a reminder's Change time ("Moved: …", or that the time has already gone). HOU-177: and its Delete
+  // ("Cancelled …", or that it was already done), so a Delete that changed nothing never passes unseen.
+  const exchanges = (await api.jobs.exchanges({ person, since })).filter((e) => !e.tap || e.action === ActionKind.accept || e.action === ActionKind.retime || e.action === ActionKind.cancel);
   return exchanges.map((e) => {
     const said = e.redacted || e.text.trim() === "" ? null : e.text;
     if (e.reply !== null) return { id: e.id, said, saidAt: e.receivedAt, state: ExchangeState.answered, reply: { ...e.reply, pick: e.job === null ? null : pickOf(e.job.toolCalls) } };

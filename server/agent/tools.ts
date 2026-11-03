@@ -19,6 +19,12 @@ const personDefaults = { quietStartHour: Limits.defaultQuietStartHour.value, qui
 
 const NOTHING_PRESSING = { title: "Nothing pressing today", why: "No rule, calendar entry or quick backlog job needs doing now." } as const;
 
+/**
+ * HOU-177 (PRV-1): Done and Not now on a reminder are only ever a person's tap. By message, a reminder
+ * changes only through change_reminder or cancel_reminder, which find the one the person named.
+ */
+export const TAP_A_REMINDER = "Nothing was changed: a reminder is done or put off by tapping it. Ask to change its time or cancel it instead.";
+
 /** The household's tools. Each runs as the agent actor for this job's person (PRV-1 is enforced by the routers). */
 export function houseTools(scope: JobScope) {
   const { rt, api } = scope;
@@ -216,10 +222,13 @@ export function houseTools(scope: JobScope) {
 
   const respondTool = createTool({
     id: "respond",
-    description: "Done, not today, snooze or accept on something on the screen, by its ref.",
+    description: "Done, not today, snooze or accept on something on the screen, by its ref. Never on a reminder: use change_reminder or cancel_reminder when someone asks.",
     // HOU-174: a reminder's Change time and Delete are a person's tap, or change_reminder / cancel_reminder; never this.
     inputSchema: z.object({ ref: z.string(), action: zActionKind.exclude([ActionKind.retime, ActionKind.cancel]), value: z.string().nullable().optional() }),
-    execute: record("respond", async (input: { ref: string; action: ActionKind; value?: string | null | undefined }) => ({ say: await respond(scope, input.ref, input.action, input.value ?? null) })),
+    execute: record("respond", async (input: { ref: string; action: ActionKind; value?: string | null | undefined }) => {
+      if (input.ref.startsWith("reminder:")) return { say: TAP_A_REMINDER };
+      return { say: await respond(scope, input.ref, input.action, input.value ?? null) };
+    }),
   });
 
   const handOver = createTool({
@@ -258,6 +267,7 @@ export function houseTools(scope: JobScope) {
     inputSchema: z.object({ ref: z.string().nullable() }),
     execute: record("move_to_tomorrow", async (input: { ref: string | null }) => {
       if (input.ref === null) return { say: "Tap the thing you mean first." };
+      if (input.ref.startsWith("reminder:")) return { say: TAP_A_REMINDER };
       await respond(scope, input.ref, ActionKind.snooze, addLocalDays(today(), 1));
       return { say: `Moved "${await subjectFor(scope, input.ref, today())}" to tomorrow.` };
     }),
