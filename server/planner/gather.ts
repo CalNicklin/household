@@ -1,4 +1,5 @@
 import { ActionKind, type BacklogItem, BacklogStatus, BacklogTag, BlockType, type HourlyForecast, Limits, type LocalDate, NotificationStatus, type NotifyAction } from "@household/contracts";
+import { deadlineOf, tooLate } from "../rules/deadline.ts";
 import { findSlot, partOfDay } from "../rules/fit.ts";
 import { adultsOf, type HouseFacts, nameOf } from "../rules/day.ts";
 import type { Runtime } from "../runtime.ts";
@@ -93,11 +94,13 @@ async function withRetry<T>(call: () => Promise<T>, attempts: number = Limits.we
   }
 }
 
-export type PickCandidate = BacklogPick & { who: string[] };
+/** HOU-178: `neededBy` is the deadline in the item's own words, read afresh each plan (never stored on the item). */
+export type PickCandidate = BacklogPick & { who: string[]; neededBy: { at: string; words: string } | null };
 
 /**
  * Backlog items with a slot this week that have never been offered (PRO-6), soonest first. A slot
- * today that only a heavy-day person could use is left free (WB-4).
+ * today that only a heavy-day person could use is left free (WB-4). A slot is always before the
+ * deadline in the item's own words, so an item past it is not offered at all (HOU-178).
  */
 export async function pickCandidates(rt: Runtime, facts: HouseFacts, date: LocalDate, now: Date, signals: { avoid: readonly string[]; offerTo: Readonly<Record<string, string>>; heavy: readonly string[]; todayOffer: string | null }): Promise<PickCandidate[]> {
   const api = rt.system("planner");
@@ -110,16 +113,24 @@ export async function pickCandidates(rt: Runtime, facts: HouseFacts, date: Local
   for (const item of items) {
     if (offered.has(item.id)) continue;
     if (signals.todayOffer !== null && item.id !== signals.todayOffer) continue;
-    const slot = findSlot(facts, item, from, date, 7);
+    // HOU-178: never a gap that starts at or after the deadline in the item's own words; past it, never offered.
+    const deadline = deadlineOf(item, rt.timeZone);
+    const slot = findSlot(facts, item, from, date, 7, deadline);
     if (slot === null) continue;
     const dayPart = partOfDay(slot.startHour);
     if (signals.avoid.includes(`${item.text.toLowerCase()}|${dayPart}`)) continue;
     if (slot.date === date && slot.who.every((w) => signals.heavy.includes(w))) continue;
     const person = signals.offerTo[item.text.toLowerCase()] ?? null;
     const forWhom = person === null ? "" : ` ${nameOf(facts.people, person)} usually takes these.`;
-    out.push({ itemId: item.id, title: item.text, why: `${pickReason(facts, item, slot.date, today, dayPart, slot.why)}${forWhom}`, person, slotDate: slot.date, dayPart, who: slot.who });
+    out.push({ itemId: item.id, title: item.text, why: `${pickReason(facts, item, slot.date, today, dayPart, slot.why)}${forWhom}`, person, slotDate: slot.date, dayPart, who: slot.who, neededBy: deadline === null ? null : { at: deadline.at.toISOString(), words: deadline.words } });
   }
-  return out.sort((a, b) => a.slotDate.localeCompare(b.slotDate));
+  // Soonest slot first; on the same day, one with a deadline before one without, the sooner first (HOU-178).
+  return out.sort((a, b) => a.slotDate.localeCompare(b.slotDate) || neededFirst(a.neededBy, b.neededBy));
+}
+
+function neededFirst(a: PickCandidate["neededBy"], b: PickCandidate["neededBy"]): number {
+  if (a === null || b === null) return a === b ? 0 : a === null ? 1 : -1;
+  return a.at.localeCompare(b.at);
 }
 
 /** HOU-173: `today` is the real current date, never the plan's: the age and the day words are both said from it. */
@@ -148,7 +159,7 @@ export async function oneThingCandidates(rt: Runtime, facts: HouseFacts, date: L
     if (b.type === BlockType.alert && b.action !== null) out.push({ ref: b.ref, title: b.title, why: b.reason, actions: withHandOver(b.ref, [{ ...b.action }]) });
   }
   const items = (await api.backlog.list()).filter((i) => i.status === BacklogStatus.active && !closed.has(`backlog:${i.id}`));
-  const quick = items.filter((i) => i.tags.includes("quick")).map((i) => ({ item: i, slot: findSlot(facts, i, now, date, 1) }));
+  const quick = items.filter((i) => i.tags.includes("quick")).map((i) => ({ item: i, slot: findSlot(facts, i, now, date, 1, deadlineOf(i, rt.timeZone)) }));
   for (const { item, slot } of quick) {
     if (slot === null || slot.date !== date) continue;
     const ref = `backlog:${item.id}`;
@@ -170,7 +181,7 @@ export async function oneThingCandidates(rt: Runtime, facts: HouseFacts, date: L
   }
   // HOU-149: a thin house still gets one answer — the oldest small job that needs nothing it can't check.
   // It is marked `fallback`, so what_now can hold it back in quiet hours (the plan is made at 5:30).
-  const small = out.length === 0 ? oldestSmall(items) : undefined;
+  const small = out.length === 0 ? oldestSmall(items.filter((i) => !tooLate(deadlineOf(i, rt.timeZone), now))) : undefined;
   if (small !== undefined) {
     const ref = `backlog:${small.id}`;
     const age = daysBetween(localDate(new Date(small.createdAt), rt.timeZone), localDate(now, rt.timeZone));

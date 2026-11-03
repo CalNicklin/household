@@ -10,7 +10,7 @@ const pad = (n: number) => String(n).padStart(2, "0");
 const hhmm = (h: number, m: number) => `${pad(h)}:${pad(m)}`;
 
 /** Times of day said in words, with no clock time: what each one means. */
-const PART_OF_DAY: readonly { words: RegExp; time: string }[] = [
+export const PART_OF_DAY: readonly { words: RegExp; time: string }[] = [
   { words: /\btonight\b/, time: "20:00" },
   { words: /\bevening\b/, time: "19:00" },
   { words: /\bafternoon\b/, time: "14:00" },
@@ -50,7 +50,7 @@ function clockWords(text: string): { hour: number; minute: number; meridiem: "am
  * people say it: "tonight at 8" and "at 3" are afternoon or evening, "morning at 8" is morning, and
  * otherwise the next 7 to 12 o'clock still to come today (in the morning on a later day).
  */
-function clockIn(text: string, evening: boolean, morning: boolean, nowTime: string | null): string | null {
+export function clockIn(text: string, evening: boolean, morning: boolean, nowTime: string | null): string | null {
   const said = clockWords(text);
   if (said === null) return null;
   let hour = said.hour;

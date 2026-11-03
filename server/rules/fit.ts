@@ -5,6 +5,7 @@
 import { type BacklogItem, BacklogTag, BacklogTagLabel, DayPart, DurationMinutes, DurationTag as Durations, type DurationTag, type LocalDate } from "@household/contracts";
 import { addLocalDays, atLocal, weekdayOf } from "../time.ts";
 import { adultsOf, DAY_END_HOUR, DAY_START_HOUR, type HouseFacts, isBusy, isDaylight, isDryHour, KIDS_BEDTIME_HOUR, kidsOf } from "./day.ts";
+import { type Deadline, tooLate } from "./deadline.ts";
 import { kidsAtNursery } from "./nudges.ts";
 
 export type Slot = { date: LocalDate; startHour: number; endHour: number; who: string[]; why: string[] };
@@ -47,8 +48,11 @@ function hourFacts(facts: HouseFacts, date: LocalDate, hour: number) {
   return { free, holds, kidsAway };
 }
 
-/** The earliest window in the next `days` days where every tag holds for long enough, with someone free. */
-export function findSlot(facts: HouseFacts, item: Pick<BacklogItem, "tags">, from: Date, fromDate: LocalDate, days = 7): Slot | null {
+/**
+ * The earliest window in the next `days` days where every tag holds for long enough, with someone free.
+ * HOU-178: with a `deadline` (the item's own "by Friday lunchtime"), no window starts at or after it.
+ */
+export function findSlot(facts: HouseFacts, item: Pick<BacklogItem, "tags">, from: Date, fromDate: LocalDate, days = 7, deadline: Deadline | null = null): Slot | null {
   const needHours = Math.max(1, Math.ceil(durationOf(item) / 60));
   const needs = item.tags.filter((t) => !Object.values(Durations).some((d) => d === t));
   for (let d = 0; d < days; d++) {
@@ -59,7 +63,7 @@ export function findSlot(facts: HouseFacts, item: Pick<BacklogItem, "tags">, fro
     for (let h = DAY_START_HOUR; h <= DAY_END_HOUR; h++) {
       const at = atLocal(date, h, 0, facts.timeZone);
       const f = hourFacts(facts, date, h);
-      const ok = at >= from && f.free.length > 0 && needs.every((t) => f.holds.has(t));
+      const ok = at >= from && f.free.length > 0 && needs.every((t) => f.holds.has(t)) && (runStart !== null || !tooLate(deadline, at));
       if (!ok) {
         runStart = null;
         continue;
@@ -95,6 +99,11 @@ export function waitingFor(item: Pick<BacklogItem, "tags">): string {
   const minutes = durationOf(item);
   const parts = [...needs, minutes >= 240 ? "a free half-day" : minutes >= 60 ? "a free hour" : "a free half-hour"];
   return `Needs ${parts.length === 1 ? parts[0] : `${parts.slice(0, -1).join(", ")} and ${parts.at(-1)}`}`;
+}
+
+/** The hour a part of the day starts, as `partOfDay` reads it (the day itself starts at DAY_START_HOUR). */
+export function partStartHour(part: DayPart): number {
+  return part === DayPart.morning ? DAY_START_HOUR : part === DayPart.afternoon ? 12 : 17;
 }
 
 export function partOfDay(hour: number): DayPart {

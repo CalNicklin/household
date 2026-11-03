@@ -78,7 +78,11 @@ export class HouseAgent {
   /** The agent's other job: which backlog item fits today's gap. Rules found the candidates. */
   async chooseBacklog(candidates: PickCandidate[]): Promise<{ pick: PickCandidate | null; inputTokens: number; outputTokens: number; costMicros: number }> {
     if (candidates.length === 0) return { pick: null, inputTokens: 0, outputTokens: 0, costMicros: 0 };
-    const prompt = ["Choose: one backlog job to offer today. Reply with its id only, or none.", ...candidates.slice(0, 8).map((c) => `- id=${c.itemId} ${c.title} — ${c.why}`)].join("\n");
+    // HOU-178: every candidate's gap is before its own deadline (rules checked); a deadline that is close helps choose.
+    const prompt = [
+      "Choose: one backlog job to offer today. Reply with its id only, or none. A job's stated deadline matters: other things equal, prefer one needed soon.",
+      ...candidates.slice(0, 8).map((c) => `- id=${c.itemId} ${c.title} — ${c.why}${c.neededBy === null ? "" : ` Needed ${c.neededBy.words}.`}`),
+    ].join("\n");
     const result = await this.#agent.generate(prompt, { toolChoice: "none" });
     const text = result.text.trim();
     const pick = candidates.find((c) => text.includes(c.itemId)) ?? (/\bnone\b/i.test(text) ? null : (candidates[0] ?? null));

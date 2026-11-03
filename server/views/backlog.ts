@@ -1,6 +1,7 @@
 import { type BacklogScreen, BacklogStatus } from "@household/contracts";
 import { gatherFacts } from "../planner/gather.ts";
 import { nameOf } from "../rules/day.ts";
+import { deadlineOf } from "../rules/deadline.ts";
 import { findSlot, partOfDay, waitingFor } from "../rules/fit.ts";
 import { pencilledFrom } from "./screen.ts";
 import { pencilledLine } from "../planner/pencil.ts";
@@ -45,7 +46,8 @@ export async function backlogScreen(rt: Runtime): Promise<BacklogScreen> {
       out.justAdded.push({ item, byline: `${nameOf(facts.people, item.createdBy)} · ${when(item.createdAt, now, rt.timeZone)}` });
       continue;
     }
-    const slot = findSlot(facts, item, now, today, 7);
+    // HOU-178: "could go soon" only in a gap before the deadline in its own words.
+    const slot = findSlot(facts, item, now, today, 7, deadlineOf(item, rt.timeZone));
     if (slot === null) out.waiting.push({ item, waitingFor: waitingFor(item) });
     else {
       const day = slot.date === today ? "Today" : slot.date === localDate(new Date(now.getTime() + 86_400_000), rt.timeZone) ? "Tomorrow" : shortWeekday(slot.date).slice(0, 3);
