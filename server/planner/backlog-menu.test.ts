@@ -90,7 +90,7 @@ describe("HOU-179: Pencil it in from the Backlog", () => {
   });
 });
 
-describe("HOU-179: Pencil it in from the Backlog on an item offered over a week ago (AR-1)", () => {
+describe("HOU-179: Pencil it in from the Backlog on an item offered over a week ago", () => {
   test("[PRO-8][CAP-4] the pencil is kept against today, so it is read back on the Backlog", async () => {
     const later = "2026-11-12";
     h.ports.clock.set(atLocal(later, 9, 0, TZ), true);

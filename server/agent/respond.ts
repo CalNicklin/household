@@ -115,7 +115,7 @@ async function tooLateToPencil(scope: JobScope, ref: string, slot: PencilSlot, n
 async function respondedOn(scope: JobScope, ref: string, action: ActionKind, hasSlot: boolean, today: LocalDate): Promise<LocalDate> {
   // HOU-179: so is Done (from the card or the Backlog's "…" menu), so an offered card closes on its own day.
   if (!ref.startsWith("backlog:") || (action !== ActionKind.accept && action !== ActionKind.done && !hasSlot)) return today;
-  // HOU-179 (AR-1): only a card still on a screen, today's or a later day's. An offer from an earlier day is
+  // HOU-179: only a card still on a screen, today's or a later day's. An offer from an earlier day is
   // no card any more, and a response kept there could fall outside the pencil window and never be read back.
   const offered = (await scope.api.plans.offers()).find((o) => `backlog:${o.itemId}` === ref)?.date;
   return offered !== undefined && offered >= today ? offered : today;
