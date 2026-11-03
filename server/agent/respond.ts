@@ -1,4 +1,4 @@
-import { ActionKind, BlockType, Channel, DayPart, type LocalDate, LongTool, ModeKind, NotificationStatus, type PencilSlot, ReminderStatus, RhythmSource, ShoppingStatus, zLocalTime } from "@household/contracts";
+import { ActionKind, BacklogStatus, BlockType, Channel, DayPart, type LocalDate, LongTool, ModeKind, NotificationStatus, type PencilSlot, ReminderStatus, RhythmSource, ShoppingStatus, zLocalTime } from "@household/contracts";
 import { START_REF_PREFIX } from "../planner/first-day.ts";
 import { forecasts, gatherFacts } from "../planner/gather.ts";
 import { parsePencil, pencilledLine } from "../planner/pencil.ts";
@@ -113,7 +113,8 @@ async function tooLateToPencil(scope: JobScope, ref: string, slot: PencilSlot, n
  * once), so the card closes there — on Week for a later day — as well as on Today. Anything else is today's.
  */
 async function respondedOn(scope: JobScope, ref: string, action: ActionKind, hasSlot: boolean, today: LocalDate): Promise<LocalDate> {
-  if (!ref.startsWith("backlog:") || (action !== ActionKind.accept && !hasSlot)) return today;
+  // HOU-179: so is Done (from the card or the Backlog's "…" menu), so an offered card closes on its own day.
+  if (!ref.startsWith("backlog:") || (action !== ActionKind.accept && action !== ActionKind.done && !hasSlot)) return today;
   return (await scope.api.plans.offers()).find((o) => `backlog:${o.itemId}` === ref)?.date ?? today;
 }
 
@@ -139,13 +140,19 @@ export async function respond(scope: JobScope, ref: string, action: ActionKind, 
   // suggestion: nothing to learn from, nothing to remember.
   if (ref.startsWith("reminder:")) return respondToReminder(scope, ref, action, date, value);
   const slot = ref.startsWith("backlog:") ? parsePencil(value) : null;
+  // HOU-179: Done on an item no longer on the backlog (done already, or deleted) records nothing.
+  if (ref.startsWith("backlog:") && action === ActionKind.done) {
+    const item = await scope.api.backlog.get({ id: ref.slice("backlog:".length) });
+    if (item === null || item.status === BacklogStatus.done) return "That's already off the list.";
+  }
   // HOU-178: a slot at or after the deadline in the item's own words is never pencilled in. Nothing is
   // recorded and the item is left as it is (PRV-1).
   if (action === ActionKind.accept && slot !== null) {
     const late = await tooLateToPencil(scope, ref, slot, now);
     if (late !== null) return late;
   }
-  await scope.api.plans.respond({ ref, action, channel: scope.channel, date: await respondedOn(scope, ref, action, slot !== null, date), value });
+  const on = await respondedOn(scope, ref, action, slot !== null, date);
+  await scope.api.plans.respond({ ref, action, channel: scope.channel, date: on, value });
   const subject = await subjectFor(scope, ref, date);
 
   // HOU-149: "Getting started" cards are about the app, not the house's life: nothing to learn or
@@ -186,7 +193,10 @@ export async function respond(scope: JobScope, ref: string, action: ActionKind, 
       return item.status === "parked" ? `Okay. That's three times, so "${subject}" is parked until you bring it back.` : "Okay, not now.";
     }
     if (action === ActionKind.done) {
-      await scope.api.backlog.markDone({ id });
+      // PRV-1: the person's own tap, so the router allows it only from this message (HOU-179).
+      await scope.api.backlog.markDone({ id, sourceMessage: scope.messageId });
+      // HOU-179: today's screens, and the day it was offered for, are planned again without it.
+      await replanFor(scope, [date, on]);
       return `Nice. "${subject}" is off the list.`;
     }
     // HOU-173: kept as the response (PRV-1: nothing is written to the calendar); Today, Week and the

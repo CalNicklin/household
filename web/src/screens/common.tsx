@@ -85,6 +85,37 @@ export function useBlockHandlers(version: number): BlockHandlers & { isHidden: (
   };
 }
 
+/**
+ * HOU-179: the Backlog's "…" menu sends the same one-tap messages as a card's buttons (CH-8). Done goes
+ * from the screen at once and is sent when the Undo window ends, like Delete (HOU-158); Pencil it in
+ * (or Move) is sent at once, and its answer, the day and why, opens the conversation.
+ */
+export function useBacklogTaps(): { done: (key: string, ref: string, title: string) => void; pencil: (ref: string, label: string) => void } {
+  const { markSaid } = useUiState();
+  const { remove } = useUndo();
+  const queryClient = useQueryClient();
+  const newestExchange = useNewestExchange();
+  const send = (action: NotifyAction) => say({ text: action.label, ref: action.ref, action: action.kind }).then(() => queryClient.invalidateQueries());
+  return {
+    // Once sent, its answer ("… is off the list") opens the conversation, as a reminder's Delete does (HOU-177).
+    done: (key, ref, title) =>
+      remove(
+        key,
+        `Done: “${title}”`,
+        () => {
+          const label = ActionLabel[ActionKind.done];
+          markSaid(newestExchange(), label);
+          return send({ kind: ActionKind.done, label, ref });
+        },
+        "Done",
+      ),
+    pencil: (ref, label) => {
+      markSaid(newestExchange(), label);
+      void send({ kind: ActionKind.accept, label, ref });
+    },
+  };
+}
+
 /** HOU-159: how many of today's exchanges show when the conversation is open ("the last few"). */
 const SHOWN_EXCHANGES = 3;
 

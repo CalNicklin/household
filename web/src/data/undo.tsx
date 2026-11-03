@@ -8,8 +8,10 @@ import { createContext, type ReactNode, useCallback, useContext, useEffect, useM
  * sent when the Undo window ends, when the next delete is made, or when the page is put away. Undo
  * before then and nothing was sent. If the delete fails, the thing comes back and the toast says so.
  */
-type Pending = { key: string; message: string; commit: () => Promise<unknown> };
-type Shown = { key: string; message: string; undoable: boolean };
+type Pending = { key: string; message: string; label: UndoLabel; commit: () => Promise<unknown> };
+type Shown = { key: string; message: string; label: UndoLabel; undoable: boolean };
+/** HOU-179: what the toast is about, for screen readers: a delete, or a backlog item marked done. */
+export type UndoLabel = "Deleted" | "Done";
 
 type Undo = {
   /** What the toast shows now: a delete that can still be undone, or one that failed and came back. */
@@ -17,7 +19,7 @@ type Undo = {
   /** True for a thing deleted on this screen, sent or not: the screen leaves it out. */
   isDeleted: (key: string) => boolean;
   /** Take `key` off the screen, show `message` with Undo, and run `commit` when the window ends. */
-  remove: (key: string, message: string, commit: () => Promise<unknown>) => void;
+  remove: (key: string, message: string, commit: () => Promise<unknown>, label?: UndoLabel) => void;
   undo: () => void;
   /**
    * Send the pending delete now, and resolve once it has landed (or failed). An add waits for this,
@@ -53,7 +55,8 @@ export function UndoProvider({ children }: { children: ReactNode }) {
       () => {
         restore(p.key);
         // Shown until the next delete or the next window ends, whichever is first; never over a newer delete.
-        setPending((now) => now ?? { key: p.key, message: `Couldn't delete that — it's back. Check the connection and try again.`, undoable: false });
+        const what = p.label === "Done" ? "mark that done" : "delete that";
+        setPending((now) => now ?? { key: p.key, message: `Couldn't ${what} — it's back. Check the connection and try again.`, label: p.label, undoable: false });
         // limit: undoWindowMs
         window.setTimeout(() => setPending((now) => (now?.key === p.key && !now.undoable ? null : now)), Limits.undoWindowMs.value);
       },
@@ -61,11 +64,11 @@ export function UndoProvider({ children }: { children: ReactNode }) {
   }, [clearTimer, queryClient, restore]);
 
   const remove = useCallback(
-    (key: string, message: string, commit: () => Promise<unknown>) => {
+    (key: string, message: string, commit: () => Promise<unknown>, label: UndoLabel = "Deleted") => {
       void flush();
       setDeleted((prev) => new Set([...prev, key]));
-      current.current = { key, message, commit };
-      setPending({ key, message, undoable: true });
+      current.current = { key, message, label, commit };
+      setPending({ key, message, label, undoable: true });
       // limit: undoWindowMs
       timer.current = window.setTimeout(() => void flush(), Limits.undoWindowMs.value);
     },
