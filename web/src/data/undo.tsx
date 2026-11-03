@@ -11,7 +11,7 @@ import { createContext, type ReactNode, useCallback, useContext, useEffect, useM
 type Pending = { key: string; message: string; label: UndoLabel; commit: () => Promise<unknown> };
 type Shown = { key: string; message: string; label: UndoLabel; undoable: boolean };
 /** HOU-179: what the toast is about, for screen readers: a delete, or a backlog item marked done. */
-export type UndoLabel = "Deleted" | "Done";
+type UndoLabel = "Deleted" | "Done";
 
 type Undo = {
   /** What the toast shows now: a delete that can still be undone, or one that failed and came back. */
