@@ -38,6 +38,8 @@ export const zUpcomingRemindersInput = z.object({ from: z.iso.date(), closed: z.
 export const zReminderMoveInput = z.object({ id: z.string(), date: z.iso.date(), sourceMessage: z.string() });
 /** CAP-10: Done on a reminder. HOU-177: only from the message of the person who tapped it (PRV-1). */
 export const zReminderDoneInput = z.object({ id: z.string(), sourceMessage: z.string() });
+/** HOU-179: Done on a backlog item, as a reminder's: only from the message of the person who tapped it (PRV-1). */
+export const zBacklogDoneInput = z.object({ id: z.string(), sourceMessage: z.string() });
 /** CAP-10: open reminders with no time from before `today` become backlog items. */
 export const zRemindersToBacklogInput = z.object({ today: z.iso.date() });
 export const zBacklogSetTagsInput = z.object({ id: z.string(), tags: z.array(zBacklogTag) });

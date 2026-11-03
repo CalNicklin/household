@@ -1,7 +1,7 @@
 import { Agent } from "@mastra/core/agent";
-import { ActionKind, Limits } from "@household/contracts";
+import { ActionKind, BacklogStatus, Limits } from "@household/contracts";
 import { gatherFacts, type PickCandidate } from "../planner/gather.ts";
-import { pencilValue } from "../planner/pencil.ts";
+import { pencilledItems, pencilValue, pencilWindow } from "../planner/pencil.ts";
 import { deadlineOf } from "../rules/deadline.ts";
 import { allowedGaps, partOfDay } from "../rules/fit.ts";
 import { localDate } from "../time.ts";
@@ -104,9 +104,15 @@ export class HouseAgent {
     };
     const none: TokenUsage = { input: 0, cacheRead: 0, cacheWrite: 0, output: 0 };
     if (item === null) return done("I can't find that on the backlog.", none, { gaps: 0 });
+    // HOU-179: from the Backlog's "…" menu too, but only for an item still on the list.
+    if (item.status !== BacklogStatus.active) return done(item.status === BacklogStatus.done ? "That's already off the list." : "That's parked. Bring it back first.", none, { gaps: 0 });
     const facts = await gatherFacts(scope.rt, today, PENCIL_DAYS);
     const deadline = deadlineOf(item, tz);
-    const gaps = allowedGaps(facts, item, now, today, PENCIL_DAYS, deadline);
+    // HOU-179: "Move" on an item already pencilled in picks again, from the other allowed gaps when there are any.
+    const current = pencilledItems(await scope.api.plans.responsesBetween(pencilWindow(today)), [item], today)[0]?.slot ?? null;
+    const allowed = allowedGaps(facts, item, now, today, PENCIL_DAYS, deadline);
+    const others = current === null ? allowed : allowed.filter((g) => g.date !== current.date || partOfDay(g.startHour) !== current.dayPart);
+    const gaps = others.length === 0 ? allowed : others;
     if (gaps.length === 0) return done(noGapSay(deadline), none, { gaps: 0 });
     const result = await this.#agent.generate(pencilPrompt(item, gaps, facts, deadline), { toolChoice: "none" });
     const usage = tokensOf(result.usage);

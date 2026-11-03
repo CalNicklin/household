@@ -39,7 +39,7 @@ export async function backlogScreen(rt: Runtime): Promise<BacklogScreen> {
     // HOU-173: pencilled in, it could go soon: on the day and part it was pencilled in for.
     const pencil = pencilled.get(item.id);
     if (pencil !== undefined) {
-      out.soon.push({ item, slot: pencilledLine(pencil, today) });
+      out.soon.push({ item, slot: pencilledLine(pencil, today), pencilled: true });
       continue;
     }
     if (!item.confirmedTags && now.getTime() - new Date(item.createdAt).getTime() < JUST_ADDED_MS) {
@@ -52,7 +52,7 @@ export async function backlogScreen(rt: Runtime): Promise<BacklogScreen> {
     else {
       const day = slot.date === today ? "Today" : slot.date === localDate(new Date(now.getTime() + 86_400_000), rt.timeZone) ? "Tomorrow" : shortWeekday(slot.date).slice(0, 3);
       const why = slot.why.length === 0 ? "" : ` · ${slot.why.join(", ")}`;
-      out.soon.push({ item, slot: `${day} ${partOfDay(slot.startHour)}${why}` });
+      out.soon.push({ item, slot: `${day} ${partOfDay(slot.startHour)}${why}`, pencilled: false });
     }
   }
   return out;

@@ -7,6 +7,7 @@ import {
   type Reminder,
   ReminderStatus,
   zBacklogCreateInput,
+  zBacklogDoneInput,
   zBacklogItem,
   zBacklogSetTagsInput,
   zIdInput,
@@ -63,10 +64,10 @@ function logReminderChange(change: "retimed" | "cancelled" | "done" | "moved", r
 }
 
 /** HOU-174: only a person, or a job acting on the message that person sent, may change or cancel a reminder. */
-function askingPerson(actor: Actor, sourceMessage: string): string {
+function askingPerson(actor: Actor, sourceMessage: string, thing = "a reminder"): string {
   const person = actingPerson(actor);
-  if (person === null) forbid("PRV-1: only a person can change a reminder");
-  if (actor.kind === ActorKind.agent && actor.message !== sourceMessage) forbid("PRV-1: a job can only change a reminder from the message it is handling");
+  if (person === null) forbid(`PRV-1: only a person can change ${thing}`);
+  if (actor.kind === ActorKind.agent && actor.message !== sourceMessage) forbid(`PRV-1: a job can only change ${thing} from the message it is handling`);
   return person;
 }
 
@@ -161,7 +162,12 @@ export function backlogRouter(db: BacklogDb) {
       return toItem(row);
     }),
 
-    markDone: actorProcedure.input(zIdInput).output(zBacklogItem).mutation(async ({ ctx, input }) => {
+    /**
+     * Done, because a person tapped it (on a card, or the Backlog's "…" menu). HOU-179: only a person, or a
+     * job acting on the message they sent (PRV-1), never the system or a job handling another message.
+     */
+    markDone: actorProcedure.input(zBacklogDoneInput).output(zBacklogItem).mutation(async ({ ctx, input }) => {
+      askingPerson(ctx.actor, input.sourceMessage, "a backlog item");
       await get(input.id);
       return update(ctx, input.id, { status: BacklogStatus.done, doneAt: ctx.now });
     }),

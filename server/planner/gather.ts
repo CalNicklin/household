@@ -1,5 +1,6 @@
 import { ActionKind, type BacklogItem, BacklogStatus, BacklogTag, BlockType, type HourlyForecast, Limits, type LocalDate, NotificationStatus, type NotifyAction } from "@household/contracts";
 import { deadlineOf, tooLate } from "../rules/deadline.ts";
+import { pencilledItems, pencilWindow } from "./pencil.ts";
 import { findSlot, partOfDay } from "../rules/fit.ts";
 import { adultsOf, type HouseFacts, nameOf } from "../rules/day.ts";
 import type { Runtime } from "../runtime.ts";
@@ -108,10 +109,13 @@ export async function pickCandidates(rt: Runtime, facts: HouseFacts, date: Local
   const offered = new Set((await api.plans.offers()).filter((o) => o.itemId !== signals.todayOffer).map((o) => o.itemId));
   // HOU-173: the reason is read from the real today, whichever day's plan it is on.
   const today = localDate(now, rt.timeZone);
+  // HOU-179: an item a person pencilled in (from the Backlog's menu) already has its day, so it isn't offered;
+  // it neither takes nor stops the day's own offer (PRO-6).
+  const pencilled = new Set(pencilledItems(await api.plans.responsesBetween(pencilWindow(today)), items, today).map((p) => p.item.id));
   const from = today === date ? now : atLocal(date, 7, 0, rt.timeZone);
   const out: PickCandidate[] = [];
   for (const item of items) {
-    if (offered.has(item.id)) continue;
+    if (offered.has(item.id) || (pencilled.has(item.id) && item.id !== signals.todayOffer)) continue;
     if (signals.todayOffer !== null && item.id !== signals.todayOffer) continue;
     // HOU-178: never a gap that starts at or after the deadline in the item's own words; past it, never offered.
     const deadline = deadlineOf(item, rt.timeZone);

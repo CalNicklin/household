@@ -38,7 +38,8 @@ export type ScreenView = z.infer<typeof zScreenView>;
 
 export const zBacklogScreen = z.object({
   count: z.number().int(),
-  soon: z.array(z.object({ item: zBacklogItem, slot: z.string() })),
+  /** HOU-179: `pencilled` when a person pencilled it in, so its menu says Move rather than Pencil it in. */
+  soon: z.array(z.object({ item: zBacklogItem, slot: z.string(), pencilled: z.boolean() })),
   waiting: z.array(z.object({ item: zBacklogItem, waitingFor: z.string() })),
   justAdded: z.array(z.object({ item: zBacklogItem, byline: z.string() })),
   parked: z.array(zBacklogItem),
