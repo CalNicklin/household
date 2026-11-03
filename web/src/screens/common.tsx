@@ -39,11 +39,13 @@ function useSay() {
   const queryClient = useQueryClient();
   const newestExchange = useNewestExchange();
   return (text: string, spoken: boolean) => {
-    markSaid(newestExchange(), text);
     const ref = about?.ref;
     setAbout(null);
     // HOU-158: a delete still in its Undo window is sent first, so "add milk" after deleting milk adds it.
-    void flush()
+    // Flushed before marking what they said, so a reminder's Delete (which marks "Delete") never shows in its place.
+    const flushed = flush();
+    markSaid(newestExchange(), text);
+    void flushed
       .then(() => say({ text, ...(ref === undefined ? {} : { ref }), ...(spoken ? { spoken } : {}) }))
       .then(() => queryClient.invalidateQueries());
   };
@@ -73,7 +75,13 @@ export function useBlockHandlers(version: number): BlockHandlers & { isHidden: (
       void send({ kind: ActionKind.retime, label, ref, value: time });
     },
     // HOU-174: like a backlog item's Delete (HOU-158): gone at once, sent when the Undo window ends.
-    onDelete: (block, ref, title) => remove(`block:${block.id}`, `Deleted “${title}”`, () => send({ kind: ActionKind.cancel, label: ActionLabel[ActionKind.cancel], ref })),
+    // HOU-177: once sent, its answer opens the conversation: "Cancelled …", or why nothing was.
+    onDelete: (block, ref, title) =>
+      remove(`block:${block.id}`, `Deleted “${title}”`, () => {
+        const label = ActionLabel[ActionKind.cancel];
+        markSaid(newestExchange(), label);
+        return send({ kind: ActionKind.cancel, label, ref });
+      }),
   };
 }
 

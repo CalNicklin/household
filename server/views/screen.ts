@@ -1,7 +1,9 @@
-import { ActionKind, type Block, BlockType, type LocalDate, type ScreenView, Section } from "@household/contracts";
+import { ActionKind, type Block, BlockType, type LocalDate, type Reminder, type ScreenView, Section } from "@household/contracts";
 import { plannerBuildId } from "../build.ts";
 import type { Runtime } from "../runtime.ts";
 import { pencilBlocks, type Pencilled, pencilledItems, pencilWindow } from "../planner/pencil.ts";
+import { remindersFor } from "../planner/gather.ts";
+import { reminderSection } from "../rules/remind.ts";
 import { localDate } from "../time.ts";
 
 const CLOSING: ReadonlySet<string> = new Set<string>([ActionKind.done, ActionKind.notToday, ActionKind.snooze, ActionKind.handOver, ActionKind.accept, ActionKind.answer, ActionKind.notHelpful]);
@@ -14,6 +16,20 @@ export function applyResponses(blocks: readonly Block[], closed: ReadonlySet<str
       if (b.type !== BlockType.mode || b.pick === null || !closed.has(b.pick.ref)) return b;
       return { ...b, pick: null };
     });
+}
+
+/**
+ * HOU-177: a saved plan's reminder card shows only while its reminder is still open, at that time,
+ * for that day: the screen never shows a reminder the house can't find (one already done, cancelled or
+ * moved), whose "…" menu would then delete nothing.
+ */
+export function openReminderBlocks(blocks: readonly Block[], open: readonly Reminder[], date: LocalDate, now: Date, timeZone: string): Block[] {
+  const byRef = new Map(open.map((r) => [`reminder:${r.id}`, r]));
+  return blocks.filter((b) => {
+    if (b.type !== BlockType.reminder) return true;
+    const r = byRef.get(b.ref);
+    return r !== undefined && r.time === b.time && reminderSection(r, date, now, timeZone) !== null;
+  });
 }
 
 /** Sections that come after a day's own Now and Later. */
@@ -47,12 +63,14 @@ export async function screenView(rt: Runtime, _person: string, date: LocalDate, 
     await planToday(plan === null ? null : build).catch((e: unknown) => console.warn(JSON.stringify({ event: "catch-up-plan-failed", error: e instanceof Error ? e.message : String(e) })));
   }
   const closed = new Set((await api.plans.responsesOn({ date })).filter((r) => CLOSING.has(r.action)).map((r) => r.ref));
-  const today = localDate(rt.ports.clock.now(), rt.timeZone);
+  const now = rt.ports.clock.now();
+  const today = localDate(now, rt.timeZone);
+  const shown = openReminderBlocks(plan?.blocks ?? [], await remindersFor(rt, date), date, now, rt.timeZone);
   const pencils = pencilBlocks(await pencilledFrom(rt, today), date, today, await api.household.people());
   return {
     date,
     version: plan?.version ?? 0,
-    generatedAt: plan?.createdAt ?? rt.ports.clock.now().toISOString(),
-    blocks: withPencils(applyResponses(plan?.blocks ?? [], closed), pencils),
+    generatedAt: plan?.createdAt ?? now.toISOString(),
+    blocks: withPencils(applyResponses(shown, closed), pencils),
   };
 }

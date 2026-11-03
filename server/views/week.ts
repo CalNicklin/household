@@ -6,7 +6,7 @@ import { allRules } from "../rules/nudges.ts";
 import type { Runtime } from "../runtime.ts";
 import { addLocalDays, localDate, longDate } from "../time.ts";
 import { pencilBlocks } from "../planner/pencil.ts";
-import { applyResponses, pencilledFrom, withPencils } from "./screen.ts";
+import { applyResponses, openReminderBlocks, pencilledFrom, withPencils } from "./screen.ts";
 
 /** Week: each day's saved plan if there is one, else the rules' view of it (no agent, no picks). */
 export async function weekView(rt: Runtime, _person: string): Promise<WeekView> {
@@ -25,8 +25,9 @@ export async function weekView(rt: Runtime, _person: string): Promise<WeekView> 
     const saved = (savedMode?.type === BlockType.mode ? savedMode.mode : null) === (modeOn(facts, date, now)?.mode ?? null) ? latest : null;
     const closed = new Set((await api.plans.responsesOn({ date })).map((r) => r.ref));
     // HOU-149: "Getting started" is about the home screen, not a day, so Week never shows it.
+    // HOU-177: a saved plan's reminder cards only for reminders still open there.
     const blocks =
-      saved?.blocks ??
+      (saved === null ? null : openReminderBlocks(saved.blocks, reminders, date, now, rt.timeZone)) ??
       compose({ date, now, facts, rules: allRules(facts, date, now).items, closed, pick: null, oneThing: null, question: null, screenNotes: [], shopping: [], avoid: new Set(), otherAdult: otherAdultOf(facts), fill: null, reminders });
     // HOU-156: Week leaves out the context line that names the mode, so a later day's mode card says it.
     const named = date === today ? blocks : blocks.map((b) => (b.type === BlockType.mode ? { ...b, heading: ModeLabel[b.mode] } : b));

@@ -1,5 +1,5 @@
 import { type LocalDate, type Reminder, ReminderStatus } from "@household/contracts";
-import { matchReminders, type ReminderWhen } from "../rules/remind.ts";
+import { matchReminders, type ReminderWhen, saysWhich } from "../rules/remind.ts";
 import { addLocalDays, localDate, localTime, longDate } from "../time.ts";
 import type { JobScope } from "./scope.ts";
 
@@ -22,26 +22,61 @@ const CLOSED: Record<Exclude<ReminderStatus, "open">, string> = {
 /** What to say about a reminder that is no longer open (done, on the Backlog or cancelled). */
 export const closedSay = (status: ReminderStatus): string => (status === ReminderStatus.open ? "" : CLOSED[status]);
 
+type Closed = Reminder & { status: Exclude<ReminderStatus, "open"> };
+const isClosed = (r: Reminder): r is Closed => r.status !== ReminderStatus.open;
+
+/** A closed reminder's state, in a list of several. */
+const CLOSED_WORD: Record<Closed["status"], string> = {
+  [ReminderStatus.done]: "done",
+  [ReminderStatus.moved]: "on the Backlog",
+  [ReminderStatus.cancelled]: "cancelled",
+};
+
+/** What became of reminders that are no longer open, and that nothing was changed; short enough to be said whole. */
+function goneSay(rs: readonly Closed[], today: LocalDate): string {
+  const [one] = rs;
+  if (rs.length === 1 && one !== undefined) return `${reminderLine(one, today)}. ${closedSay(one.status)} Nothing was changed.`;
+  return `None of those is still on: ${rs.map((r) => `${reminderLine(r, today)} (${CLOSED_WORD[r.status]})`).join("; ")}. Nothing was changed.`;
+}
+
+/**
+ * The reminder they are looking at (the About ref), when it fits what they said ("that one" fits any).
+ * HOU-177: open or not, it is the one they mean, so a closed one is answered for itself and the search
+ * never goes on to some other open reminder in its place. null when there is no such reminder or it doesn't fit.
+ */
+async function lookingAt(scope: JobScope, which: string, ref: string | null | undefined, today: LocalDate): Promise<{ reminder: Reminder } | { say: string } | null> {
+  if (ref?.startsWith("reminder:") !== true) return null;
+  const reminder = await scope.api.backlog.getReminder({ id: ref.slice("reminder:".length) });
+  if (reminder === null || matchReminders([reminder], which, today).length !== 1) return null;
+  return isClosed(reminder) ? { say: goneSay([reminder], today) } : { reminder };
+}
+
 /** The reminder a person means, or what to ask them instead. `ref` is the About ref when they said "this". */
 export async function findReminder(scope: JobScope, which: string, ref: string | null | undefined): Promise<{ reminder: Reminder } | { say: string }> {
   const today = localDate(scope.rt.ports.clock.now(), scope.rt.timeZone);
-  // The one they are looking at, if it fits what they said ("that one" fits any); never one they didn't name.
-  if (ref?.startsWith("reminder:") === true) {
-    const reminder = await scope.api.backlog.getReminder({ id: ref.slice("reminder:".length) });
-    if (reminder?.status === ReminderStatus.open && matchReminders([reminder], which, today).length === 1) return { reminder };
-  }
+  const seen = await lookingAt(scope, which, ref, today);
+  if (seen !== null) return seen;
   const open = await scope.api.backlog.upcomingReminders({ from: today });
-  if (open.length === 0) return { say: "There are no reminders coming up." };
   const found = matchReminders(open, which, today);
   const [only] = found;
   if (found.length === 1 && only !== undefined) return { reminder: only };
+  if (found.length === 0) {
+    // HOU-177: the ones they named are already done, on the Backlog or cancelled: say so, never offer another
+    // in their place. Only when what they said names them ("that reminder" alone names none).
+    const closed = (await scope.api.backlog.upcomingReminders({ from: today, closed: true })).filter(isClosed);
+    const gone = matchReminders(closed, which, today);
+    // What they said picked these out (a day, a time or what it's about), or there is only the one.
+    const named = gone.length > 0 && (saysWhich(which) || closed.length === 1);
+    if (named) return { say: goneSay(gone, today) };
+  }
+  if (open.length === 0) return { say: "There are no reminders coming up." };
   // Never a guess: several could match, or none does, so ask which.
   const list = (found.length > 1 ? found : open).map((r) => reminderLine(r, today)).join("; ");
   return { say: found.length > 1 ? `Which one? ${list}. Say its time or what it's about.` : `I couldn't tell which reminder you mean. Coming up: ${list}.` };
 }
 
 /** Today and tomorrow's screens, and any other day already planned, that showed or will show it. */
-async function replanFor(scope: JobScope, dates: readonly LocalDate[]): Promise<void> {
+export async function replanFor(scope: JobScope, dates: readonly LocalDate[]): Promise<void> {
   const today = localDate(scope.rt.ports.clock.now(), scope.rt.timeZone);
   const shownOn = new Set(dates.flatMap((d) => [d, addLocalDays(d, -1)]).filter((d) => d >= today));
   for (const d of [...shownOn].sort()) {

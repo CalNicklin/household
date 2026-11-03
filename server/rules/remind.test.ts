@@ -1,7 +1,7 @@
 import { type Person, PersonRole, Section } from "@household/contracts";
 import { describe, expect, test } from "vitest";
 import { atLocal } from "../time.ts";
-import { isDue, matchReminders, reminderFor, reminderPeople, reminderSection, reminderWhen, retimeWhen } from "./remind.ts";
+import { isDue, matchReminders, reminderFor, reminderPeople, reminderSection, reminderWhen, retimeWhen, saysWhich } from "./remind.ts";
 
 const TZ = "Europe/London";
 const MON = "2026-11-02";
@@ -119,4 +119,16 @@ describe("HOU-174: which reminder a person means, and its new time", () => {
     expect(reminderWhen("4/11/2026", at(14), TZ)?.time ?? null).toBeNull();
     expect(reminderWhen("on 4 Nov 2026", at(14), TZ)).toEqual({ date: WED, time: null });
   });
+});
+
+describe("HOU-177: whether the words say which reminder", () => {
+  test.each([
+    ["the 9 o'clock BoyBoy reminder", true],
+    ["the swimming reminder", true],
+    ["Wednesday's reminder", true],
+    ["the 9am one", true],
+    ["that one", false],
+    ["that reminder", false],
+    ["the reminder", false],
+  ])("[CAP-10] %s → %s", (words, says) => expect(saysWhich(words)).toBe(says));
 });
