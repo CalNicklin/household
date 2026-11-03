@@ -1,7 +1,12 @@
 import { Agent } from "@mastra/core/agent";
-import { type ActionKind, Limits } from "@household/contracts";
-import type { PickCandidate } from "../planner/gather.ts";
+import { ActionKind, Limits } from "@household/contracts";
+import { gatherFacts, type PickCandidate } from "../planner/gather.ts";
+import { pencilValue } from "../planner/pencil.ts";
+import { deadlineOf } from "../rules/deadline.ts";
+import { allowedGaps, partOfDay } from "../rules/fit.ts";
+import { localDate } from "../time.ts";
 import { cachedInstructions, costMicros, languageModel, type TokenUsage } from "./model.ts";
+import { chosenGap, gapReason, noGapSay, pencilPrompt } from "./pencil-gap.ts";
 import { askedForMore, clampReply } from "./reply.ts";
 import { respond } from "./respond.ts";
 import type { JobScope } from "./scope.ts";
@@ -22,6 +27,9 @@ Reply in at most three short sentences unless they ask for more. Plain, warm, no
 Only say something is done when the tool says it is done, and say what every tool you called did: never that you couldn't change something a tool changed. Only offer what your tools can do: you can set, move, re-time and cancel reminders; you cannot change calendar events. For shopping say what the shop tool says, never that it has been added. Never explain which tool you chose.
 Refer to people by name. Never guess anyone's pronouns.
 Never mention anything you were not told in this message, the About line or the Memory line.`;
+
+/** "Pencil it in" looks for a gap over the coming week, as a backlog pick does (PRO-6). */
+const PENCIL_DAYS = 7;
 
 /**
  * A call's tokens, summed over its steps. Mastra reports cache reads as `cachedInputTokens` and
@@ -68,17 +76,54 @@ export class HouseAgent {
     return { reply: clampReply(result.text, askedForMore(input.text)), inputTokens: usage.input, outputTokens: usage.output, costMicros: costMicros(this.#model, usage), intent };
   }
 
-  /** A one-tap button press needs no model: it goes straight to the respond tool (CH-8). */
+  /**
+   * A one-tap button press goes straight to the respond tool (CH-8), with no model, except "Pencil it
+   * in" on a backlog item, whose time the model chooses from the gaps the rules allow (HOU-178).
+   */
   async tap(ref: string, action: ActionKind, value: string | null): Promise<AgentResult> {
+    if (action === ActionKind.accept && ref.startsWith("backlog:")) return this.#pencil(ref);
     const say = await respond(this.#scope, ref, action, value);
     this.#scope.toolCalls.push({ tool: "respond", input: { ref, action, value }, output: { say } });
     return { reply: say, inputTokens: 0, outputTokens: 0, costMicros: 0, intent: `tap:${action}` };
   }
 
+  /**
+   * HOU-178 (PRO-8): "Pencil it in". Rules list the allowed gaps over the coming week; the model
+   * chooses one from that list only (anything else is the first allowed gap), and it is kept as the
+   * accept response with that slot, as before (PRV-1). With no gap allowed, nothing is pencilled in.
+   */
+  async #pencil(ref: string): Promise<AgentResult> {
+    const scope = this.#scope;
+    const tz = scope.rt.timeZone;
+    const now = scope.rt.ports.clock.now();
+    const today = localDate(now, tz);
+    const item = await scope.api.backlog.get({ id: ref.slice("backlog:".length) });
+    const done = (say: string, usage: TokenUsage, output: Record<string, unknown>): AgentResult => {
+      scope.toolCalls.push({ tool: "pencil", input: { ref }, output: { ...output, say } });
+      return { reply: say, inputTokens: usage.input, outputTokens: usage.output, costMicros: costMicros(this.#model, usage), intent: `tap:${ActionKind.accept}` };
+    };
+    const none: TokenUsage = { input: 0, cacheRead: 0, cacheWrite: 0, output: 0 };
+    if (item === null) return done("I can't find that on the backlog.", none, { gaps: 0 });
+    const facts = await gatherFacts(scope.rt, today, PENCIL_DAYS);
+    const deadline = deadlineOf(item, tz);
+    const gaps = allowedGaps(facts, item, now, today, PENCIL_DAYS, deadline);
+    if (gaps.length === 0) return done(noGapSay(deadline), none, { gaps: 0 });
+    const result = await this.#agent.generate(pencilPrompt(item, gaps, facts, deadline), { toolChoice: "none" });
+    const usage = tokensOf(result.usage);
+    const { gap, reason } = chosenGap(result.text, gaps);
+    const slot = { date: gap.date, dayPart: partOfDay(gap.startHour) };
+    const said = await respond(scope, ref, ActionKind.accept, pencilValue(slot));
+    return done(`${said} ${reason ?? gapReason(gap, deadline, today)}`, usage, { gaps: gaps.length, chosen: pencilValue(slot), fromModel: reason !== null });
+  }
+
   /** The agent's other job: which backlog item fits today's gap. Rules found the candidates. */
   async chooseBacklog(candidates: PickCandidate[]): Promise<{ pick: PickCandidate | null; inputTokens: number; outputTokens: number; costMicros: number }> {
     if (candidates.length === 0) return { pick: null, inputTokens: 0, outputTokens: 0, costMicros: 0 };
-    const prompt = ["Choose: one backlog job to offer today. Reply with its id only, or none.", ...candidates.slice(0, 8).map((c) => `- id=${c.itemId} ${c.title} — ${c.why}`)].join("\n");
+    // HOU-178: every candidate's gap is before its own deadline (rules checked); a deadline that is close helps choose.
+    const prompt = [
+      "Choose: one backlog job to offer today. Reply with its id only, or none. A job's stated deadline matters: other things equal, prefer one needed soon.",
+      ...candidates.slice(0, 8).map((c) => `- id=${c.itemId} ${c.title} — ${c.why}${c.neededBy === null ? "" : ` Needed ${c.neededBy.words}.`}`),
+    ].join("\n");
     const result = await this.#agent.generate(prompt, { toolChoice: "none" });
     const text = result.text.trim();
     const pick = candidates.find((c) => text.includes(c.itemId)) ?? (/\bnone\b/i.test(text) ? null : (candidates[0] ?? null));

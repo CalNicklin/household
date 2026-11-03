@@ -183,6 +183,8 @@ function decide(options: LanguageModelV4CallOptions): { content: LanguageModelV4
   if (last?.role === "tool") return { content: [{ type: "text", text: wording(options) }], finishReason: { unified: "stop", raw: undefined } };
   const user = [...options.prompt].reverse().find((m) => m.role === "user");
   const prompt = user === undefined ? "" : textOf(user.content);
+  // HOU-178: "Pencil it in" takes the first allowed gap, with no reason of its own (the rules give one).
+  if (/^Pencil:/m.test(prompt)) return { content: [{ type: "text", text: "1" }], finishReason: { unified: "stop", raw: undefined } };
   if (/^Choose:/m.test(prompt)) {
     const first = /^- id=(\S+)/m.exec(prompt)?.[1] ?? "none";
     return { content: [{ type: "text", text: first }], finishReason: { unified: "stop", raw: undefined } };

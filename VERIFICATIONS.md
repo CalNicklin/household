@@ -33,7 +33,7 @@ You can look at the kitchen iPad when you wake up and know what today needs, wit
 Anything either of us remembers can be noted in under five seconds, from anywhere, and will not be lost or nag us.
 
 - [ ] CAP-1 **(gate)** Type or say a thought anywhere (the app, WhatsApp, email) and it appears on the Backlog for both of us within five seconds.
-- [ ] CAP-2 Backlog items have no due date and no priority. They only have tags for what they need: how long, daylight, dry weather, both of us home, no kids around, a phone call, a trip out, office hours.
+- [ ] CAP-2 Backlog items have no due-date field and no priority. They only have tags for what they need: how long, daylight, dry weather, both of us home, no kids around, a phone call, a trip out, office hours. If an item's words say when it's needed by ("by Friday lunchtime", "before the 12th"), the app never suggests it, or pencils it in, for a time after that.
 - [ ] CAP-3 The app guesses the tags from what you wrote and shows them as chips. One tap fixes a wrong one.
 - [ ] CAP-4 The Backlog screen has three groups: Could go soon (it has found a slot and says when), Waiting for the right moment (it says what it is waiting for), and Just added.
 - [ ] CAP-5 If you say "not now" to something three times, it moves to Parked and stops being offered until you bring it back.
@@ -68,7 +68,7 @@ The app does the remembering. Things that currently live in one of our heads arr
 - [ ] PRO-5 On the morning of a delivery that needs someone in, you get a message. Deliveries that can be left get no message.
 - [ ] PRO-6 The app offers at most one backlog item a day, and only once.
 - [ ] PRO-7 Each of us can set how many messages a day we want (three to start) and quiet hours (9pm to 7am to start). Anything over the limit waits for the morning screen.
-- [ ] PRO-8 All these reminders are fixed rules with tests, not AI guesses. The AI only chooses which backlog item fits a gap and how to word things.
+- [ ] PRO-8 All these reminders are fixed rules with tests, not AI guesses. The AI only chooses which backlog item fits a gap, which allowed gap a backlog item fits when someone asks to pencil it in, and how to word things.
 - [ ] PRO-9 Dismiss a message on your phone and it is dismissed everywhere. Nothing is shown twice.
 - [ ] PRO-10 Nursery parties, inset days and closures show under Tomorrow the day before, with who is covering, or a warning if nobody is.
 

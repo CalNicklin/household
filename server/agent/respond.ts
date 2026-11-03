@@ -1,8 +1,10 @@
-import { ActionKind, BlockType, Channel, DayPart, type LocalDate, LongTool, ModeKind, NotificationStatus, ReminderStatus, RhythmSource, ShoppingStatus, zLocalTime } from "@household/contracts";
+import { ActionKind, BlockType, Channel, DayPart, type LocalDate, LongTool, ModeKind, NotificationStatus, type PencilSlot, ReminderStatus, RhythmSource, ShoppingStatus, zLocalTime } from "@household/contracts";
 import { START_REF_PREFIX } from "../planner/first-day.ts";
-import { forecasts } from "../planner/gather.ts";
+import { forecasts, gatherFacts } from "../planner/gather.ts";
 import { parsePencil, pencilledLine } from "../planner/pencil.ts";
-import { addLocalDays, localDate, localHour, longDate, weekdayOf } from "../time.ts";
+import { deadlineOf, tooLate } from "../rules/deadline.ts";
+import { findSlot, partOfDay, partStartHour } from "../rules/fit.ts";
+import { addLocalDays, atLocal, dayPartWords, localDate, localHour, longDate, weekdayOf } from "../time.ts";
 import { cancelReminder, changeReminder, closedSay, replanFor } from "./reminders.ts";
 import type { JobScope } from "./scope.ts";
 
@@ -90,6 +92,23 @@ async function respondToReminder(scope: JobScope, ref: string, action: ActionKin
 }
 
 /**
+ * HOU-178: what to say when a pencil slot starts at or after the item's deadline ("by Friday
+ * lunchtime"), with the first free slot before it if there is one; null when the slot is in time.
+ */
+async function tooLateToPencil(scope: JobScope, ref: string, slot: PencilSlot, now: Date): Promise<string | null> {
+  const tz = scope.rt.timeZone;
+  const item = await scope.api.backlog.get({ id: ref.slice("backlog:".length) });
+  const deadline = item === null ? null : deadlineOf(item, tz);
+  if (item === null || deadline === null || !tooLate(deadline, atLocal(slot.date, partStartHour(slot.dayPart), 0, tz))) return null;
+  const today = localDate(now, tz);
+  const instead = findSlot(await gatherFacts(scope.rt, today, 7), item, now, today, 7, deadline);
+  const late = `That's too late: it's needed ${deadline.words}, so I haven't pencilled it in.`;
+  if (instead === null) return `${late} There's no free slot for it before then.`;
+  const words = dayPartWords(instead.date, today, partOfDay(instead.startHour));
+  return `${late} ${words.charAt(0).toUpperCase()}${words.slice(1)} is free before then.`;
+}
+
+/**
  * HOU-173: a backlog pick's buttons are kept against the day whose plan offered it (PRO-6: one plan,
  * once), so the card closes there — on Week for a later day — as well as on Today. Anything else is today's.
  */
@@ -120,6 +139,12 @@ export async function respond(scope: JobScope, ref: string, action: ActionKind, 
   // suggestion: nothing to learn from, nothing to remember.
   if (ref.startsWith("reminder:")) return respondToReminder(scope, ref, action, date, value);
   const slot = ref.startsWith("backlog:") ? parsePencil(value) : null;
+  // HOU-178: a slot at or after the deadline in the item's own words is never pencilled in. Nothing is
+  // recorded and the item is left as it is (PRV-1).
+  if (action === ActionKind.accept && slot !== null) {
+    const late = await tooLateToPencil(scope, ref, slot, now);
+    if (late !== null) return late;
+  }
   await scope.api.plans.respond({ ref, action, channel: scope.channel, date: await respondedOn(scope, ref, action, slot !== null, date), value });
   const subject = await subjectFor(scope, ref, date);
 
